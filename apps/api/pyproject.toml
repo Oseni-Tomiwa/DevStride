@@ -1,0 +1,36 @@
+[project]
+name = "devstride-api"
+version = "0.1.0"
+description = "DevStride FastAPI backend"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115.0",
+  "pydantic-settings>=2.7.0",
+  "uvicorn[standard]>=0.34.0"
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.0",
+  "pyright>=1.1.390",
+  "pytest>=8.3.0",
+  "pytest-asyncio>=0.25.0",
+  "ruff>=0.9.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pyright]
+include = ["app", "tests"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"

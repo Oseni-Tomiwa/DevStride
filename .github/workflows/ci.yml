@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm web:lint
+      - run: pnpm web:typecheck
+      - run: pnpm web:test
+      - run: pnpm web:build
+
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: cd apps/api && uv sync --dev
+      - run: cd apps/api && uv run ruff check .
+      - run: cd apps/api && uv run ruff format --check .
+      - run: cd apps/api && uv run pyright
+      - run: cd apps/api && uv run pytest

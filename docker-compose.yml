@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: devstride-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-devstride}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devstride}
+      POSTGRES_DB: ${POSTGRES_DB:-devstride}
+    ports:
+      - "5432:5432"
+    volumes:
+      - devstride_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-devstride} -d ${POSTGRES_DB:-devstride}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  devstride_postgres_data:

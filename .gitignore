@@ -1,0 +1,37 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+pnpm-debug.log*
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+*.py[cod]
+.coverage
+htmlcov/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Local data
+postgres-data/

@@ -1,0 +1,77 @@
+.env.example
+.gitignore
+AGENTS.md
+FIRST_CODEX_PROMPT.md
+Makefile
+PROJECT_GUIDE.pdf
+README.md
+START_HERE.md
+docker-compose.yml
+package.json
+pnpm-workspace.yaml
+.github/
+  workflows/
+    ci.yml
+apps/
+  api/
+    pyproject.toml
+    app/
+      __init__.py
+      main.py
+      ai/
+        .gitkeep
+      api/
+        __init__.py
+        health.py
+      auth/
+        .gitkeep
+      conversations/
+        .gitkeep
+      core/
+        __init__.py
+        config.py
+      database/
+        .gitkeep
+      goals/
+        .gitkeep
+      interviews/
+        .gitkeep
+      memory/
+        .gitkeep
+      mentor/
+        .gitkeep
+      profiles/
+        .gitkeep
+      simulations/
+        .gitkeep
+    tests/
+      test_health.py
+  web/
+    eslint.config.mjs
+    next-env.d.ts
+    next.config.ts
+    package.json
+    tsconfig.json
+    vitest.config.ts
+    src/
+      app/
+        globals.css
+        layout.tsx
+        page.test.tsx
+        page.tsx
+docs/
+  architecture/
+    SYSTEM.md
+  decisions/
+    ADR-001-modular-monolith.md
+  product/
+    PRD.md
+evals/
+  README.md
+infrastructure/
+  README.md
+packages/
+  contracts/
+    README.md
+  prompts/
+    README.md
