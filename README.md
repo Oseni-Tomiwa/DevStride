@@ -129,6 +129,19 @@ make api-migrate-down
 for example `postgresql+asyncpg://devstride:devstride@localhost:5432/devstride`.
 The API rejects a missing database URL outside test environments.
 
+## Backend authentication
+
+Non-test API environments require these backend-only variables:
+
+- `SUPABASE_JWT_SECRET`: the Supabase JWT signing secret.
+- `SUPABASE_JWT_ISSUER`: the Supabase issuer URL, such as
+  `https://<project-ref>.supabase.co/auth/v1`.
+
+The temporary authentication verification route is `GET /api/v1/auth/me` and
+requires a Supabase access token in the `Authorization: Bearer` header. JWT
+verification happens only in the API; no signing secret is exposed to the
+frontend.
+
 
 
 ## Current scope

@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     api_port: int = 8000
     database_url: str | None = None
     cors_origins: str = "http://localhost:3000"
+    supabase_jwt_secret: str | None = None
+    supabase_jwt_issuer: str | None = None
+    supabase_jwt_audience: str = "authenticated"
 
     model_config = SettingsConfigDict(
         env_file="../.env",
@@ -33,6 +36,16 @@ class Settings(BaseSettings):
 
         if database_url.drivername != "postgresql+asyncpg":
             raise ValueError("DATABASE_URL must use the postgresql+asyncpg driver")
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_auth_configuration(self) -> "Settings":
+        if self.app_env != "test":
+            if not self.supabase_jwt_secret:
+                raise ValueError("SUPABASE_JWT_SECRET is required outside test environments")
+            if not self.supabase_jwt_issuer:
+                raise ValueError("SUPABASE_JWT_ISSUER is required outside test environments")
 
         return self
 
