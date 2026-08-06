@@ -1,4 +1,4 @@
-.PHONY: api-install api-dev api-lint api-format api-format-check api-typecheck api-test db-up db-down db-logs check
+.PHONY: api-install api-dev api-lint api-format api-format-check api-typecheck api-test api-migration api-migrate api-migrate-down db-up db-down db-logs check
 
 api-install:
 	cd apps/api && uv sync --dev
@@ -20,6 +20,15 @@ api-typecheck:
 
 api-test:
 	cd apps/api && uv run pytest
+
+api-migration:
+	cd apps/api && uv run alembic revision --autogenerate -m "describe change"
+
+api-migrate:
+	cd apps/api && uv run alembic upgrade head
+
+api-migrate-down:
+	cd apps/api && uv run alembic downgrade -1
 
 db-up:
 	docker compose up -d postgres

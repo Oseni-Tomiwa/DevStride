@@ -3,7 +3,8 @@
 DevStride is a planned AI software-engineering mentor and communication coach.
 Codex is used to accelerate implementation; it is not the product name.
 
-This repository currently contains the Milestone 0 foundation.
+This repository currently contains the Milestone 1 database foundation on top
+of the Milestone 0 scaffold.
 
 ## Repository structure
 
@@ -106,12 +107,32 @@ View logs:
 make db-logs
 ```
 
-## Codex workflow
+Run database migrations from the repository root:
 
-Codex must read `AGENTS.md` first. The initial task is stored in
-`FIRST_CODEX_PROMPT.md`.
+```bash
+make api-migrate
+```
+
+Create a new migration after changing SQLAlchemy models:
+
+```bash
+make api-migration
+```
+
+Revert the latest migration:
+
+```bash
+make api-migrate-down
+```
+
+`DATABASE_URL` must be a PostgreSQL SQLAlchemy URL using the `asyncpg` driver,
+for example `postgresql+asyncpg://devstride:devstride@localhost:5432/devstride`.
+The API rejects a missing database URL outside test environments.
+
+
 
 ## Current scope
 
-Only Milestone 0 foundation work is allowed. Product features begin after the
-foundation has been verified.
+The current implementation is limited to Milestone 1 database and profile
+persistence foundations. Authentication, onboarding UI, and product features
+remain out of scope until explicitly requested.
