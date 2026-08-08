@@ -18,7 +18,7 @@ async def get_current_user(
         raise authentication_error()
 
     try:
-        return verify_access_token(credentials.credentials)
+        return await verify_access_token(credentials.credentials)
     except InvalidTokenError as exc:
         del exc
         raise authentication_error() from None

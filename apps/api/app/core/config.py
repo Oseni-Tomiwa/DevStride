@@ -12,9 +12,9 @@ class Settings(BaseSettings):
     api_port: int = 8000
     database_url: str | None = None
     cors_origins: str = "http://localhost:3000"
-    supabase_jwt_secret: str | None = None
     supabase_jwt_issuer: str | None = None
     supabase_jwt_audience: str = "authenticated"
+    supabase_jwt_algorithms: str = "ES256"
 
     model_config = SettingsConfigDict(
         env_file="../.env",
@@ -41,9 +41,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self) -> "Settings":
+        algorithms = tuple(
+            algorithm.strip().upper()
+            for algorithm in self.supabase_jwt_algorithms.split(",")
+            if algorithm.strip()
+        )
+        allowed_algorithms = {"ES256", "RS256"}
+        if not algorithms or any(algorithm not in allowed_algorithms for algorithm in algorithms):
+            raise ValueError("SUPABASE_JWT_ALGORITHMS must contain only ES256 or RS256")
+
         if self.app_env != "test":
-            if not self.supabase_jwt_secret:
-                raise ValueError("SUPABASE_JWT_SECRET is required outside test environments")
             if not self.supabase_jwt_issuer:
                 raise ValueError("SUPABASE_JWT_ISSUER is required outside test environments")
 

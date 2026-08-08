@@ -133,19 +133,21 @@ The API rejects a missing database URL outside test environments.
 
 Non-test API environments require these backend-only variables:
 
-- `SUPABASE_JWT_SECRET`: the Supabase JWT signing secret.
 - `SUPABASE_JWT_ISSUER`: the Supabase issuer URL, such as
   `https://<project-ref>.supabase.co/auth/v1`.
+- `SUPABASE_JWT_ALGORITHMS`: comma-separated asymmetric algorithms configured
+  for the project, normally `ES256`.
 
 The temporary authentication verification route is `GET /api/v1/auth/me` and
 requires a Supabase access token in the `Authorization: Bearer` header. JWT
-verification happens only in the API; no signing secret is exposed to the
-frontend.
+verification happens only in the API; private signing keys are never stored
+by DevStride or exposed to the frontend.
 
 
 
 ## Current scope
 
-The current implementation is limited to Milestone 1 database and profile
-persistence foundations. Authentication, onboarding UI, and product features
-remain out of scope until explicitly requested.
+The current implementation is limited to Milestone 1 database, profile
+persistence, and backend authentication foundations. Frontend authentication,
+profile endpoints, onboarding UI, and product features remain out of scope
+until explicitly requested.
