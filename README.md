@@ -143,11 +143,20 @@ requires a Supabase access token in the `Authorization: Bearer` header. JWT
 verification happens only in the API; private signing keys are never stored
 by DevStride or exposed to the frontend.
 
+Frontend authentication uses these public browser-safe variables:
+
+- `NEXT_PUBLIC_SUPABASE_URL`: the Supabase project URL.
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: the Supabase publishable key.
+
+The Next.js app manages sessions with Supabase SSR cookies. It provides
+`/login`, `/sign-up`, `/auth/callback`, `/dashboard`, and `/onboarding`; the
+last two require an authenticated Supabase session.
+
 
 
 ## Current scope
 
 The current implementation is limited to Milestone 1 database, profile
-persistence, and backend authentication foundations. Frontend authentication,
-profile endpoints, onboarding UI, and product features remain out of scope
-until explicitly requested.
+persistence, backend authentication, and frontend authentication foundations.
+The full onboarding form and product features remain out of scope until
+explicitly requested.
