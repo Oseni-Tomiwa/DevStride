@@ -1,4 +1,5 @@
 import asyncio
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -18,12 +19,17 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def migration_database_url() -> str | None:
+    return os.getenv("TEST_DATABASE_URL") or settings.database_url
+
+
 def run_migrations_offline() -> None:
-    if settings.database_url is None:
+    database_url = migration_database_url()
+    if database_url is None:
         raise RuntimeError("DATABASE_URL is required to run migrations")
 
     context.configure(
-        url=settings.database_url,
+        url=database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -41,11 +47,12 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    if settings.database_url is None:
+    database_url = migration_database_url()
+    if database_url is None:
         raise RuntimeError("DATABASE_URL is required to run migrations")
 
     connectable = async_engine_from_config(
-        {"sqlalchemy.url": settings.database_url},
+        {"sqlalchemy.url": database_url},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
