@@ -160,3 +160,7 @@ The current implementation is limited to Milestone 1 database, profile
 persistence, backend authentication, and frontend authentication foundations.
 AI, chat, interview, memory, and other product features remain out of scope
 until explicitly requested.
+
+Conversation messages are currently limited to 20,000 characters while
+persistence APIs are being established. Assistant generation and streaming
+remain deferred.

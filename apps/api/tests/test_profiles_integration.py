@@ -21,6 +21,7 @@ from sqlalchemy.pool import NullPool
 
 from alembic import command
 from app.auth.jwt import jwks_client
+from app.conversations.models import Conversation, Message
 from app.core.config import settings
 from app.database.session import get_db_session
 from app.main import app
@@ -90,10 +91,12 @@ async def clean_profiles(
 ) -> AsyncIterator[async_sessionmaker[Any]]:
     _, factory = test_database
     async with factory() as session:
+        await session.execute(delete(Conversation))
         await session.execute(delete(Profile))
         await session.commit()
     yield factory
     async with factory() as session:
+        await session.execute(delete(Conversation))
         await session.execute(delete(Profile))
         await session.commit()
 
@@ -303,3 +306,108 @@ async def test_user_cannot_read_or_mutate_another_users_profile(
     assert patch_response.status_code == 404
     assert profile is not None
     assert profile.display_name == "Integration User"
+
+
+@pytest.mark.asyncio
+async def test_conversation_messages_persist_and_cascade_delete(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, factory = integration_client
+    user_id = uuid4()
+    headers = auth_headers(signing_key, user_id)
+
+    create_response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/conversations",
+            json={"title": "Persistence test"},
+            headers=headers,
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+    conversation_id = UUID(create_response.json()["id"])
+    message_response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={"content": "First message"},
+            headers=headers,
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+    delete_response = cast(
+        Response,
+        client.delete(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/conversations/{conversation_id}", headers=headers
+        ),
+        # pyright: ignore[reportUnknownMemberType]
+    )
+
+    async with factory() as session:
+        conversation = await session.get(Conversation, conversation_id)
+        messages = list(
+            (
+                await session.execute(
+                    select(Message).where(Message.conversation_id == conversation_id)
+                )
+            ).scalars()
+        )
+
+    assert create_response.status_code == 201
+    assert message_response.status_code == 201
+    assert delete_response.status_code == 204
+    assert conversation is None
+    assert messages == []
+
+
+@pytest.mark.asyncio
+async def test_conversation_ownership_is_enforced_end_to_end(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, _ = integration_client
+    owner_id = uuid4()
+    other_user_id = uuid4()
+    owner_headers = auth_headers(signing_key, owner_id)
+    other_headers = auth_headers(signing_key, other_user_id)
+
+    create_response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/conversations",
+            json={"title": "Owner only"},
+            headers=owner_headers,
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+    conversation_id = create_response.json()["id"]
+
+    responses: list[Response] = [
+        cast(  # pyright: ignore[reportUnknownMemberType]
+            Response,
+            client.get(  # pyright: ignore[reportUnknownMemberType]
+                f"/api/v1/conversations/{conversation_id}", headers=other_headers
+            ),
+        ),
+        cast(
+            Response,
+            client.patch(  # pyright: ignore[reportUnknownMemberType]
+                f"/api/v1/conversations/{conversation_id}",
+                json={"title": "Not mine"},
+                headers=other_headers,
+            ),
+        ),
+        cast(
+            Response,
+            client.delete(  # pyright: ignore[reportUnknownMemberType]
+                f"/api/v1/conversations/{conversation_id}", headers=other_headers
+            ),
+        ),
+        cast(
+            Response,
+            client.post(  # pyright: ignore[reportUnknownMemberType]
+                f"/api/v1/conversations/{conversation_id}/messages",
+                json={"content": "Not mine"},
+                headers=other_headers,
+            ),
+        ),
+    ]
+
+    assert create_response.status_code == 201
+    assert all(response.status_code == 404 for response in responses)
