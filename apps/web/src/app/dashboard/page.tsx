@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LogoutButton } from "../../features/auth/components/logout-button";
@@ -57,6 +58,7 @@ export default async function DashboardPage() {
             <p className="muted">Your personalized engineering practice space.</p>
           </div>
           <nav className="dashboard-nav" aria-label="Account navigation">
+            <Link href="/conversations">Conversations</Link>
             <a href="/account">Edit profile</a>
             <LogoutButton />
           </nav>

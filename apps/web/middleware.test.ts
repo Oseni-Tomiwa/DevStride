@@ -33,4 +33,15 @@ describe("middleware", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("redirects unauthenticated conversation routes to login", async () => {
+    updateSession.mockResolvedValue({ response: NextResponse.next(), user: null });
+
+    const response = await middleware(new NextRequest("http://localhost/conversations/abc"));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost/login?next=%2Fconversations%2Fabc",
+    );
+  });
 });

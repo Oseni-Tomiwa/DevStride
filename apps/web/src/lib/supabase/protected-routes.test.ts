@@ -8,6 +8,8 @@ describe("protected routes", () => {
     expect(isProtectedPath("/dashboard/settings")).toBe(true);
     expect(isProtectedPath("/onboarding")).toBe(true);
     expect(isProtectedPath("/account")).toBe(true);
+    expect(isProtectedPath("/conversations")).toBe(true);
+    expect(isProtectedPath("/conversations/123")).toBe(true);
   });
 
   it("leaves public paths accessible", () => {
