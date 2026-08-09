@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     supabase_jwt_issuer: str | None = None
     supabase_jwt_audience: str = "authenticated"
     supabase_jwt_algorithms: str = "ES256"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4.1-mini"
+    ai_generation_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -58,6 +61,14 @@ class Settings(BaseSettings):
             if not self.supabase_jwt_issuer:
                 raise ValueError("SUPABASE_JWT_ISSUER is required outside test environments")
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_ai_configuration(self) -> "Settings":
+        if not self.openai_model.strip():
+            raise ValueError("OPENAI_MODEL must not be blank")
+        if self.ai_generation_enabled and not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY is required when AI_GENERATION_ENABLED is true")
         return self
 
 

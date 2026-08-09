@@ -1,0 +1,1 @@
+"""Internal AI provider boundary."""

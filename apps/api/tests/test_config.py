@@ -25,6 +25,27 @@ def test_jwt_issuer_is_required_outside_test_environment() -> None:
         )
 
 
+def test_ai_generation_is_disabled_by_default() -> None:
+    settings = Settings(
+        app_env="test",
+        database_url="postgresql+asyncpg://user:password@localhost:5432/db",
+        supabase_jwt_issuer="https://test-project.supabase.co/auth/v1",
+    )
+
+    assert settings.ai_generation_enabled is False
+
+
+def test_enabled_ai_generation_requires_server_key() -> None:
+    with pytest.raises(ValidationError, match="OPENAI_API_KEY is required"):
+        Settings(
+            app_env="test",
+            database_url="postgresql+asyncpg://user:password@localhost:5432/db",
+            supabase_jwt_issuer="https://test-project.supabase.co/auth/v1",
+            ai_generation_enabled=True,
+            openai_api_key=None,
+        )
+
+
 def test_settings_env_file_is_absolute_and_repository_rooted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

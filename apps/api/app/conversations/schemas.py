@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -57,6 +59,15 @@ class MessageCreateRequest(BaseModel):
         if not value:
             raise ValueError("content must not be blank")
         return value
+
+
+class RespondRequest(MessageCreateRequest):
+    """Client input for one persisted user message plus one AI response."""
+
+
+class RespondResponse(BaseModel):
+    user_message: MessageResponse
+    assistant_message: MessageResponse
 
 
 class ConversationResponse(BaseModel):

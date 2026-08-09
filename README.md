@@ -156,11 +156,18 @@ last two require an authenticated Supabase session.
 
 ## Current scope
 
-The current implementation is limited to Milestone 1 database, profile
-persistence, backend authentication, and frontend authentication foundations.
-AI, chat, interview, memory, and other product features remain out of scope
-until explicitly requested.
+The current implementation includes the Milestone 1 foundations and the
+first disabled-by-default assistant-generation boundary. Streaming, Mentor
+Mode, interviews, memory, and other advanced product features remain out of
+scope.
 
 Conversation messages are currently limited to 20,000 characters while
-persistence APIs are being established. Assistant generation and streaming
-remain deferred.
+persistence APIs are being established. Assistant generation is available only
+when the backend-only `AI_GENERATION_ENABLED` flag is set to `true` and a
+server-side `OPENAI_API_KEY` is configured. Streaming remains deferred.
+
+The authenticated response boundary is `POST
+/api/v1/conversations/{conversation_id}/respond`. It persists the user
+message, sends at most the 20 most recent messages to the configured provider,
+and persists one assistant response. If generation fails, the user message is
+preserved and no assistant placeholder is created.

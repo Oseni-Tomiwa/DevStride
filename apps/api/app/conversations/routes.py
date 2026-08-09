@@ -4,14 +4,23 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.dependencies import get_ai_provider
+from app.ai.provider import AIProvider
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
+from app.conversations.response_service import (
+    AssistantGenerationDisabledError,
+    AssistantGenerationError,
+    generate_response,
+)
 from app.conversations.schemas import (
     ConversationCreateRequest,
     ConversationPatchRequest,
     ConversationResponse,
     MessageCreateRequest,
     MessageResponse,
+    RespondRequest,
+    RespondResponse,
 )
 from app.conversations.service import (
     ConversationNotFoundError,
@@ -28,6 +37,7 @@ from app.database.session import get_db_session
 router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
+Provider = Annotated[AIProvider | None, Depends(get_ai_provider)]
 
 
 @router.post(
@@ -129,3 +139,40 @@ async def list_messages(
             status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
         ) from None
     return [MessageResponse.model_validate(item) for item in messages]
+
+
+@router.post(
+    "/{conversation_id}/respond",
+    response_model=RespondResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def respond(
+    conversation_id: UUID,
+    data: RespondRequest,
+    session: Session,
+    current_user: AuthenticatedUser,
+    provider: Provider,
+) -> RespondResponse:
+    try:
+        user_message, assistant_message = await generate_response(
+            session, current_user.id, conversation_id, data, provider
+        )
+    except ConversationNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        ) from None
+    except AssistantGenerationDisabledError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Assistant generation is currently disabled",
+        ) from None
+    except AssistantGenerationError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Assistant generation failed. Please try again.",
+        ) from None
+
+    return RespondResponse(
+        user_message=MessageResponse.model_validate(user_message),
+        assistant_message=MessageResponse.model_validate(assistant_message),
+    )

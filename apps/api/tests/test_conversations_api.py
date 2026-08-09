@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.dependencies import get_ai_provider
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations.models import Conversation, Message
@@ -116,6 +117,16 @@ def get_messages(conversation_id: UUID) -> Response:
         Response,
         client.get(  # pyright: ignore[reportUnknownMemberType]
             f"/api/v1/conversations/{conversation_id}/messages"
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+
+
+def post_response(conversation_id: UUID, payload: Mapping[str, object]) -> Response:
+    return cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/conversations/{conversation_id}/respond",
+            json=payload,
         ),  # pyright: ignore[reportUnknownMemberType]
     )
 
@@ -281,3 +292,103 @@ def test_messages_are_returned_chronologically(
 
     assert response.status_code == 200
     assert [item["id"] for item in response.json()] == [str(item.id) for item in messages]
+
+
+def test_unauthenticated_response_returns_401() -> None:
+    response = post_response(uuid4(), {"content": "Hello"})
+
+    assert response.status_code == 401
+
+
+def test_response_returns_404_for_unowned_conversation(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.conversations.routes.generate_response",
+        AsyncMock(side_effect=ConversationNotFoundError),
+    )
+
+    response = post_response(uuid4(), {"content": "Hello"})
+
+    assert response.status_code == 404
+
+
+def test_response_is_disabled_without_calling_provider(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.conversations.response_service import AssistantGenerationDisabledError
+
+    generate = AsyncMock(side_effect=AssistantGenerationDisabledError)
+    monkeypatch.setattr("app.conversations.routes.generate_response", generate)
+    app.dependency_overrides[get_ai_provider] = lambda: None
+
+    response = post_response(uuid4(), {"content": "Hello"})
+
+    assert response.status_code == 503
+    assert generate.await_count == 1
+
+
+def test_response_persists_user_and_assistant_contract(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation_id = uuid4()
+    user_message = make_message(conversation_id)
+    assistant_message = make_message(conversation_id)
+    assistant_message.role = "assistant"
+    assistant_message.provider = "openai"
+    assistant_message.model = "configured-model"
+    assistant_message.input_tokens = 4
+    assistant_message.output_tokens = 8
+    assistant_message.latency_ms = 30
+    respond = AsyncMock(return_value=(user_message, assistant_message))
+    monkeypatch.setattr("app.conversations.routes.generate_response", respond)
+    app.dependency_overrides[get_ai_provider] = lambda: object()
+
+    response = post_response(conversation_id, {"content": "Hello"})
+
+    assert response.status_code == 201
+    assert response.json()["user_message"]["role"] == "user"
+    assert response.json()["assistant_message"]["role"] == "assistant"
+    assert response.json()["assistant_message"]["provider"] == "openai"
+    assert respond.await_args is not None
+    assert respond.await_args.args[1] == USER_ID
+
+
+def test_response_hides_provider_failure_details(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.conversations.response_service import AssistantGenerationError
+
+    monkeypatch.setattr(
+        "app.conversations.routes.generate_response",
+        AsyncMock(side_effect=AssistantGenerationError("secret provider detail")),
+    )
+    app.dependency_overrides[get_ai_provider] = lambda: object()
+
+    response = post_response(uuid4(), {"content": "Hello"})
+
+    assert response.status_code == 502
+    assert "secret provider detail" not in response.text
+    assert response.json()["detail"] == "Assistant generation failed. Please try again."
+
+
+def test_response_rejects_client_controlled_metadata(
+    authenticated_client: tuple[TestClient, CurrentUser],
+) -> None:
+    response = post_response(
+        uuid4(),
+        {"content": "Hello", "role": "assistant", "model": "unsafe-model"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_response_rejects_blank_and_oversized_content(
+    authenticated_client: tuple[TestClient, CurrentUser],
+) -> None:
+    assert post_response(uuid4(), {"content": " "}).status_code == 422
+    assert post_response(uuid4(), {"content": "x" * 20_001}).status_code == 422
