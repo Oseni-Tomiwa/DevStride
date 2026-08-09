@@ -5,9 +5,12 @@ DevStride is an AI software-engineering mentor and communication coach.
 Codex is the coding agent used to accelerate development; it is not the product.
 
 ## Current milestone
-Milestone 0: repository foundation only.
+Milestone 2: conversation and message persistence foundation.
 
-Do not implement authentication, AI provider calls, chat, interviews, memory, RAG, voice, billing, or GitHub integration until a later task explicitly requests them.
+Milestone 0 and Milestone 1 foundations are implemented. Do not implement
+OpenAI integration, assistant generation, streaming, Mentor Mode, interviews,
+memory, RAG, voice, billing, or GitHub integration until a later task
+explicitly requests them.
 
 ## Required reading order
 Before editing:

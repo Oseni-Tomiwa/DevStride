@@ -1,6 +1,6 @@
 """create conversations and messages tables
 
-Revision ID: 0002_create_conversations_messages
+Revision ID: 0002
 Revises: 0001_create_profiles
 Create Date: 2026-08-09
 
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "0002_create_conversations_messages"
+revision: str = "0002"
 down_revision: str | None = "0001_create_profiles"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

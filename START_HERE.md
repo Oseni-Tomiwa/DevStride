@@ -15,7 +15,8 @@ The product will eventually help users:
 - receive personalized coaching based on user-approved memories.
 
 ## Current goal
-Complete Milestone 0 only.
+Verify and stabilize the Milestone 0, Milestone 1, and current Milestone 2
+foundations without adding new product features.
 
 Milestone 0 is complete when:
 - the Next.js app starts;
@@ -41,9 +42,10 @@ Milestone 0 is complete when:
 12. Production hardening
 
 ## Do not build yet
-- authentication;
 - OpenAI integration;
-- conversations;
+- assistant generation;
+- streaming;
+- frontend chat;
 - interviews;
 - memory;
 - RAG;
