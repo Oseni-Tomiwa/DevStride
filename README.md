@@ -158,5 +158,5 @@ last two require an authenticated Supabase session.
 
 The current implementation is limited to Milestone 1 database, profile
 persistence, backend authentication, and frontend authentication foundations.
-The full onboarding form and product features remain out of scope until
-explicitly requested.
+AI, chat, interview, memory, and other product features remain out of scope
+until explicitly requested.

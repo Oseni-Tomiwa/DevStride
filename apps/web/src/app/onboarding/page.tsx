@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { OnboardingForm } from "../../features/onboarding/components/onboarding-form";
 import { createClient } from "../../lib/supabase/server";
 
 export default async function OnboardingPage() {
@@ -12,11 +13,7 @@ export default async function OnboardingPage() {
 
   return (
     <main className="page-shell">
-      <section>
-        <p className="eyebrow">Onboarding</p>
-        <h1>Welcome to DevStride.</h1>
-        <p className="muted">Your onboarding flow will be added in the next task.</p>
-      </section>
+      <OnboardingForm />
     </main>
   );
 }

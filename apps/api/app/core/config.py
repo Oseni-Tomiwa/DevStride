@@ -1,9 +1,13 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+ENV_FILE = (REPOSITORY_ROOT / ".env").resolve()
 
 
 class Settings(BaseSettings):
@@ -17,7 +21,7 @@ class Settings(BaseSettings):
     supabase_jwt_algorithms: str = "ES256"
 
     model_config = SettingsConfigDict(
-        env_file="../.env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )

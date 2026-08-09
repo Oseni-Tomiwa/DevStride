@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { LogoutButton } from "../../features/auth/components/logout-button";
+import { ApiError, createAuthenticatedApiClient } from "../../lib/api/client";
 import { createClient } from "../../lib/supabase/server";
 
 export default async function DashboardPage() {
@@ -9,6 +10,18 @@ export default async function DashboardPage() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  try {
+    await createAuthenticatedApiClient(supabase).get("/api/v1/profile/me");
+  } catch (cause) {
+    if (cause instanceof ApiError && cause.status === 404) {
+      redirect("/onboarding");
+    }
+    if (cause instanceof ApiError && cause.status === 401) {
+      redirect("/login");
+    }
+    throw cause;
   }
 
   return (
