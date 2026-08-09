@@ -8,5 +8,10 @@
     "web:typecheck": "pnpm --filter @devstride/web typecheck",
     "web:test": "pnpm --filter @devstride/web test",
     "web:build": "pnpm --filter @devstride/web build"
+  },
+  "dependencies": {
+    "@supabase/server": "^1.4.1",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.2"
   }
 }

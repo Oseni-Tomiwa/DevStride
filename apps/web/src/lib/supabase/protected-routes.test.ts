@@ -7,6 +7,7 @@ describe("protected routes", () => {
     expect(isProtectedPath("/dashboard")).toBe(true);
     expect(isProtectedPath("/dashboard/settings")).toBe(true);
     expect(isProtectedPath("/onboarding")).toBe(true);
+    expect(isProtectedPath("/account")).toBe(true);
   });
 
   it("leaves public paths accessible", () => {

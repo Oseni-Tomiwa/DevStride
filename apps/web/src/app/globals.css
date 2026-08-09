@@ -30,6 +30,95 @@ section {
   align-items: center;
 }
 
+.dashboard-shell {
+  width: min(68rem, 100%);
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.dashboard-header h1 {
+  max-width: 42rem;
+  font-size: clamp(2.5rem, 6vw, 4.75rem);
+}
+
+.dashboard-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  white-space: nowrap;
+}
+
+.dashboard-nav button {
+  margin-top: 0;
+}
+
+.profile-summary,
+.practice-card {
+  border: 1px solid #dce3f0;
+  border-radius: 1.25rem;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 1rem 3rem rgb(35 53 89 / 8%);
+}
+
+.profile-summary {
+  padding: 1.75rem;
+  margin-bottom: 2rem;
+}
+
+.summary-heading h2 {
+  margin: 0.25rem 0 1.25rem;
+  font-size: 1.5rem;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.profile-grid div {
+  padding: 1rem;
+  border-radius: 0.8rem;
+  background: #f5f7fb;
+}
+
+dt {
+  color: #5e6b83;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+dd {
+  margin: 0.35rem 0 0;
+  font-weight: 700;
+}
+
+.practice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.practice-card {
+  padding: 1.5rem;
+}
+
+.practice-card h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.practice-card button {
+  margin-top: 0.5rem;
+}
+
 .auth-card {
   width: min(28rem, 100%);
   padding: 2.5rem;
@@ -70,6 +159,29 @@ input {
   border: 1px solid #c9d2e4;
   border-radius: 0.6rem;
   font: inherit;
+}
+
+select {
+  width: 100%;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #c9d2e4;
+  border-radius: 0.6rem;
+  background: white;
+  font: inherit;
+}
+
+.field-hint,
+.field-error {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.field-hint {
+  color: #5e6b83;
+}
+
+.field-error {
+  color: #b42318;
 }
 
 button {
@@ -114,4 +226,15 @@ h1 {
 
 p {
   line-height: 1.6;
+}
+
+@media (max-width: 700px) {
+  .dashboard-header {
+    flex-direction: column;
+  }
+
+  .profile-grid,
+  .practice-grid {
+    grid-template-columns: 1fr;
+  }
 }
