@@ -7,6 +7,7 @@ import type {
   CreateUserMessageInput,
   Message,
   RenameConversationInput,
+  RespondResponse,
 } from "./types";
 
 export function listConversations(supabase: SupabaseClient) {
@@ -59,6 +60,18 @@ export function createUserMessage(
 ) {
   return createAuthenticatedApiClient(supabase).post<Message>(
     `/api/v1/conversations/${conversationId}/messages`,
+    input,
+  );
+}
+
+
+export function respondToConversation(
+  supabase: SupabaseClient,
+  conversationId: string,
+  input: CreateUserMessageInput,
+) {
+  return createAuthenticatedApiClient(supabase).post<RespondResponse>(
+    `/api/v1/conversations/${conversationId}/respond`,
     input,
   );
 }

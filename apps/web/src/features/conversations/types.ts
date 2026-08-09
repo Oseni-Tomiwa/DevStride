@@ -35,3 +35,9 @@ export type RenameConversationInput = {
 export type CreateUserMessageInput = {
   content: string;
 };
+
+
+export type RespondResponse = {
+  user_message: Message;
+  assistant_message: Message;
+};

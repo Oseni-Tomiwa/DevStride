@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import React from "react";
-import { useState } from "react";
+import React, { useState } from "react";
 
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
-import { createUserMessage } from "../api";
+import { respondToConversation } from "../api";
 import type { Conversation, Message } from "../types";
 
 const MESSAGE_MAX_LENGTH = 20_000;
@@ -45,19 +44,27 @@ export function ConversationDetail({ conversation, initialMessages }: Conversati
     setError(null);
     setIsSending(true);
     try {
-      const message = await createUserMessage(createClient(), conversation.id, {
+      const response = await respondToConversation(createClient(), conversation.id, {
         content: trimmedContent,
       });
-      setMessages((current) => chronologicalMessages([...current, message]));
+      setMessages((current) => chronologicalMessages([
+        ...current,
+        response.user_message,
+        response.assistant_message,
+      ]));
       setContent("");
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
         router.push("/login");
         return;
       }
+      if (cause instanceof ApiError && cause.status === 502) {
+        setError("The assistant could not respond right now. Please try again.");
+        return;
+      }
       setError(cause instanceof ApiError && cause.status === 0
         ? "We could not reach DevStride. Check your connection and try again."
-        : "Your message could not be saved. Please try again.");
+        : "Your message could not be sent. Please try again.");
     } finally {
       setIsSending(false);
     }
@@ -69,18 +76,18 @@ export function ConversationDetail({ conversation, initialMessages }: Conversati
         <Link href="/conversations" className="back-link">← All conversations</Link>
         <p className="eyebrow">{conversation.mode}</p>
         <h1 id="conversation-title">{conversation.title}</h1>
-        <p className="muted">This space saves your messages for future practice. Assistant responses are not enabled yet.</p>
+        <p className="muted">Your messages and assistant responses are saved in this conversation.</p>
       </div>
 
       <div className="message-history" aria-live="polite">
         {messages.length === 0 ? (
           <div className="message-empty">
-            <h2>Start with a thought</h2>
-            <p className="muted">Send a message to save the first entry in this conversation.</p>
+            <h2>Start with a question</h2>
+            <p className="muted">Ask something to begin this conversation.</p>
           </div>
         ) : messages.map((message) => (
           <article className={`message-bubble message-${message.role}`} key={message.id}>
-            <p className="message-label">{message.role === "user" ? "You" : message.role}</p>
+            <p className="message-label">{message.role === "user" ? "You" : "Assistant"}</p>
             <p>{message.content}</p>
           </article>
         ))}
@@ -92,17 +99,18 @@ export function ConversationDetail({ conversation, initialMessages }: Conversati
           id="message-content"
           value={content}
           maxLength={MESSAGE_MAX_LENGTH}
-          placeholder="Capture a question, goal, or practice note…"
+          placeholder="Ask a question or describe what you want to practise…"
           onChange={(event) => {
             setContent(event.target.value);
             setError(null);
           }}
           rows={5}
+          disabled={isSending}
         />
         <p className="field-hint">{content.length.toLocaleString()} / {MESSAGE_MAX_LENGTH.toLocaleString()}</p>
         {error && <p className="form-error" role="alert">{error}</p>}
         <button type="submit" disabled={isSending}>
-          {isSending ? "Saving…" : "Save message"}
+          {isSending ? "Generating…" : "Send message"}
         </button>
       </form>
     </section>

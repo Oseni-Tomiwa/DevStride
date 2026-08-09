@@ -3,17 +3,20 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../../lib/api/client";
 import { ConversationDetail } from "./conversation-detail";
 
-const { push, createUserMessage } = vi.hoisted(() => ({
+const { push, respondToConversation } = vi.hoisted(() => ({
   push: vi.fn(),
-  createUserMessage: vi.fn(),
+  respondToConversation: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
-vi.mock("next/link", () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
+vi.mock("next/link", () => ({
+  default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
+}));
 vi.mock("../../../lib/supabase/client", () => ({ createClient: () => ({}) }));
-vi.mock("../api", () => ({ createUserMessage }));
+vi.mock("../api", () => ({ respondToConversation }));
 
 const conversation = {
   id: "conversation-id",
@@ -26,13 +29,18 @@ const conversation = {
   updated_at: "2026-08-01T10:00:00Z",
 };
 
-const message = (id: string, content: string, created_at: string) => ({
+const message = (
+  id: string,
+  content: string,
+  created_at: string,
+  role: "user" | "assistant" = "user",
+) => ({
   id,
   conversation_id: conversation.id,
-  role: "user",
+  role,
   content,
-  provider: null,
-  model: null,
+  provider: role === "assistant" ? "openai" : null,
+  model: role === "assistant" ? "gpt-test" : null,
   input_tokens: null,
   output_tokens: null,
   latency_ms: null,
@@ -40,35 +48,96 @@ const message = (id: string, content: string, created_at: string) => ({
   created_at,
 });
 
+const response = {
+  user_message: message("new-user", "A saved question", "2026-08-01T12:00:00Z"),
+  assistant_message: message(
+    "new-assistant",
+    "A helpful answer",
+    "2026-08-01T12:00:01Z",
+    "assistant",
+  ),
+};
+
 describe("ConversationDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("renders messages chronologically and prevents blank submissions", () => {
+  it("renders persisted history chronologically and reloads both roles", () => {
     render(<ConversationDetail conversation={conversation} initialMessages={[
-      message("later", "Second", "2026-08-01T11:00:00Z"),
+      message("later", "Second", "2026-08-01T11:00:00Z", "assistant"),
       message("earlier", "First", "2026-08-01T10:00:00Z"),
     ]} />);
 
     const text = screen.getByRole("region").textContent ?? "";
     expect(text.indexOf("First")).toBeLessThan(text.indexOf("Second"));
-    fireEvent.submit(screen.getByRole("button", { name: "Save message" }).closest("form")!);
-    expect(createUserMessage).not.toHaveBeenCalled();
+    expect(screen.getByText("You")).toBeInTheDocument();
+    expect(screen.getByText("Assistant")).toBeInTheDocument();
+  });
+
+  it("prevents blank submissions", () => {
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.submit(screen.getByRole("button", { name: "Send message" }).closest("form")!);
+
+    expect(respondToConversation).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("Write a message before sending.");
   });
 
-  it("trims and persists only the user message content", async () => {
-    createUserMessage.mockResolvedValue(message("new", "A saved note", "2026-08-01T12:00:00Z"));
+  it("sends only content and renders the persisted user and assistant messages", async () => {
+    respondToConversation.mockResolvedValue(response);
     render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
 
-    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "  A saved note  " } });
-    fireEvent.click(screen.getByRole("button", { name: "Save message" }));
+    fireEvent.change(screen.getByLabelText("Your message"), {
+      target: { value: "  A saved question  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
 
-    await waitFor(() => expect(createUserMessage).toHaveBeenCalledWith({}, "conversation-id", {
-      content: "A saved note",
-    }));
+    await waitFor(() => expect(respondToConversation).toHaveBeenCalledWith(
+      {},
+      "conversation-id",
+      { content: "A saved question" },
+    ));
+    expect(Object.keys(respondToConversation.mock.calls[0][2])).toEqual(["content"]);
+    expect(screen.getByText("A saved question")).toBeInTheDocument();
+    expect(screen.getByText("A helpful answer")).toBeInTheDocument();
     expect(screen.getByLabelText("Your message")).toHaveValue("");
-    expect(screen.getByText("A saved note")).toBeInTheDocument();
+  });
+
+  it("disables the composer while generation is running", async () => {
+    let resolveResponse!: (value: typeof response) => void;
+    respondToConversation.mockReturnValue(new Promise((resolve) => {
+      resolveResponse = resolve;
+    }));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(screen.getByRole("button", { name: "Generating…" })).toBeDisabled();
+    expect(screen.getByLabelText("Your message")).toBeDisabled();
+    resolveResponse(response);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled());
+  });
+
+  it("shows a provider failure without creating fake assistant data", async () => {
+    respondToConversation.mockRejectedValue(new ApiError("generation failed", 502));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("assistant could not respond");
+    expect(screen.queryByText("A helpful answer")).not.toBeInTheDocument();
+  });
+
+  it("redirects to login when the authenticated request fails", async () => {
+    respondToConversation.mockRejectedValue(new ApiError("unauthorized", 401));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/login"));
   });
 });
