@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
+import { AppHeader } from "../../../components/app-header";
 import { ConversationDetail } from "../../../features/conversations/components/conversation-detail";
 import { getConversation, listMessages } from "../../../features/conversations/api";
 import { ApiError } from "../../../lib/api/client";
@@ -23,16 +24,20 @@ export default async function ConversationPage({ params }: ConversationPageProps
       listMessages(supabase, conversationId),
     ]);
     return (
-      <main className="page-shell">
-        <ConversationDetail conversation={conversation} initialMessages={messages} />
+      <main className="page-shell app-page">
+        <AppHeader current="conversations" />
+        <section className="page-content">
+          <ConversationDetail conversation={conversation} initialMessages={messages} />
+        </section>
       </main>
     );
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 401) redirect("/login");
     if (cause instanceof ApiError && cause.status === 404) notFound();
     return (
-      <main className="page-shell">
-        <section className="conversation-shell conversation-empty" role="alert">
+      <main className="page-shell app-page">
+        <AppHeader current="conversations" />
+        <section className="page-content conversation-shell conversation-empty" role="alert">
           <h1>Conversation unavailable</h1>
           <p className="muted">We could not load this conversation. Please try again.</p>
         </section>

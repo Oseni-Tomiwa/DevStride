@@ -1,8 +1,7 @@
 import React from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { LogoutButton } from "../../features/auth/components/logout-button";
+import { AppHeader } from "../../components/app-header";
 import { Profile } from "../../features/profile/types";
 import { getAuthenticatedProfile } from "../../features/profile/api";
 import { ApiError } from "../../lib/api/client";
@@ -51,7 +50,8 @@ export default async function DashboardPage() {
   }
 
   return (
-    <main className="page-shell">
+    <main className="page-shell app-page">
+      <AppHeader current="dashboard" />
       <section className="dashboard-shell">
         <header className="dashboard-header">
           <div>
@@ -59,11 +59,6 @@ export default async function DashboardPage() {
             <h1>Welcome back, {profile.display_name}</h1>
             <p className="muted">Your personalized engineering practice space.</p>
           </div>
-          <nav className="dashboard-nav" aria-label="Account navigation">
-            <Link href="/conversations">Conversations</Link>
-            <a href="/account">Edit profile</a>
-            <LogoutButton />
-          </nav>
         </header>
 
         <section className="profile-summary" aria-labelledby="profile-summary-title">

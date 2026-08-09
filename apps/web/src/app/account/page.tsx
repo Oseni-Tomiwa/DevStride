@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { AppHeader } from "../../components/app-header";
 import { ProfileForm } from "../../features/profile/components/profile-form";
 import { getAuthenticatedProfile } from "../../features/profile/api";
 import { ApiError } from "../../lib/api/client";
@@ -18,7 +19,9 @@ export default async function AccountPage() {
   try {
     const profile = await getAuthenticatedProfile(supabase);
     return (
-      <main className="page-shell">
+      <main className="page-shell app-page">
+        <AppHeader current="account" />
+        <section className="page-content">
         <ProfileForm
           mode="edit"
           initialValues={{
@@ -30,6 +33,7 @@ export default async function AccountPage() {
             feedback_preference: profile.feedback_preference,
           }}
         />
+        </section>
       </main>
     );
   } catch (cause) {
