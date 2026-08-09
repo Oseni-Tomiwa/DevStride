@@ -36,7 +36,6 @@ describe("AuthForm", () => {
       email: "user@example.com",
       password: "password123",
     }));
-    expect(push).toHaveBeenCalledWith("/dashboard");
   });
 
   it("handles email confirmation after sign-up", async () => {

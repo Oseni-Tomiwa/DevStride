@@ -9,15 +9,21 @@ export async function GET(request: Request) {
   const destination = next?.startsWith("/") ? next : "/dashboard";
 
   if (!code) {
-    return NextResponse.redirect(new URL("/login?error=confirmation", request.url));
+    return redirectWithNoStore(new URL("/login?error=confirmation", request.url));
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return NextResponse.redirect(new URL("/login?error=confirmation", request.url));
+    return redirectWithNoStore(new URL("/login?error=confirmation", request.url));
   }
 
-  return NextResponse.redirect(new URL(destination, request.url));
+  return redirectWithNoStore(new URL(destination, request.url));
+}
+
+function redirectWithNoStore(url: URL) {
+  const response = NextResponse.redirect(url);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
 }

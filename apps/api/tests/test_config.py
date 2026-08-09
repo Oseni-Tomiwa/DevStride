@@ -54,3 +54,12 @@ def test_settings_env_file_is_absolute_and_repository_rooted(
     assert ENV_FILE.is_absolute()
     assert ENV_FILE == Path(__file__).resolve().parents[3] / ".env"
     assert Settings.model_config.get("env_file") == ENV_FILE
+
+
+def test_jwt_issuer_must_be_supabase_auth_v1_url() -> None:
+    with pytest.raises(ValidationError, match="/auth/v1"):
+        Settings(
+            app_env="test",
+            database_url="postgresql+asyncpg://user:password@localhost:5432/db",
+            supabase_jwt_issuer="https://test-project.supabase.co",
+        )

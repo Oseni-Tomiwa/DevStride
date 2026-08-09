@@ -52,3 +52,39 @@ describe("authenticated API client", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+
+function authenticatedClient() {
+  return createAuthenticatedApiClient({
+    auth: {
+      getSession: vi.fn().mockResolvedValue({
+        data: { session: { access_token: "test-access-token" } },
+        error: null,
+      }),
+    },
+  } as never);
+}
+
+it("turns a JSON 401 into an authentication error", async () => {
+  fetchMock.mockResolvedValue(
+    new Response(JSON.stringify({ detail: "Not authenticated" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    }),
+  );
+
+  await expect(authenticatedClient().get("/api/v1/profile/me"))
+    .rejects.toMatchObject({ status: 401, message: "Authentication required." });
+});
+
+it("turns a plain-text 401 into an authentication error without JSON parsing", async () => {
+  fetchMock.mockResolvedValue(
+    new Response("401: Not authenticated", {
+      status: 401,
+      headers: { "content-type": "text/plain" },
+    }),
+  );
+
+  await expect(authenticatedClient().get("/api/v1/profile/me"))
+    .rejects.toMatchObject({ status: 401, message: "Authentication required." });
+});

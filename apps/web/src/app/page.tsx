@@ -1,14 +1,45 @@
 import React from "react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-export default function HomePage() {
+import { createClient } from "../lib/supabase/server";
+
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect("/dashboard");
+  }
+
   return (
-    <main>
-      <section>
-        <p>Milestone 0</p>
-        <h1>DevStride</h1>
-        <p>
-          The foundation is ready. Authentication, AI chat, interviews, and
-          memory will be added in later milestones.
+    <main className="landing-shell">
+      <nav className="landing-nav" aria-label="Primary navigation">
+        <Link className="landing-brand" href="/">DevStride</Link>
+        <div className="landing-nav-actions">
+          <Link href="/login">Log in</Link>
+          <Link className="landing-button landing-button-small" href="/sign-up">
+            Create account
+          </Link>
+        </div>
+      </nav>
+
+      <section className="landing-content" aria-labelledby="landing-title">
+        <p className="landing-kicker">Your next engineering stride</p>
+        <h1 id="landing-title">Grow into the engineer you want to become.</h1>
+        <p className="landing-description">
+          DevStride is an AI-powered environment for software engineers to learn,
+          practise, communicate, prepare for interviews, and grow professionally.
+        </p>
+        <div className="landing-actions">
+          <Link className="landing-button" href="/sign-up">Create account</Link>
+          <Link className="landing-button landing-button-secondary" href="/login">Log in</Link>
+        </div>
+        <p className="landing-note">
+          Start with your profile and conversation workspace. More guided practice
+          capabilities are coming soon.
         </p>
       </section>
     </main>

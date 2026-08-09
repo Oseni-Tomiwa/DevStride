@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 import { createClient } from "../../../lib/supabase/client";
 
@@ -24,7 +24,6 @@ const copy: Record<AuthMode, { title: string; submit: string; alternate: string;
 };
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,12 +39,14 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     setIsLoading(true);
 
     const supabase = createClient();
+    const next = searchParams.get("next");
+    const destination = next?.startsWith("/") ? next : "/dashboard";
     const result = mode === "login"
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(destination)}` },
         });
 
     setIsLoading(false);
@@ -60,9 +61,12 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       return;
     }
 
-    const next = searchParams.get("next");
-    router.push(next?.startsWith("/") ? next : "/dashboard");
-    router.refresh();
+    if (!result.data.session) {
+      setError("Authentication succeeded without an active session. Please try logging in again.");
+      return;
+    }
+
+    window.location.assign(destination);
   }
 
   return (

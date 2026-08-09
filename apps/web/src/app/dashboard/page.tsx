@@ -8,6 +8,8 @@ import { getAuthenticatedProfile } from "../../features/profile/api";
 import { ApiError } from "../../lib/api/client";
 import { createClient } from "../../lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 const displayLabels: Record<string, string> = {
   beginner: "Beginner",
   junior: "Junior",

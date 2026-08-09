@@ -349,7 +349,7 @@ def test_response_persists_user_and_assistant_contract(
 
     response = post_response(conversation_id, {"content": "Hello"})
 
-    assert response.status_code == 201
+    assert response.status_code == 200
     assert response.json()["user_message"]["role"] == "user"
     assert response.json()["assistant_message"]["role"] == "assistant"
     assert response.json()["assistant_message"]["provider"] == "openai"

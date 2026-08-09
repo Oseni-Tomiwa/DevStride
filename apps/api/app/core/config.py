@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -60,6 +61,12 @@ class Settings(BaseSettings):
         if self.app_env != "test":
             if not self.supabase_jwt_issuer:
                 raise ValueError("SUPABASE_JWT_ISSUER is required outside test environments")
+
+        if self.supabase_jwt_issuer:
+            issuer = urlparse(self.supabase_jwt_issuer)
+            issuer_path_is_valid = issuer.path.rstrip("/") == "/auth/v1"
+            if issuer.scheme != "https" or not issuer.netloc or not issuer_path_is_valid:
+                raise ValueError("SUPABASE_JWT_ISSUER must be an HTTPS Supabase /auth/v1 URL")
 
         return self
 

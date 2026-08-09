@@ -66,17 +66,28 @@ export function createAuthenticatedApiClient(supabase: SupabaseClient) {
 
     if (!response.ok) {
       let detail: unknown;
-      try {
-        const payload: unknown = await response.json();
-        detail = typeof payload === "object" && payload !== null && "detail" in payload
-          ? payload.detail
-          : undefined;
-      } catch {
-        detail = undefined;
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        try {
+          const payload: unknown = await response.json();
+          detail = typeof payload === "object" && payload !== null && "detail" in payload
+            ? payload.detail
+            : undefined;
+        } catch {
+          detail = undefined;
+        }
+      } else {
+        try {
+          const text = await response.text();
+          detail = text.trim() || undefined;
+        } catch {
+          detail = undefined;
+        }
       }
 
       throw new ApiError(
-        errorMessage(detail) ?? "The API request failed.",
+        response.status === 401 ? "Authentication required." :
+          errorMessage(detail) ?? "The API request failed.",
         response.status,
         detail,
       );
