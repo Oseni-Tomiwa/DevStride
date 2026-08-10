@@ -51,6 +51,37 @@ describe("authenticated API client", () => {
     ).rejects.toMatchObject({ status: 401 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("opens an authenticated SSE stream with only the request body", async () => {
+    fetchMock.mockResolvedValue(
+      new Response("event: done\\ndata: {}\\n\\n", {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+    const supabase = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { access_token: "test-access-token" } },
+          error: null,
+        }),
+      },
+    };
+
+    await createAuthenticatedApiClient(supabase as never).stream(
+      "/api/v1/conversations/conversation-id/stream",
+      { content: "Hello" },
+    );
+
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((request.headers as Headers).get("Authorization")).toBe(
+      "Bearer test-access-token",
+    );
+    expect((request.headers as Headers).get("Content-Type")).toBe(
+      "application/json",
+    );
+    expect(request.body).toBe(JSON.stringify({ content: "Hello" }));
+  });
 });
 
 

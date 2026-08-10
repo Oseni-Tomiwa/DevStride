@@ -131,6 +131,16 @@ def post_response(conversation_id: UUID, payload: Mapping[str, object]) -> Respo
     )
 
 
+def post_stream(conversation_id: UUID, payload: Mapping[str, object]) -> Response:
+    return cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/conversations/{conversation_id}/stream",
+            json=payload,
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+
+
 def test_unauthenticated_conversation_list_returns_401() -> None:
     response = get_conversations()
 
@@ -392,3 +402,63 @@ def test_response_rejects_blank_and_oversized_content(
 ) -> None:
     assert post_response(uuid4(), {"content": " "}).status_code == 422
     assert post_response(uuid4(), {"content": "x" * 20_001}).status_code == 422
+
+
+def test_unauthenticated_stream_returns_401() -> None:
+    response = post_stream(uuid4(), {"content": "Hello"})
+    assert response.status_code == 401
+
+
+def test_stream_returns_404_for_unowned_conversation(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.conversations.routes.get_conversation",
+        AsyncMock(side_effect=ConversationNotFoundError),
+    )
+
+    response = post_stream(uuid4(), {"content": "Hello"})
+    assert response.status_code == 404
+
+
+def test_stream_emits_ordered_sse_events_and_final_metadata(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation_id = uuid4()
+    user_message = make_message(conversation_id)
+    assistant_message = make_message(conversation_id)
+    assistant_message.role = "assistant"
+    assistant_message.provider = "openai"
+    assistant_message.model = "configured-model"
+    assistant_message.latency_ms = 42
+
+    async def fake_stream(*args: object):
+        del args
+        from app.conversations.response_service import (
+            StreamAssistantComplete,
+            StreamAssistantDelta,
+            StreamUserMessage,
+        )
+
+        yield StreamUserMessage(user_message)
+        yield StreamAssistantDelta("Hello ")
+        yield StreamAssistantDelta("there")
+        yield StreamAssistantComplete(assistant_message)
+
+    monkeypatch.setattr(
+        "app.conversations.routes.get_conversation", AsyncMock(return_value=object())
+    )
+    monkeypatch.setattr("app.conversations.routes.stream_response", fake_stream)
+    app.dependency_overrides[get_ai_provider] = lambda: object()
+
+    response = post_stream(conversation_id, {"content": "Hello"})
+
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    body = response.text
+    assert body.index("event: user_message") < body.index("event: assistant_delta")
+    assert body.index('data: {"delta":"Hello "}') < body.index('data: {"delta":"there"}')
+    assert body.index("event: assistant_complete") < body.index("event: done")
+    assert '"role":"assistant"' in body

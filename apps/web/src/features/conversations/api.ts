@@ -75,3 +75,17 @@ export function respondToConversation(
     input,
   );
 }
+
+
+export function streamConversation(
+  supabase: SupabaseClient,
+  conversationId: string,
+  input: CreateUserMessageInput,
+  signal?: AbortSignal,
+) {
+  return createAuthenticatedApiClient(supabase).stream(
+    `/api/v1/conversations/${conversationId}/stream`,
+    input,
+    signal,
+  );
+}

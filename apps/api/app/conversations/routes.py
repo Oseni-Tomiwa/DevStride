@@ -1,7 +1,10 @@
-from typing import Annotated
+import json
+from collections.abc import AsyncIterator
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.dependencies import get_ai_provider
@@ -11,7 +14,10 @@ from app.auth.models import CurrentUser
 from app.conversations.response_service import (
     AssistantGenerationDisabledError,
     AssistantGenerationError,
+    StreamAssistantDelta,
+    StreamUserMessage,
     generate_response,
+    stream_response,
 )
 from app.conversations.schemas import (
     ConversationCreateRequest,
@@ -176,3 +182,75 @@ async def respond(
         user_message=MessageResponse.model_validate(user_message),
         assistant_message=MessageResponse.model_validate(assistant_message),
     )
+
+
+@router.post(
+    "/{conversation_id}/stream",
+    response_class=StreamingResponse,
+)
+async def stream(
+    conversation_id: UUID,
+    data: RespondRequest,
+    session: Session,
+    current_user: AuthenticatedUser,
+    provider: Provider,
+) -> StreamingResponse:
+    # Validate ownership before opening the response so unowned conversations
+    # receive a normal HTTP 404 rather than an SSE error after status 200.
+    try:
+        await get_conversation(session, current_user.id, conversation_id)
+    except ConversationNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        ) from None
+
+    async def event_stream() -> AsyncIterator[str]:
+        try:
+            async for event in stream_response(
+                session, current_user.id, conversation_id, data, provider
+            ):
+                if isinstance(event, StreamUserMessage):
+                    payload: dict[str, Any] = MessageResponse.model_validate(
+                        event.message
+                    ).model_dump(mode="json")
+                    yield _sse_event("user_message", payload)
+                elif isinstance(event, StreamAssistantDelta):
+                    yield _sse_event("assistant_delta", {"delta": event.delta})
+                else:
+                    payload = MessageResponse.model_validate(event.message).model_dump(mode="json")
+                    yield _sse_event("assistant_complete", payload)
+        except AssistantGenerationDisabledError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "generation_disabled",
+                    "message": "Assistant generation is currently disabled",
+                },
+            )
+        except AssistantGenerationError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "generation_failed",
+                    "message": "Assistant generation failed. Please try again.",
+                },
+            )
+        finally:
+            yield _sse_event("done", {})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _sse_event(event: str, data: dict[str, Any]) -> str:
+    """Serialize the stream contract: user_message, assistant_delta,
+    assistant_complete, error, and the terminal done event.
+    """
+    return f"event: {event}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"

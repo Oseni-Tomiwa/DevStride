@@ -81,3 +81,50 @@ async def test_openai_provider_wraps_sdk_failures(
         await provider.generate([])
 
     assert str(error.value) == ""
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_normalizes_stream_deltas_and_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StreamingResponses:
+        async def create(self, **kwargs: Any) -> Any:
+            assert kwargs["stream"] is True
+
+            async def events() -> Any:
+                yield SimpleNamespace(type="response.output_text.delta", delta="Hello ")
+                yield SimpleNamespace(type="response.output_text.delta", delta="there")
+                yield SimpleNamespace(
+                    type="response.completed",
+                    response=SimpleNamespace(
+                        id="response-stream-123",
+                        model="configured-model",
+                        usage=SimpleNamespace(input_tokens=8, output_tokens=3),
+                    ),
+                )
+
+            return events()
+
+    class StreamingClient:
+        responses = StreamingResponses()
+
+    def make_streaming_client(**kwargs: Any) -> StreamingClient:
+        del kwargs
+        return StreamingClient()
+
+    monkeypatch.setattr(
+        "app.ai.openai_provider.AsyncOpenAI",
+        cast(Any, make_streaming_client),
+    )
+    provider = OpenAIProvider("test-key", "configured-model")
+
+    chunks = [
+        chunk async for chunk in provider.stream([ProviderMessage(role="user", content="Hello")])
+    ]
+
+    assert [chunk.delta for chunk in chunks if chunk.delta] == ["Hello ", "there"]
+    result = next(chunk.result for chunk in chunks if chunk.result is not None)
+    assert result.provider == "openai"
+    assert result.provider_response_id == "response-stream-123"
+    assert result.input_tokens == 8
+    assert result.output_tokens == 3

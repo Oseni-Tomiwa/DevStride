@@ -2,9 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-type ApiRequestOptions = Omit<RequestInit, "body"> & {
-  body?: unknown;
-};
+type ApiRequestOptions = Omit<RequestInit, "body"> & { body?: unknown };
 
 export class ApiError extends Error {
   constructor(
@@ -18,40 +16,54 @@ export class ApiError extends Error {
 }
 
 function errorMessage(detail: unknown): string | undefined {
-  if (typeof detail === "string") {
-    return detail;
-  }
-
+  if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) {
     const messages = detail
-      .filter((item): item is { msg: string } => {
-        return typeof item === "object" && item !== null && "msg" in item &&
-          typeof item.msg === "string";
-      })
+      .filter((item): item is { msg: string } => typeof item === "object" && item !== null && "msg" in item && typeof item.msg === "string")
       .map((item) => item.msg);
     return messages.length > 0 ? messages.join(", ") : undefined;
   }
-
   return undefined;
 }
 
+async function errorFromResponse(response: Response): Promise<ApiError> {
+  let detail: unknown;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      const payload: unknown = await response.json();
+      detail = typeof payload === "object" && payload !== null && "detail" in payload ? payload.detail : undefined;
+    } catch {
+      detail = undefined;
+    }
+  } else {
+    try {
+      const text = await response.text();
+      detail = text.trim() || undefined;
+    } catch {
+      detail = undefined;
+    }
+  }
+  return new ApiError(
+    response.status === 401 ? "Authentication required." : errorMessage(detail) ?? "The API request failed.",
+    response.status,
+    detail,
+  );
+}
+
 export function createAuthenticatedApiClient(supabase: SupabaseClient) {
-  async function request<T>(
-    path: string,
-    options: ApiRequestOptions = {},
-  ): Promise<T> {
+  async function accessToken(): Promise<string> {
     const { data, error: sessionError } = await supabase.auth.getSession();
-    const accessToken = data.session?.access_token;
+    const token = data.session?.access_token;
+    if (sessionError || !token) throw new ApiError("Authentication is required.", 401);
+    return token;
+  }
 
-    if (sessionError || !accessToken) {
-      throw new ApiError("Authentication is required.", 401);
-    }
-
+  async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+    const token = await accessToken();
     const headers = new Headers(options.headers);
-    headers.set("Authorization", `Bearer ${accessToken}`);
-    if (options.body !== undefined && !headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json");
-    }
+    headers.set("Authorization", `Bearer ${token}`);
+    if (options.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
     let response: Response;
     try {
@@ -63,41 +75,28 @@ export function createAuthenticatedApiClient(supabase: SupabaseClient) {
     } catch (cause) {
       throw new ApiError("The API could not be reached.", 0, cause);
     }
-
-    if (!response.ok) {
-      let detail: unknown;
-      const contentType = response.headers.get("content-type") ?? "";
-      if (contentType.includes("application/json")) {
-        try {
-          const payload: unknown = await response.json();
-          detail = typeof payload === "object" && payload !== null && "detail" in payload
-            ? payload.detail
-            : undefined;
-        } catch {
-          detail = undefined;
-        }
-      } else {
-        try {
-          const text = await response.text();
-          detail = text.trim() || undefined;
-        } catch {
-          detail = undefined;
-        }
-      }
-
-      throw new ApiError(
-        response.status === 401 ? "Authentication required." :
-          errorMessage(detail) ?? "The API request failed.",
-        response.status,
-        detail,
-      );
-    }
-
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
+    if (!response.ok) throw await errorFromResponse(response);
+    if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
+  }
+
+  async function stream(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
+    const token = await accessToken();
+    const headers = new Headers({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
+    let response: Response;
+    try {
+      response = await fetch(`${apiBaseUrl}${path}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers,
+        signal,
+      });
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+      throw new ApiError("The API could not be reached.", 0, cause);
+    }
+    if (!response.ok) throw await errorFromResponse(response);
+    return response;
   }
 
   return {
@@ -105,5 +104,6 @@ export function createAuthenticatedApiClient(supabase: SupabaseClient) {
     post: <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body }),
     patch: <T>(path: string, body: unknown) => request<T>(path, { method: "PATCH", body }),
     delete: <T = void>(path: string) => request<T>(path, { method: "DELETE" }),
+    stream,
   };
 }
