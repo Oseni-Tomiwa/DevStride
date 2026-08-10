@@ -35,7 +35,7 @@ def _session_title(conversation: Conversation, first_user_content: str | None) -
 async def get_progress_summary(session: AsyncSession, user_id: UUID) -> ProgressSummaryResponse:
     rows = await repository.get_progress_rows(session, user_id)
     sessions: list[ProgressSessionResponse] = []
-    for conversation, message_count, first_user_content in rows:
+    for conversation, message_count, first_user_content, summary_available in rows:
         metadata = conversation.metadata_ or {}
         sessions.append(
             ProgressSessionResponse(
@@ -50,6 +50,7 @@ async def get_progress_summary(session: AsyncSession, user_id: UUID) -> Progress
                 interview_started=metadata.get("interview_started") is True,
                 interview_completed=metadata.get("interview_completed") is True,
                 has_final_assessment=metadata.get("final_assessment_message_id") is not None,
+                summary_available=bool(summary_available),
             )
         )
 

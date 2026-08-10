@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/api/client";
 import { ConversationDetail } from "./conversation-detail";
 
-const { push, retryConversationMessage, startInterview, streamConversation } = vi.hoisted(() => ({
+const { createConversationSummary, getConversationSummary, push, retryConversationMessage, startInterview, streamConversation } = vi.hoisted(() => ({
+  createConversationSummary: vi.fn(),
+  getConversationSummary: vi.fn(),
   push: vi.fn(),
   retryConversationMessage: vi.fn(),
   startInterview: vi.fn(),
@@ -18,7 +20,7 @@ vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
 vi.mock("../../../lib/supabase/client", () => ({ createClient: () => ({}) }));
-vi.mock("../api", () => ({ retryConversationMessage, startInterview, streamConversation }));
+vi.mock("../api", () => ({ createConversationSummary, getConversationSummary, retryConversationMessage, startInterview, streamConversation }));
 
 const conversation = {
   id: "conversation-id",
@@ -64,6 +66,7 @@ describe("ConversationDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     startInterview.mockResolvedValue(sseResponse([{ event: "interview_pending", data: {} }]));
+    getConversationSummary.mockRejectedValue(new ApiError("not found", 404));
   });
 
   it("renders persisted history chronologically", () => {
@@ -188,6 +191,41 @@ describe("ConversationDetail", () => {
     expect(screen.getByText("Technical · backend engineer · junior · apis")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "End interview" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Quiz me" })).not.toBeInTheDocument();
+  });
+
+  it("shows a Mentor summary control only for Mentor sessions and renders the returned summary", async () => {
+    const sessionSummary = {
+      id: "summary-id",
+      conversation_id: conversation.id,
+      session_mode: "mentor" as const,
+      summary: "This session showed careful API reasoning.",
+      topics_covered: ["APIs"],
+      strengths: ["Clear explanations"],
+      weaknesses: ["Failure handling"],
+      recommended_next_steps: ["Practice retries"],
+      concepts_practiced: ["HTTP semantics"],
+      exercises_completed: ["API walkthrough"],
+      correctness_rating: null,
+      clarity_rating: null,
+      depth_rating: null,
+      reasoning_rating: null,
+      created_at: "2026-08-01T12:00:00Z",
+      updated_at: "2026-08-01T12:00:00Z",
+    };
+    getConversationSummary.mockResolvedValueOnce(sessionSummary);
+    streamConversation.mockResolvedValueOnce(sseResponse([
+      { event: "user_message", data: message("end-user", "End request", "2026-08-01T12:00:00Z") },
+      { event: "assistant_complete", data: message("closing", "Session closed", "2026-08-01T12:00:01Z", "assistant") },
+    ]));
+    render(<ConversationDetail conversation={{ ...conversation, mode: "mentor" }} initialMessages={[message("started", "Let's discuss APIs", "2026-08-01T11:00:00Z", "assistant")]} />);
+
+    expect(screen.getByRole("button", { name: "End Mentor Session" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "End Mentor Session" }));
+
+    expect(await screen.findByRole("heading", { name: "What this session showed" })).toBeInTheDocument();
+    expect(screen.getByText("Topics covered")).toBeInTheDocument();
+    expect(screen.getByText("HTTP semantics")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "End Mentor Session" })).not.toBeInTheDocument();
   });
 
   it("sends the approved final-assessment instruction when ending an interview", async () => {

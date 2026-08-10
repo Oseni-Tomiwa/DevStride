@@ -23,6 +23,7 @@ const summary = {
       interview_started: true,
       interview_completed: true,
       has_final_assessment: true,
+      summary_available: true,
     },
   ],
 };
@@ -36,6 +37,7 @@ describe("ProgressOverview", () => {
     expect(screen.getByText("Technical interview · Databases · 4 messages")).toBeInTheDocument();
     expect(screen.getByText("Final assessment available")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Technical Interview/ })).toHaveAttribute("href", "/conversations/interview-id");
+    expect(screen.getByRole("link", { name: "View summary" })).toHaveAttribute("href", "/conversations/interview-id#session-summary");
   });
 
   it("offers useful actions for an empty history", () => {

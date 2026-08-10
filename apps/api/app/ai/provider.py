@@ -1,6 +1,10 @@
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TypeVar
+
+from pydantic import BaseModel
+
+StructuredModel = TypeVar("StructuredModel", bound=BaseModel)
 
 
 @dataclass(frozen=True)
@@ -37,6 +41,16 @@ class AIProvider(Protocol):
         self, messages: Sequence[ProviderMessage], *, system_instruction: str
     ) -> GenerationResult:
         """Generate one assistant response from bounded conversation context."""
+        ...
+
+    async def generate_structured(
+        self,
+        messages: Sequence[ProviderMessage],
+        *,
+        system_instruction: str,
+        response_model: type[StructuredModel],
+    ) -> tuple[StructuredModel, GenerationResult]:
+        """Generate and validate a provider-neutral structured response."""
         ...
 
     def stream(

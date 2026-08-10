@@ -11,6 +11,7 @@ from app.ai.provider import (
     GenerationResult,
     GenerationStreamChunk,
     ProviderMessage,
+    StructuredModel,
 )
 
 OPENAI_PROVIDER_NAME = "openai"
@@ -73,6 +74,48 @@ class OpenAIProvider:
             latency_ms=elapsed_ms,
             provider_response_id=response_id if isinstance(response_id, str) else None,
         )
+
+    async def generate_structured(
+        self,
+        messages: Sequence[ProviderMessage],
+        *,
+        system_instruction: str,
+        response_model: type[StructuredModel],
+    ) -> tuple[StructuredModel, GenerationResult]:
+        started_at = perf_counter()
+        request_input = _request_input(messages)
+        try:
+            response = await self.client.responses.parse(
+                model=self.model,
+                instructions=system_instruction,
+                input=cast(Any, request_input),
+                text_format=response_model,
+                timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            logger.warning(
+                "AI provider structured request failed",
+                extra={"operation": "generate_structured", "error_type": type(exc).__name__},
+            )
+            raise AIProviderError from exc
+
+        response_data = cast(Any, response)
+        parsed = getattr(response_data, "output_parsed", None)
+        if not isinstance(parsed, response_model):
+            raise AIProviderError
+        usage = getattr(response_data, "usage", None)
+        response_id = getattr(response_data, "id", None)
+        response_model_name = getattr(response_data, "model", None)
+        result = GenerationResult(
+            text="",
+            provider=OPENAI_PROVIDER_NAME,
+            model=response_model_name if isinstance(response_model_name, str) else self.model,
+            input_tokens=_int_or_none(getattr(usage, "input_tokens", None)),
+            output_tokens=_int_or_none(getattr(usage, "output_tokens", None)),
+            latency_ms=int((perf_counter() - started_at) * 1000),
+            provider_response_id=response_id if isinstance(response_id, str) else None,
+        )
+        return parsed, result
 
     async def stream(
         self,

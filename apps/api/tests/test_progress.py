@@ -51,9 +51,9 @@ async def test_progress_summary_counts_modes_and_preserves_interview_status(
 
     async def fake_rows(
         session: AsyncSession, user_id: Any
-    ) -> list[tuple[Conversation, int, str | None]]:
+    ) -> list[tuple[Conversation, int, str | None, bool]]:
         del session, user_id
-        return [(completed, 4, None), (mentor, 2, None), (general, 0, None)]
+        return [(completed, 4, None, True), (mentor, 2, None, False), (general, 0, None, False)]
 
     monkeypatch.setattr(repository, "get_progress_rows", fake_rows)
 
@@ -67,6 +67,7 @@ async def test_progress_summary_counts_modes_and_preserves_interview_status(
     assert summary.recent_sessions[0].title == "Technical Interview — Databases"
     assert summary.recent_sessions[0].has_final_assessment is True
     assert summary.recent_sessions[0].interview_completed is True
+    assert summary.recent_sessions[0].summary_available is True
     assert summary.recent_sessions[2].has_messages is False
 
 

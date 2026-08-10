@@ -12,6 +12,7 @@ export type ProgressSession = {
   interview_started: boolean;
   interview_completed: boolean;
   has_final_assessment: boolean;
+  summary_available: boolean;
 };
 
 export type ProgressSummary = {

@@ -6,16 +6,18 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
-import { retryConversationMessage, startInterview, streamConversation } from "../api";
+import { createConversationSummary, getConversationSummary, retryConversationMessage, startInterview, streamConversation } from "../api";
 import { conversationDisplayTitle } from "../title";
-import type { Conversation, Message } from "../types";
+import type { Conversation, Message, SessionSummary } from "../types";
 import { AssistantMarkdown } from "./assistant-markdown";
+import { SessionSummaryView } from "./session-summary-view";
 
 const MESSAGE_MAX_LENGTH = 20_000;
 
 type ConversationDetailProps = {
   conversation: Conversation;
   initialMessages: Message[];
+  initialSummary?: SessionSummary | null;
   mentorContext?: { currentLevel: string; targetRole: string };
   interviewContext?: { interviewType: string; interviewFocus: string | null; currentLevel: string; targetRole: string };
 };
@@ -79,7 +81,7 @@ async function* readSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<
   }
 }
 
-export function ConversationDetail({ conversation, initialMessages, mentorContext, interviewContext }: ConversationDetailProps) {
+export function ConversationDetail({ conversation, initialMessages, initialSummary = null, mentorContext, interviewContext }: ConversationDetailProps) {
   const router = useRouter();
   const [messages, setMessages] = useState(() => chronologicalMessages(initialMessages));
   const [content, setContent] = useState("");
@@ -90,6 +92,10 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
     conversation.mode === "interview" && initialMessages.length === 0,
   );
   const [interviewKickoffFailed, setInterviewKickoffFailed] = useState(false);
+  const [summary, setSummary] = useState<SessionSummary | null>(initialSummary);
+  const [summaryPending, setSummaryPending] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [sessionEndRequested, setSessionEndRequested] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const generationIdRef = useRef(0);
   const persistedUserMessageIdRef = useRef<string | null>(null);
@@ -272,6 +278,42 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
     await runGeneration((signal) => retryConversationMessage(createClient(), conversation.id, retryMessageId, signal));
   }
 
+  async function refreshSummary() {
+    setSummaryPending(true);
+    setSummaryError(null);
+    try {
+      setSummary(await getConversationSummary(createClient(), conversation.id));
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 404) {
+        setSummary(null);
+      } else if (cause instanceof ApiError && cause.status === 401) {
+        router.push("/login");
+      } else {
+        setSummaryError("The session summary is not available yet.");
+      }
+    } finally {
+      setSummaryPending(false);
+    }
+  }
+
+  async function generateSummary() {
+    setSummaryPending(true);
+    setSummaryError(null);
+    try {
+      setSummary(await createConversationSummary(createClient(), conversation.id));
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) {
+        router.push("/login");
+      } else if (cause instanceof ApiError && cause.status === 409) {
+        setSummaryError("Summaries are only available for Mentor and Interview sessions.");
+      } else {
+        setSummaryError("The session summary could not be generated. Please try again.");
+      }
+    } finally {
+      setSummaryPending(false);
+    }
+  }
+
   async function startInterviewKickoff() {
     setError(null);
     setInterviewKickoffFailed(false);
@@ -308,7 +350,15 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
   }, [conversation.id, conversation.mode, initialMessages.length]);
 
   async function endInterview() {
+    setSessionEndRequested(true);
     await submitMessage("End the interview and provide my final practice assessment with strengths, areas to improve, gaps, and next practice areas. Include practice ratings for correctness, clarity, depth, and reasoning from 1 to 5, and clearly state that they are not hiring predictions.");
+    await refreshSummary();
+  }
+
+  async function endMentorSession() {
+    setSessionEndRequested(true);
+    await submitMessage("End the mentor session and provide my practice summary with topics covered, strengths observed, areas to improve, and recommended next steps. Keep observations grounded in this session.");
+    await refreshSummary();
   }
 
   function handleComposerKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -392,6 +442,20 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
           </button>
         </div>
       )}
+      {conversation.mode === "mentor" && messages.some((message) => message.role === "assistant" && !message.id.startsWith("streaming-")) && !summary && (
+        <div className="session-end-actions">
+          <button type="button" className="button-secondary" onClick={() => void endMentorSession()} disabled={isSending || summaryPending}>
+            {sessionEndRequested ? "Updating summary…" : "End Mentor Session"}
+          </button>
+        </div>
+      )}
+      {sessionEndRequested && !summary && !summaryPending && (
+        <div className="generation-error" role="alert">
+          <p>{summaryError ?? "The session summary is not available yet."}</p>
+          <button type="button" className="button-secondary" onClick={() => void generateSummary()}>Retry summary</button>
+        </div>
+      )}
+      {summary && <SessionSummaryView summary={summary} />}
       <form className="message-composer" onSubmit={handleSubmit}>
         <label htmlFor="message-content">Your message</label>
         <textarea id="message-content" value={content} maxLength={MESSAGE_MAX_LENGTH} placeholder="Ask a question or describe what you want to practise…" onChange={(event) => { setContent(event.target.value); setError(null); }} onKeyDown={handleComposerKeyDown} rows={4} disabled={isSending} />

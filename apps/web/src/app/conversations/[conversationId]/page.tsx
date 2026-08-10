@@ -2,7 +2,8 @@ import { notFound, redirect } from "next/navigation";
 
 import { AppHeader } from "../../../components/app-header";
 import { ConversationDetail } from "../../../features/conversations/components/conversation-detail";
-import { getConversation, listMessages } from "../../../features/conversations/api";
+import { getConversation, getConversationSummary, listMessages } from "../../../features/conversations/api";
+import type { SessionSummary } from "../../../features/conversations/types";
 import { getAuthenticatedProfile } from "../../../features/profile/api";
 import type { Profile } from "../../../features/profile/types";
 import { ApiError } from "../../../lib/api/client";
@@ -26,6 +27,14 @@ export default async function ConversationPage({ params }: ConversationPageProps
       listMessages(supabase, conversationId),
     ]);
     let mentorProfile: Profile | null = null;
+    let sessionSummary: SessionSummary | null = null;
+    if (conversation.mode === "mentor" || conversation.mode === "interview") {
+      try {
+        sessionSummary = await getConversationSummary(supabase, conversationId);
+      } catch (cause) {
+        if (!(cause instanceof ApiError && cause.status === 404)) throw cause;
+      }
+    }
     if (conversation.mode === "mentor" || conversation.mode === "interview") {
       try {
         mentorProfile = await getAuthenticatedProfile(supabase);
@@ -51,6 +60,7 @@ export default async function ConversationPage({ params }: ConversationPageProps
               currentLevel: mentorProfile.current_level,
               targetRole: mentorProfile.target_role,
             } : undefined}
+            initialSummary={sessionSummary}
           />
         </section>
       </main>

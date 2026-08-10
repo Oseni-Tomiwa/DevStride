@@ -8,6 +8,7 @@ import type {
   Message,
   RenameConversationInput,
   RespondResponse,
+  SessionSummary,
 } from "./types";
 
 export function listConversations(supabase: SupabaseClient) {
@@ -112,5 +113,18 @@ export function startInterview(
     `/api/v1/conversations/${conversationId}/interview-start`,
     {},
     signal,
+  );
+}
+
+export function getConversationSummary(supabase: SupabaseClient, conversationId: string) {
+  return createAuthenticatedApiClient(supabase).get<SessionSummary>(
+    `/api/v1/conversations/${conversationId}/summary`,
+  );
+}
+
+export function createConversationSummary(supabase: SupabaseClient, conversationId: string) {
+  return createAuthenticatedApiClient(supabase).post<SessionSummary>(
+    `/api/v1/conversations/${conversationId}/summary`,
+    {},
   );
 }

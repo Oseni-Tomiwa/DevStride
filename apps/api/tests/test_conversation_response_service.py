@@ -49,6 +49,23 @@ class FakeProvider:
         assert self.result is not None
         return self.result
 
+    async def generate_structured(
+        self,
+        messages: Sequence[ProviderMessage],
+        *,
+        system_instruction: str,
+        response_model: Any,
+    ) -> tuple[Any, GenerationResult]:
+        del messages, system_instruction
+        assert self.result is not None
+        return response_model(
+            summary=self.result.text,
+            topics_covered=["practice topic"],
+            strengths=["clear explanation"],
+            weaknesses=[],
+            recommended_next_steps=["Keep practicing"],
+        ), self.result
+
     async def stream(
         self, messages: Sequence[ProviderMessage], *, system_instruction: str
     ) -> AsyncIterator[GenerationStreamChunk]:
@@ -299,6 +316,11 @@ async def test_successful_final_assessment_marks_interview_complete_after_persis
         "app.conversations.response_service.get_conversation", fake_get_conversation
     )
     monkeypatch.setattr("app.conversations.response_service.system_instruction", fake_instruction)
+
+    async def fake_summary(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+
+    monkeypatch.setattr("app.conversations.response_service.generate_summary", fake_summary)
     monkeypatch.setattr(repository, "create_message", fake_create_message)
     monkeypatch.setattr(repository, "get_recent_by_conversation_id", fake_recent)
 

@@ -21,6 +21,7 @@ class ProgressSessionResponse(BaseModel):
     interview_started: bool
     interview_completed: bool
     has_final_assessment: bool
+    summary_available: bool
 
 
 class ProgressSummaryResponse(BaseModel):

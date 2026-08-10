@@ -33,7 +33,8 @@ function SessionItem({ session }: { session: ProgressSession }) {
   const status = interviewStatus(session);
   return (
     <li className="progress-session">
-      <Link href={`/conversations/${session.id}`} className="progress-session-link">
+      <div className="progress-session-row">
+        <Link href={`/conversations/${session.id}`} className="progress-session-link">
           <span>
             <strong>{session.title}</strong>
             <span className="progress-session-meta">
@@ -41,12 +42,14 @@ function SessionItem({ session }: { session: ProgressSession }) {
               {session.interview_focus ? ` · ${focusLabels[session.interview_focus] ?? session.interview_focus}` : ""}
               {` · ${session.has_messages ? `${session.message_count} messages` : "No messages yet"}`}
             </span>
-        </span>
-        <span className="progress-session-side">
-          <span>{formatUpdatedAt(session.updated_at)}</span>
-          {status && <span className={session.interview_completed ? "status-pill status-pill-success" : "status-pill"}>{status}</span>}
-        </span>
-      </Link>
+          </span>
+          <span className="progress-session-side">
+            <span>{formatUpdatedAt(session.updated_at)}</span>
+            {status && <span className={session.interview_completed ? "status-pill status-pill-success" : "status-pill"}>{status}</span>}
+          </span>
+        </Link>
+        {session.summary_available && <Link href={`/conversations/${session.id}#session-summary`} className="text-link">View summary</Link>}
+      </div>
     </li>
   );
 }

@@ -11,6 +11,7 @@ from app.conversations import models as conversation_models  # noqa: F401
 from app.core.config import settings
 from app.database.base import Base
 from app.profiles import models  # noqa: F401
+from app.session_summaries import models as session_summary_models  # noqa: F401
 
 config = context.config
 

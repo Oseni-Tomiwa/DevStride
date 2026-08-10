@@ -53,3 +53,22 @@ export type RespondResponse = {
   user_message: Message;
   assistant_message: Message;
 };
+
+export type SessionSummary = {
+  id: string;
+  conversation_id: string;
+  session_mode: "mentor" | "interview";
+  summary: string;
+  topics_covered: string[];
+  strengths: string[];
+  weaknesses: string[];
+  recommended_next_steps: string[];
+  concepts_practiced: string[] | null;
+  exercises_completed: string[] | null;
+  correctness_rating: number | null;
+  clarity_rating: number | null;
+  depth_rating: number | null;
+  reasoning_rating: number | null;
+  created_at: string;
+  updated_at: string;
+};

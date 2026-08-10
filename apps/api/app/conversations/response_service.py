@@ -19,10 +19,15 @@ from app.conversations.service import get_conversation, get_retry_message
 from app.interviews.prompts import build_interview_instruction
 from app.mentor.prompts import build_mentor_instruction
 from app.profiles import repository as profile_repository
+from app.session_summaries.service import (
+    SessionSummaryGenerationError,
+    generate_summary,
+)
 
 logger = logging.getLogger(__name__)
 RECENT_MESSAGE_CONTEXT_LIMIT = 20
 FINAL_ASSESSMENT_REQUEST_PREFIX = "End the interview and provide my final practice assessment"
+MENTOR_SESSION_END_REQUEST_PREFIX = "End the mentor session and provide my practice summary"
 
 
 class AssistantGenerationDisabledError(Exception):
@@ -74,11 +79,42 @@ def _is_final_assessment_request(content: str) -> bool:
     return content.strip().startswith(FINAL_ASSESSMENT_REQUEST_PREFIX)
 
 
+def _is_mentor_session_end_request(content: str) -> bool:
+    return content.strip().startswith(MENTOR_SESSION_END_REQUEST_PREFIX)
+
+
 def _mark_interview_completed(conversation: Conversation, assistant_message: Message) -> None:
     metadata = dict(conversation.metadata_ or {})
     metadata["interview_completed"] = True
     metadata["final_assessment_message_id"] = str(assistant_message.id)
     conversation.metadata_ = metadata
+
+
+async def _maybe_generate_session_summary(
+    session: AsyncSession,
+    user_id: UUID,
+    conversation: Conversation,
+    trigger_content: str,
+    provider: AIProvider | None,
+) -> None:
+    should_summarize = (
+        conversation.mode == "interview" and _is_final_assessment_request(trigger_content)
+    ) or (conversation.mode == "mentor" and _is_mentor_session_end_request(trigger_content))
+    if not should_summarize:
+        return
+    try:
+        await generate_summary(session, user_id, conversation.id, provider)
+    except SessionSummaryGenerationError:
+        logger.warning(
+            "Session summary remains unavailable",
+            extra={"mode": conversation.mode},
+        )
+        return
+    if conversation.mode == "mentor":
+        metadata = dict(conversation.metadata_ or {})
+        metadata["mentor_completed"] = True
+        conversation.metadata_ = metadata
+        await session.commit()
 
 
 def _provider_messages(messages: Sequence[Message]) -> list[ProviderMessage]:
@@ -259,6 +295,7 @@ async def generate_response(
         _mark_interview_completed(conversation, assistant_message)
     repository.touch_conversation_activity(conversation)
     await session.commit()
+    await _maybe_generate_session_summary(session, user_id, conversation, data.content, provider)
     return user_message, assistant_message
 
 
@@ -338,6 +375,7 @@ async def stream_response(
         _mark_interview_completed(conversation, assistant_message)
     repository.touch_conversation_activity(conversation)
     await session.commit()
+    await _maybe_generate_session_summary(session, user_id, conversation, data.content, provider)
     yield StreamAssistantComplete(assistant_message)
 
 
@@ -409,4 +447,7 @@ async def retry_stream_response(
         _mark_interview_completed(conversation, assistant_message)
     repository.touch_conversation_activity(conversation)
     await session.commit()
+    await _maybe_generate_session_summary(
+        session, user_id, conversation, user_message.content, provider
+    )
     yield StreamAssistantComplete(assistant_message)
