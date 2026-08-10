@@ -28,6 +28,11 @@ Install:
 - Docker with Docker Compose
 - Git
 
+The web app uses Next.js 16.3.0 and requires Node.js 20.9 or newer; Node.js
+22.13+ is the recommended LTS runtime used by CI. Its authentication boundary
+uses the Next 16 `proxy.ts` convention with the existing Supabase SSR cookie
+flow.
+
 ## Initial setup
 
 ```bash

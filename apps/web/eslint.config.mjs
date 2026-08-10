@@ -1,15 +1,19 @@
-import { FlatCompat } from "@eslint/eslintrc";
 import { globalIgnores } from "eslint/config";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const compat = new FlatCompat({ baseDirectory: __dirname });
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 
 const eslintConfig = [
   globalIgnores([".next/**", "node_modules/**", "next-env.d.ts"]),
-  ...compat.extends("next/core-web-vitals", "next/typescript")
+  ...nextCoreWebVitals,
+  ...nextTypescript,
+  {
+    // These stricter React compiler diagnostics are not enabled by the
+    // previous Next.js 15 toolchain and are outside this dependency upgrade.
+    rules: {
+      "react-hooks/error-boundaries": "off",
+      "react-hooks/purity": "off",
+    },
+  },
 ];
 
 export default eslintConfig;

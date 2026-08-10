@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "./src/lib/supabase/middleware";
 import { isProtectedPath } from "./src/lib/supabase/protected-routes";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { response, user } = await updateSession(request);
 
   if (isProtectedPath(request.nextUrl.pathname) && !user) {
