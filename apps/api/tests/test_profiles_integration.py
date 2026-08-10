@@ -22,9 +22,12 @@ from sqlalchemy.pool import NullPool
 from alembic import command
 from app.auth.jwt import jwks_client
 from app.conversations.models import Conversation, Message
+from app.conversations.response_service import system_instruction
 from app.core.config import settings
 from app.database.session import get_db_session
 from app.main import app
+from app.memory.models import MemoryRecord
+from app.memory.service import retrieve_for_prompt
 from app.profiles.models import Profile
 
 TEST_DATABASE_URL = os.getenv(
@@ -92,11 +95,13 @@ async def clean_profiles(
     _, factory = test_database
     async with factory() as session:
         await session.execute(delete(Conversation))
+        await session.execute(delete(MemoryRecord))
         await session.execute(delete(Profile))
         await session.commit()
     yield factory
     async with factory() as session:
         await session.execute(delete(Conversation))
+        await session.execute(delete(MemoryRecord))
         await session.execute(delete(Profile))
         await session.commit()
 
@@ -356,6 +361,251 @@ async def test_conversation_messages_persist_and_cascade_delete(
     assert delete_response.status_code == 204
     assert conversation is None
     assert messages == []
+
+
+async def persisted_memories(factory: async_sessionmaker[Any], user_id: UUID) -> list[MemoryRecord]:
+    async with factory() as session:
+        result = await session.execute(
+            select(MemoryRecord)
+            .where(MemoryRecord.user_id == user_id)
+            .order_by(MemoryRecord.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+
+@pytest.mark.asyncio
+async def test_memory_create_read_edit_and_archive_are_persisted(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, factory = integration_client
+    user_id = uuid4()
+    headers = auth_headers(signing_key, user_id)
+
+    create_response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/memories",
+            json={"category": "goal", "content": "Target backend engineering roles"},
+            headers=headers,
+        ),
+    )
+    memory_id = UUID(create_response.json()["id"])
+    read_response = cast(
+        Response,
+        client.get("/api/v1/memories", headers=headers),  # pyright: ignore[reportUnknownMemberType]
+    )
+    edit_response = cast(
+        Response,
+        client.patch(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/memories/{memory_id}",
+            json={"content": "Target backend platform roles"},
+            headers=headers,
+        ),
+    )
+    delete_response = cast(
+        Response,
+        client.delete(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/memories/{memory_id}", headers=headers
+        ),
+    )
+    active_after_delete = cast(
+        Response,
+        client.get("/api/v1/memories", headers=headers),  # pyright: ignore[reportUnknownMemberType]
+    )
+    stored = await persisted_memories(factory, user_id)
+
+    assert create_response.status_code == 201
+    assert read_response.status_code == 200
+    assert read_response.json()[0]["content"] == "Target backend engineering roles"
+    assert edit_response.status_code == 200
+    assert edit_response.json()["content"] == "Target backend platform roles"
+    assert delete_response.status_code == 204
+    assert active_after_delete.json() == []
+    assert len(stored) == 1
+    assert stored[0].status == "archived"
+
+
+@pytest.mark.asyncio
+async def test_memory_ownership_validation_and_duplicate_reinforcement(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, factory = integration_client
+    owner_id = uuid4()
+    other_id = uuid4()
+    owner_headers = auth_headers(signing_key, owner_id)
+    other_headers = auth_headers(signing_key, other_id)
+    payload = {"category": "preference", "content": "Prefers direct feedback"}
+
+    first = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/memories", json=payload, headers=owner_headers
+        ),
+    )
+    second = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/memories",
+            json={"category": "preference", "content": "  PREFERS   direct feedback "},
+            headers=owner_headers,
+        ),
+    )
+    memory_id = UUID(first.json()["id"])
+    foreign_read = cast(
+        Response,
+        client.get(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/memories", headers=other_headers
+        ),
+    )
+    foreign_edit = cast(
+        Response,
+        client.patch(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/memories/{memory_id}",
+            json={"content": "Changed by another user"},
+            headers=other_headers,
+        ),
+    )
+    foreign_delete = cast(
+        Response,
+        client.delete(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/memories/{memory_id}", headers=other_headers
+        ),
+    )
+    stored = await persisted_memories(factory, owner_id)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert second.json()["id"] == first.json()["id"]
+    assert second.json()["reinforcement_count"] == 1
+    assert foreign_read.status_code == 200
+    assert foreign_read.json() == []
+    assert foreign_edit.status_code == 404
+    assert foreign_delete.status_code == 404
+    assert len(stored) == 1
+    assert stored[0].reinforcement_count == 1
+
+
+@pytest.mark.asyncio
+async def test_memory_invalid_category_and_secret_are_rejected(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, _factory = integration_client
+    headers = auth_headers(signing_key, uuid4())
+
+    invalid_category = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/memories",
+            json={"category": "identity", "content": "Not allowed"},
+            headers=headers,
+        ),
+    )
+    secret = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/memories",
+            json={"category": "project", "content": "Remember password=hunter2"},
+            headers=headers,
+        ),
+    )
+
+    assert invalid_category.status_code == 422
+    assert secret.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_memory_migration_and_prompt_injection_boundaries(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    _client, _signing_key, factory = integration_client
+    user_id = uuid4()
+    profile = Profile(
+        user_id=user_id,
+        display_name="Prompt User",
+        current_level="junior",
+        target_role="backend_engineer",
+        preferred_stack=["Python"],
+        communication_goal="technical_interviews",
+        feedback_preference="balanced",
+        onboarding_completed=True,
+    )
+    async with factory() as session:
+        session.add(profile)
+        for index in range(7):
+            session.add(
+                MemoryRecord(
+                    user_id=user_id,
+                    category="skill",
+                    content=f"Useful memory {index}",
+                    importance=5,
+                    confidence=1.0,
+                    source_type="manual",
+                )
+            )
+        session.add(
+            MemoryRecord(
+                user_id=user_id,
+                category="weakness",
+                content="Archived memory",
+                importance=5,
+                confidence=1.0,
+                source_type="interview_summary",
+                status="archived",
+            )
+        )
+        await session.commit()
+        memories = await retrieve_for_prompt(session, user_id)
+        mentor_prompt = await system_instruction(
+            session, user_id, Conversation(user_id=user_id, title="Mentor", mode="mentor")
+        )
+        interview_prompt = await system_instruction(
+            session,
+            user_id,
+            Conversation(user_id=user_id, title="Interview", mode="interview", metadata_={}),
+        )
+
+    assert len(memories) == 6
+    assert all(memory.status == "active" for memory in memories)
+    assert "Archived memory" not in mentor_prompt
+    assert "Archived memory" not in interview_prompt
+    assert mentor_prompt.count("Useful memory") == 6
+    assert interview_prompt.count("Useful memory") == 6
+    assert "current explicit user input overrides it" in mentor_prompt
+    assert "current explicit user input overrides it" in interview_prompt
+    for prompt in (mentor_prompt, interview_prompt):
+        assert "confidence" not in prompt
+        assert "source_type" not in prompt
+        assert "created_at" not in prompt
+        assert str(user_id) not in prompt
+        assert "user_id" not in prompt
+        assert "Bearer " not in prompt
+        assert "PRIVATE KEY" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_general_prompt_receives_no_memory_context(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    _client, _signing_key, factory = integration_client
+    user_id = uuid4()
+    async with factory() as session:
+        session.add(
+            MemoryRecord(
+                user_id=user_id,
+                category="goal",
+                content="Target backend roles",
+                importance=5,
+                confidence=1.0,
+                source_type="manual",
+            )
+        )
+        await session.commit()
+        prompt = await system_instruction(
+            session, user_id, Conversation(user_id=user_id, title="General", mode="general")
+        )
+
+    assert "Target backend roles" not in prompt
+    assert "Relevant saved user context" not in prompt
 
 
 @pytest.mark.asyncio

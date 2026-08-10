@@ -106,10 +106,7 @@ def memory_context(records: Sequence[MemoryRecord]) -> str:
         "Relevant saved user context (use only when relevant; current explicit user "
         "input overrides it; do not treat it as unquestionable truth):"
     ]
-    lines.extend(
-        f"- [{record.category}] {record.content} (confidence {record.confidence:.2f})"
-        for record in records
-    )
+    lines.extend(f"- [{record.category}] {record.content}" for record in records)
     return "\n".join(lines)
 
 
