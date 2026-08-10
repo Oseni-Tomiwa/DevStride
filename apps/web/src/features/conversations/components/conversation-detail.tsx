@@ -16,6 +16,7 @@ type ConversationDetailProps = {
   conversation: Conversation;
   initialMessages: Message[];
   mentorContext?: { currentLevel: string; targetRole: string };
+  interviewContext?: { interviewType: string; interviewFocus: string | null; currentLevel: string; targetRole: string };
 };
 type SseEvent = { event: string; data: unknown };
 type SseRecord = Record<string, unknown>;
@@ -77,7 +78,7 @@ async function* readSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<
   }
 }
 
-export function ConversationDetail({ conversation, initialMessages, mentorContext }: ConversationDetailProps) {
+export function ConversationDetail({ conversation, initialMessages, mentorContext, interviewContext }: ConversationDetailProps) {
   const router = useRouter();
   const [messages, setMessages] = useState(() => chronologicalMessages(initialMessages));
   const [content, setContent] = useState("");
@@ -242,6 +243,10 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
     await runGeneration((signal) => retryConversationMessage(createClient(), conversation.id, retryMessageId, signal));
   }
 
+  async function endInterview() {
+    await submitMessage("End the interview and provide my final practice assessment with strengths, areas to improve, gaps, and next practice areas. Include practice ratings for correctness, clarity, depth, and reasoning from 1 to 5, and clearly state that they are not hiring predictions.");
+  }
+
   function handleComposerKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -257,6 +262,7 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
     { label: "Challenge my answer", content: "Challenge my most recent answer. Point out weak assumptions and ask me to improve it." },
   ];
   const profileLabel = (value: string) => value.replaceAll("_", " ");
+  const interviewTypeLabel = interviewContext?.interviewType === "behavioral" ? "Behavioral" : "Technical";
 
   const displayTitle = conversationDisplayTitle(conversation, messages);
 
@@ -264,12 +270,18 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
     <section className="conversation-shell conversation-detail" aria-labelledby="conversation-title">
       <div className="conversation-detail-header">
         <Link href="/conversations" className="back-link">← All conversations</Link>
-        <p className="eyebrow">{conversation.mode === "mentor" ? "Mentor Mode" : conversation.mode}</p>
+        <p className="eyebrow">{conversation.mode === "mentor" ? "Mentor Mode" : conversation.mode === "interview" ? "Interview Mode" : conversation.mode}</p>
         <h1 id="conversation-title">{displayTitle}</h1>
         <p className="muted">Your messages and assistant responses are saved in this conversation.</p>
         {conversation.mode === "mentor" && mentorContext && (
           <p className="conversation-context">
             {profileLabel(mentorContext.targetRole)} · {profileLabel(mentorContext.currentLevel)}
+          </p>
+        )}
+        {conversation.mode === "interview" && interviewContext && (
+          <p className="conversation-context">
+            {interviewTypeLabel} · {profileLabel(interviewContext.targetRole)} · {profileLabel(interviewContext.currentLevel)}
+            {interviewContext.interviewFocus && ` · ${profileLabel(interviewContext.interviewFocus)}`}
           </p>
         )}
       </div>
@@ -295,6 +307,13 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
               {action.label}
             </button>
           ))}
+        </div>
+      )}
+      {conversation.mode === "interview" && (
+        <div className="interview-actions">
+          <button type="button" className="button-secondary" onClick={() => void endInterview()} disabled={isSending}>
+            End interview
+          </button>
         </div>
       )}
       <form className="message-composer" onSubmit={handleSubmit}>

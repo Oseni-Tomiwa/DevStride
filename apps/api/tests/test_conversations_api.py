@@ -192,10 +192,59 @@ def test_user_creates_owned_mentor_conversation(
     assert create.await_args.args[2].mode == "mentor"
 
 
-def test_unsupported_conversation_mode_is_rejected(
+def test_interview_mode_requires_interview_type(
     authenticated_client: tuple[TestClient, CurrentUser],
 ) -> None:
     response = post_conversation({"title": "Unsupported", "mode": "interview"})
+
+    assert response.status_code == 422
+
+
+def test_unknown_conversation_mode_is_rejected(
+    authenticated_client: tuple[TestClient, CurrentUser],
+) -> None:
+    response = post_conversation({"title": "Unsupported", "mode": "interviews"})
+
+    assert response.status_code == 422
+
+
+def test_user_creates_technical_interview_with_focus(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, current_user = authenticated_client
+    conversation = make_conversation(current_user.id)
+    conversation.mode = "interview"
+    conversation.metadata_ = {"interview_type": "technical", "interview_focus": "apis"}
+    create = AsyncMock(return_value=conversation)
+    monkeypatch.setattr("app.conversations.routes.create_conversation", create)
+
+    response = post_conversation(
+        {
+            "title": "Technical interview",
+            "mode": "interview",
+            "interview_type": "technical",
+            "interview_focus": "apis",
+        }
+    )
+
+    assert response.status_code == 201
+    assert response.json()["mode"] == "interview"
+    assert create.await_args is not None
+    assert create.await_args.args[2].interview_focus == "apis"
+
+
+def test_behavioral_interview_rejects_technical_focus(
+    authenticated_client: tuple[TestClient, CurrentUser],
+) -> None:
+    response = post_conversation(
+        {
+            "title": "Behavioral interview",
+            "mode": "interview",
+            "interview_type": "behavioral",
+            "interview_focus": "apis",
+        }
+    )
 
     assert response.status_code == 422
 

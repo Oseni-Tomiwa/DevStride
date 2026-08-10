@@ -27,7 +27,13 @@ class RetryNotAllowedError(Exception):
 async def create_conversation(
     session: AsyncSession, user_id: UUID, data: ConversationCreateRequest
 ) -> Conversation:
-    conversation = Conversation(user_id=user_id, **data.model_dump())
+    conversation_data = data.model_dump(exclude={"interview_type", "interview_focus"})
+    if data.mode == "interview":
+        conversation_data["metadata_"] = {
+            "interview_type": data.interview_type,
+            "interview_focus": data.interview_focus,
+        }
+    conversation = Conversation(user_id=user_id, **conversation_data)
     await repository.create_conversation(session, conversation)
     await session.commit()
     return conversation

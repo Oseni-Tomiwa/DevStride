@@ -2,6 +2,7 @@ import React from "react";
 import { redirect } from "next/navigation";
 
 import { AppHeader } from "../../components/app-header";
+import { InterviewEntry } from "../../features/conversations/components/interview-entry";
 import { MentorEntry } from "../../features/conversations/components/mentor-entry";
 import { Profile } from "../../features/profile/types";
 import { getAuthenticatedProfile } from "../../features/profile/api";
@@ -98,13 +99,16 @@ export default async function DashboardPage() {
               <p className="muted">A profile-aware software-engineering learning space.</p>
               <MentorEntry />
             </article>
-            {["Mock Interview", "Team Practice"].map((title) => (
-              <article className="practice-card" key={title}>
-                <h3>{title}</h3>
-                <p className="muted">Structured practice is coming soon.</p>
-                <button type="button" disabled>Coming soon</button>
-              </article>
-            ))}
+            <article className="practice-card">
+              <h3>Mock Interview</h3>
+              <p className="muted">Practice technical and behavioral engineering interviews.</p>
+              <InterviewEntry />
+            </article>
+            <article className="practice-card">
+              <h3>Team Practice</h3>
+              <p className="muted">Structured practice is coming soon.</p>
+              <button type="button" disabled>Coming soon</button>
+            </article>
           </div>
         </section>
       </section>

@@ -1,3 +1,13 @@
+export type ConversationMode = "general" | "mentor" | "interview";
+export type InterviewType = "technical" | "behavioral";
+export type InterviewFocus =
+  | "general_backend"
+  | "apis"
+  | "databases"
+  | "javascript_node"
+  | "python"
+  | "system_design";
+
 export type Conversation = {
   id: string;
   title: string;
@@ -25,7 +35,9 @@ export type Message = {
 
 export type CreateConversationInput = {
   title: string;
-  mode: string;
+  mode: ConversationMode;
+  interview_type?: InterviewType;
+  interview_focus?: InterviewFocus;
 };
 
 export type RenameConversationInput = {

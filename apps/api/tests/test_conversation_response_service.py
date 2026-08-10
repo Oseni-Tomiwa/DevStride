@@ -22,8 +22,10 @@ from app.conversations.response_service import (
     generate_response,
     retry_stream_response,
     stream_response,
+    system_instruction,
 )
 from app.conversations.schemas import RespondRequest
+from app.interviews.prompts import build_interview_instruction
 from app.mentor.prompts import build_mentor_instruction
 from app.profiles.models import Profile
 
@@ -415,3 +417,70 @@ def test_mentor_prompt_uses_safe_profile_context_and_feedback_guidance() -> None
     assert "require precise answers" in instruction
     assert "Private name" not in instruction
     assert str(profile.user_id) not in instruction
+
+
+def test_interview_prompt_contains_configuration_and_final_assessment_rules() -> None:
+    profile = Profile(
+        user_id=uuid4(),
+        display_name="Private name",
+        current_level="senior",
+        target_role="backend_engineer",
+        preferred_stack=["Python", "PostgreSQL"],
+        communication_goal="technical_interviews",
+        feedback_preference="balanced",
+        onboarding_completed=True,
+    )
+
+    instruction = build_interview_instruction(
+        profile,
+        {"interview_type": "technical", "interview_focus": "apis"},
+    )
+
+    assert "interview-v1" in instruction
+    assert "Technical" in instruction
+    assert "APIs" in instruction
+    assert "senior" in instruction
+    assert "backend_engineer" in instruction
+    assert "Python, PostgreSQL" in instruction
+    assert "Ask one primary question" in instruction
+    assert "final practice assessment" in instruction
+    assert "Private name" not in instruction
+    assert str(profile.user_id) not in instruction
+
+
+@pytest.mark.asyncio
+async def test_interview_mode_selects_interview_prompt_server_side(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    conversation = Conversation(
+        user_id=user_id,
+        title="Technical interview",
+        mode="interview",
+        metadata_={"interview_type": "behavioral", "interview_focus": None},
+    )
+    profile = Profile(
+        user_id=user_id,
+        display_name="Private name",
+        current_level="junior",
+        target_role="backend_engineer",
+        preferred_stack=["Python"],
+        communication_goal="technical_interviews",
+        feedback_preference="balanced",
+        onboarding_completed=True,
+    )
+
+    async def fake_profile(*args: Any) -> Profile:
+        del args
+        return profile
+
+    monkeypatch.setattr(
+        "app.conversations.response_service.profile_repository.get_profile_by_user_id",
+        fake_profile,
+    )
+
+    instruction = await system_instruction(cast(AsyncSession, object()), user_id, conversation)
+
+    assert "Behavioral" in instruction
+    assert "You are a professional DevStride software-engineering interviewer." in instruction
+    assert "You are DevStride Mentor" not in instruction

@@ -14,6 +14,7 @@ from app.auth.models import CurrentUser
 from app.conversations.response_service import (
     AssistantGenerationDisabledError,
     AssistantGenerationError,
+    InterviewProfileRequiredError,
     MentorProfileRequiredError,
     StreamAssistantDelta,
     StreamUserMessage,
@@ -190,7 +191,7 @@ async def respond(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Assistant generation failed. Please try again.",
         ) from None
-    except MentorProfileRequiredError:
+    except (MentorProfileRequiredError, InterviewProfileRequiredError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Complete onboarding before using Mentor Mode",
@@ -253,7 +254,7 @@ async def stream(
                     "message": "Assistant generation failed. Please try again.",
                 },
             )
-        except MentorProfileRequiredError:
+        except (MentorProfileRequiredError, InterviewProfileRequiredError):
             yield _sse_event(
                 "error",
                 {
@@ -329,7 +330,7 @@ async def retry_stream(
                     "message": "Assistant generation failed. Please try again.",
                 },
             )
-        except MentorProfileRequiredError:
+        except (MentorProfileRequiredError, InterviewProfileRequiredError):
             yield _sse_event(
                 "error",
                 {

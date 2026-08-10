@@ -13,9 +13,10 @@ from app.ai.provider import (
     ProviderMessage,
 )
 from app.conversations import repository
-from app.conversations.models import Message
+from app.conversations.models import Conversation, Message
 from app.conversations.schemas import RespondRequest
 from app.conversations.service import get_conversation, get_retry_message
+from app.interviews.prompts import build_interview_instruction
 from app.mentor.prompts import build_mentor_instruction
 from app.profiles import repository as profile_repository
 
@@ -32,6 +33,10 @@ class AssistantGenerationError(Exception):
 
 
 class MentorProfileRequiredError(Exception):
+    pass
+
+
+class InterviewProfileRequiredError(Exception):
     pass
 
 
@@ -57,12 +62,19 @@ def _provider_messages(messages: Sequence[Message]) -> list[ProviderMessage]:
     return [ProviderMessage(role=message.role, content=message.content) for message in messages]
 
 
-async def _system_instruction(session: AsyncSession, user_id: UUID, conversation_mode: str) -> str:
-    if conversation_mode != "mentor":
+async def system_instruction(
+    session: AsyncSession, user_id: UUID, conversation: Conversation
+) -> str:
+    mode = conversation.mode
+    if mode not in {"mentor", "interview"}:
         return SYSTEM_INSTRUCTION
     profile = await profile_repository.get_profile_by_user_id(session, user_id)
     if profile is None:
+        if mode == "interview":
+            raise InterviewProfileRequiredError
         raise MentorProfileRequiredError
+    if mode == "interview":
+        return build_interview_instruction(profile, conversation.metadata_ or {})
     return build_mentor_instruction(profile)
 
 
@@ -76,7 +88,7 @@ async def generate_response(
     conversation = await get_conversation(session, user_id, conversation_id)
     if provider is None:
         raise AssistantGenerationDisabledError
-    system_instruction = await _system_instruction(session, user_id, conversation.mode)
+    instruction = await system_instruction(session, user_id, conversation)
 
     user_message = Message(
         conversation_id=conversation_id,
@@ -91,7 +103,7 @@ async def generate_response(
     )
     context = _provider_messages(list(reversed(recent_messages)))
     try:
-        result = await provider.generate(context, system_instruction=system_instruction)
+        result = await provider.generate(context, system_instruction=instruction)
     except AIProviderError as exc:
         logger.warning(
             "AI generation failed",
@@ -133,7 +145,7 @@ async def stream_response(
 ) -> AsyncIterator[StreamEvent]:
     """Persist the user turn, stream normalized deltas, then persist one assistant turn."""
     conversation = await get_conversation(session, user_id, conversation_id)
-    system_instruction = await _system_instruction(session, user_id, conversation.mode)
+    instruction = await system_instruction(session, user_id, conversation)
 
     user_message = Message(
         conversation_id=conversation_id,
@@ -154,7 +166,7 @@ async def stream_response(
     chunks: list[str] = []
     final_result: GenerationResult | None = None
     try:
-        async for chunk in provider.stream(context, system_instruction=system_instruction):
+        async for chunk in provider.stream(context, system_instruction=instruction):
             if chunk.delta:
                 chunks.append(chunk.delta)
                 yield StreamAssistantDelta(chunk.delta)
@@ -214,7 +226,7 @@ async def retry_stream_response(
         raise AssistantGenerationDisabledError
 
     conversation = await get_conversation(session, user_id, conversation_id)
-    system_instruction = await _system_instruction(session, user_id, conversation.mode)
+    instruction = await system_instruction(session, user_id, conversation)
     recent_messages = await repository.get_recent_by_conversation_id(
         session, conversation_id, limit=RECENT_MESSAGE_CONTEXT_LIMIT
     )
@@ -222,7 +234,7 @@ async def retry_stream_response(
     chunks: list[str] = []
     final_result: GenerationResult | None = None
     try:
-        async for chunk in provider.stream(context, system_instruction=system_instruction):
+        async for chunk in provider.stream(context, system_instruction=instruction):
             if chunk.delta:
                 chunks.append(chunk.delta)
                 yield StreamAssistantDelta(chunk.delta)

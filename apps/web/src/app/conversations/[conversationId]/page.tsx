@@ -26,7 +26,7 @@ export default async function ConversationPage({ params }: ConversationPageProps
       listMessages(supabase, conversationId),
     ]);
     let mentorProfile: Profile | null = null;
-    if (conversation.mode === "mentor") {
+    if (conversation.mode === "mentor" || conversation.mode === "interview") {
       try {
         mentorProfile = await getAuthenticatedProfile(supabase);
       } catch (cause) {
@@ -42,6 +42,12 @@ export default async function ConversationPage({ params }: ConversationPageProps
             conversation={conversation}
             initialMessages={messages}
             mentorContext={mentorProfile ? {
+              currentLevel: mentorProfile.current_level,
+              targetRole: mentorProfile.target_role,
+            } : undefined}
+            interviewContext={conversation.mode === "interview" && mentorProfile ? {
+              interviewType: typeof conversation.metadata.interview_type === "string" ? conversation.metadata.interview_type : "technical",
+              interviewFocus: typeof conversation.metadata.interview_focus === "string" ? conversation.metadata.interview_focus : null,
               currentLevel: mentorProfile.current_level,
               targetRole: mentorProfile.target_role,
             } : undefined}

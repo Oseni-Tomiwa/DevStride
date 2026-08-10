@@ -112,6 +112,33 @@ describe("ConversationDetail", () => {
     expect(screen.queryByRole("button", { name: "Quiz me" })).not.toBeInTheDocument();
   });
 
+  it("renders Interview Mode context and only interview controls", () => {
+    render(<ConversationDetail
+      conversation={{ ...conversation, mode: "interview" }}
+      initialMessages={[]}
+      interviewContext={{ interviewType: "technical", interviewFocus: "apis", currentLevel: "junior", targetRole: "backend_engineer" }}
+    />);
+
+    expect(screen.getByText("Interview Mode")).toBeInTheDocument();
+    expect(screen.getByText("Technical · backend engineer · junior · apis")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "End interview" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quiz me" })).not.toBeInTheDocument();
+  });
+
+  it("sends the approved final-assessment instruction when ending an interview", async () => {
+    streamConversation.mockResolvedValue(sseResponse([{ event: "done", data: {} }]));
+    render(<ConversationDetail conversation={{ ...conversation, mode: "interview" }} initialMessages={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "End interview" }));
+
+    await waitFor(() => expect(streamConversation).toHaveBeenCalledWith(
+      {},
+      "conversation-id",
+      { content: expect.stringContaining("End the interview") },
+      expect.any(AbortSignal),
+    ));
+  });
+
   it("prevents blank submissions", () => {
     render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
 

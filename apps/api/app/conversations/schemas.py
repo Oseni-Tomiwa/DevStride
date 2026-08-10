@@ -4,10 +4,19 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MESSAGE_CONTENT_MAX_LENGTH = 20_000
-ConversationMode = Literal["general", "mentor"]
+ConversationMode = Literal["general", "mentor", "interview"]
+InterviewType = Literal["technical", "behavioral"]
+InterviewFocus = Literal[
+    "general_backend",
+    "apis",
+    "databases",
+    "javascript_node",
+    "python",
+    "system_design",
+]
 
 
 class ConversationCreateRequest(BaseModel):
@@ -16,6 +25,20 @@ class ConversationCreateRequest(BaseModel):
     title: str = Field(max_length=200)
     mode: ConversationMode = "general"
     persona: str | None = None
+    interview_type: InterviewType | None = None
+    interview_focus: InterviewFocus | None = None
+
+    @model_validator(mode="after")
+    def validate_interview_configuration(self) -> ConversationCreateRequest:
+        if self.mode == "interview" and self.interview_type is None:
+            raise ValueError("interview_type is required for interview conversations")
+        if self.mode != "interview" and (
+            self.interview_type is not None or self.interview_focus is not None
+        ):
+            raise ValueError("interview configuration is only valid for interview conversations")
+        if self.interview_type == "behavioral" and self.interview_focus is not None:
+            raise ValueError("interview_focus is only valid for technical interviews")
+        return self
 
     @field_validator("title")
     @classmethod
