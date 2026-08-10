@@ -102,4 +102,13 @@ async def generate_summary(
             extra={"mode": conversation.mode, "error_type": type(exc).__name__},
         )
         raise SessionSummaryGenerationError from exc
+    try:
+        from app.memory.service import extract_and_persist_candidates
+
+        await extract_and_persist_candidates(session, user_id, summary, provider)
+    except Exception as exc:
+        logger.warning(
+            "Memory extraction remains unavailable",
+            extra={"error_type": type(exc).__name__},
+        )
     return summary

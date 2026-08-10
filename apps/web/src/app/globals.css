@@ -253,6 +253,19 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .rating-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin: var(--space-3) 0 0; }
 .rating-grid div { padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-subtle); }
 .rating-grid dd { margin-top: 0.25rem; }
+.memory-page { max-width: 62rem; }
+.memory-manager { display: grid; gap: var(--space-5); }
+.memory-add-form { grid-template-columns: minmax(10rem, 0.35fr) minmax(0, 1fr) auto; align-items: end; gap: var(--space-3); padding: clamp(1.1rem, 3vw, 1.5rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 94%); box-shadow: var(--shadow-sm); }
+.memory-add-form .form-field, .memory-edit { display: grid; gap: 0.45rem; }
+.memory-add-form button { min-width: 8rem; }
+.memory-list { display: grid; gap: var(--space-3); padding: 0; margin: 0; list-style: none; }
+.memory-card { padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 94%); box-shadow: var(--shadow-sm); }
+.memory-card-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: 0.75rem; }
+.memory-card > p { max-width: 58rem; margin: 0; color: var(--ink-800); line-height: 1.55; }
+.memory-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.memory-actions button { min-height: 2.4rem; padding: 0.5rem 0.75rem; font-size: 0.84rem; }
+.memory-edit textarea { min-height: 5rem; }
+.memory-empty { margin-top: var(--space-2); }
 
 @media (max-width: 900px) {
   .profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -286,6 +299,8 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
   .progress-counts { grid-template-columns: 1fr 1fr; }
   .session-summary-heading { flex-direction: column; }
   .rating-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .memory-add-form { grid-template-columns: 1fr; align-items: stretch; }
+  .memory-add-form button { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }

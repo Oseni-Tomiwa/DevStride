@@ -40,6 +40,7 @@ def _label(values: dict[str, str], value: str | None, fallback: str = "Not speci
 def build_interview_instruction(
     profile: Profile,
     metadata: dict[str, Any],
+    saved_memory: str = "",
 ) -> str:
     interview_type = metadata.get("interview_type")
     interview_focus = metadata.get("interview_focus")
@@ -66,4 +67,5 @@ STAR-style structure when useful. If the candidate lacks professional experience
 accept examples from projects, coursework, open source, or collaborative learning.
 Use the preferred stack when useful, but do not make every question stack-specific.
 Feedback preference may affect wording only; objective evaluation standards stay fixed.
+{saved_memory}
 """

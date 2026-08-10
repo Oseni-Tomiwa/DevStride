@@ -17,6 +17,7 @@ from app.conversations.models import Conversation, Message
 from app.conversations.schemas import RespondRequest
 from app.conversations.service import get_conversation, get_retry_message
 from app.interviews.prompts import build_interview_instruction
+from app.memory.service import memory_context, retrieve_for_prompt
 from app.mentor.prompts import build_mentor_instruction
 from app.profiles import repository as profile_repository
 from app.session_summaries.service import (
@@ -232,8 +233,18 @@ async def system_instruction(
             raise InterviewProfileRequiredError
         raise MentorProfileRequiredError
     if mode == "interview":
-        return build_interview_instruction(profile, conversation.metadata_ or {})
-    return build_mentor_instruction(profile)
+        try:
+            memories = await retrieve_for_prompt(session, user_id)
+        except Exception:
+            memories = []
+        return build_interview_instruction(
+            profile, conversation.metadata_ or {}, memory_context(memories)
+        )
+    try:
+        memories = await retrieve_for_prompt(session, user_id)
+    except Exception:
+        memories = []
+    return build_mentor_instruction(profile, memory_context(memories))
 
 
 async def generate_response(

@@ -5,6 +5,7 @@ from app.api.health import router as health_router
 from app.auth.routes import router as auth_router
 from app.conversations.routes import router as conversations_router
 from app.core.config import settings
+from app.memory.routes import router as memory_router
 from app.profiles.routes import router as profiles_router
 from app.progress.routes import router as progress_router
 from app.session_summaries.routes import router as session_summaries_router
@@ -31,3 +32,4 @@ app.include_router(conversations_router)
 app.include_router(profiles_router)
 app.include_router(progress_router)
 app.include_router(session_summaries_router)
+app.include_router(memory_router)

@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { LogoutButton } from "../features/auth/components/logout-button";
 
-type AppSection = "dashboard" | "onboarding" | "account" | "conversations" | "progress";
+type AppSection = "dashboard" | "onboarding" | "account" | "conversations" | "progress" | "memories";
 
 type AppHeaderProps = {
   current?: AppSection;
@@ -13,6 +13,7 @@ const links: Array<{ href: string; label: string; section: AppSection }> = [
   { href: "/dashboard", label: "Dashboard", section: "dashboard" },
   { href: "/conversations", label: "Conversations", section: "conversations" },
   { href: "/progress", label: "Progress", section: "progress" },
+  { href: "/memories", label: "Memory", section: "memories" },
   { href: "/account", label: "Account", section: "account" },
 ];
 

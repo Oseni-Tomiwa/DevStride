@@ -5,12 +5,15 @@ DevStride is an AI software-engineering mentor and communication coach.
 Codex is the coding agent used to accelerate development; it is not the product.
 
 ## Current milestone
-Milestone 2: conversation and message persistence foundation.
+Milestone 3: bounded Long-Term Memory v1 on top of the conversation and session-summary foundation.
 
-Milestone 0 and Milestone 1 foundations are implemented. Do not implement
-OpenAI integration, assistant generation, streaming, Mentor Mode, interviews,
-memory, RAG, voice, billing, or GitHub integration until a later task
-explicitly requests them.
+Milestone 0, Milestone 1, and the Milestone 2 conversation/session-summary
+foundations are implemented. Long-Term Memory v1 is explicitly in scope when
+requested: it must remain bounded, transparent, editable, deletable,
+ownership-scoped, conservative, and limited to approved categories and trusted
+profile/session-summary sources. Do not implement RAG, embeddings, pgvector,
+vector search, document retrieval, GitHub ingestion, or "remember everything"
+behavior. Voice, billing, and unrelated product features remain deferred.
 
 ## Required reading order
 Before editing:
@@ -32,6 +35,8 @@ Before editing:
 - Keep provider-specific AI code behind an internal interface when AI work begins.
 - Store secrets only in environment variables.
 - Never commit `.env` files or credentials.
+- Memory must never store secrets, auth material, or sensitive personal data by
+  default; user-facing memory must be inspectable and easy to delete.
 
 ## Change rules
 - Make the smallest coherent change that satisfies the task.
@@ -40,6 +45,8 @@ Before editing:
 - Use reversible Alembic migrations for database changes.
 - Validate all external input.
 - Enforce authentication and record ownership once protected features exist.
+- Memory records must be owned by the verified JWT subject; never accept
+  `user_id` from client input.
 - Do not log secrets, tokens, or sensitive user content.
 - Review generated migrations and security-sensitive code manually.
 

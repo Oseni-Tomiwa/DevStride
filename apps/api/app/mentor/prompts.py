@@ -27,7 +27,7 @@ certification authority or guarantee interview or job outcomes.
 """
 
 
-def build_mentor_instruction(profile: Profile) -> str:
+def build_mentor_instruction(profile: Profile, saved_memory: str = "") -> str:
     preferred_stack = ", ".join(profile.preferred_stack) or "not specified"
     return f"""{MENTOR_SYSTEM_INSTRUCTION}
 
@@ -42,4 +42,5 @@ Learner profile:
 Tailor examples toward the target role and preferred stack when sensible.
 Support interview preparation when the communication goal calls for it.
 Adjust tone to the feedback preference while remaining constructive.
+{saved_memory}
 """
