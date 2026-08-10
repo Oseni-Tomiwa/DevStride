@@ -19,13 +19,13 @@ FROM python:3.12-slim-bookworm
 RUN groupadd --system app \
     && useradd --system --gid app --home-dir /app --shell /usr/sbin/nologin app
 
-WORKDIR /app
-COPY --from=build --chown=app:app /build/.venv ./.venv
+WORKDIR /build/apps/api
+COPY --from=build --chown=app:app /build/.venv /build/.venv
 COPY --from=build --chown=app:app /build/app ./app
 COPY --from=build --chown=app:app /build/alembic ./alembic
 COPY --from=build --chown=app:app /build/alembic.ini ./alembic.ini
 
-ENV PATH="/app/.venv/bin:$PATH" \
+ENV PATH="/build/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
