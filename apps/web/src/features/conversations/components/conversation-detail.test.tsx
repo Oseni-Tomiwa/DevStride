@@ -247,6 +247,25 @@ describe("ConversationDetail", () => {
     expect(screen.getByLabelText("Your message")).toBeEnabled();
   });
 
+  it("uses Markdown for streamed assistant content and keeps user content plain", async () => {
+    const userMessage = message("markdown-user", "<b>my plain question</b>", "2026-08-01T12:00:00Z");
+    const assistantMessage = message("markdown-assistant", "## Answer\n\nUse `fetch()`.", "2026-08-01T12:00:01Z", "assistant");
+    streamConversation.mockResolvedValue(sseResponse([
+      { event: "user_message", data: userMessage },
+      { event: "assistant_delta", data: { delta: "## Answer\n\nUse `fetch()`." } },
+      { event: "assistant_complete", data: assistantMessage },
+    ]));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByRole("heading", { name: "Answer" })).toBeInTheDocument();
+    expect(screen.getByText("fetch()")).toHaveClass("inline-code");
+    expect(screen.getByText("<b>my plain question</b>")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "my plain question" })).not.toBeInTheDocument();
+  });
+
   it("finishes on assistant_complete even when trailing done is absent", async () => {
     streamConversation.mockResolvedValue(sseResponse([
       { event: "user_message", data: message("new-user", "Question", "2026-08-01T12:00:00Z") },

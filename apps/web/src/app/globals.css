@@ -214,6 +214,22 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .message-bubble { max-width: min(78%, 48rem); padding: 0.95rem 1.1rem; border: 1px solid var(--line); border-radius: 1rem 1rem 1rem 0.35rem; background: var(--surface-subtle); box-shadow: 0 1px 1px rgb(26 42 74 / 4%); }
 .message-user { justify-self: end; border-color: #cbd8ff; border-radius: 1rem 1rem 0.35rem 1rem; background: var(--blue-100); }
 .message-bubble p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-bubble .markdown-content { overflow-wrap: anywhere; }
+.markdown-content > :first-child { margin-top: 0; }
+.markdown-content > :last-child { margin-bottom: 0; }
+.markdown-content p { white-space: normal; }
+.markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4, .markdown-content h5, .markdown-content h6 { margin: 1.1rem 0 0.5rem; font-size: 1.05rem; letter-spacing: -0.02em; }
+.markdown-content ul, .markdown-content ol { margin: 0.6rem 0 0.9rem; padding-left: 1.35rem; }
+.markdown-content li + li { margin-top: 0.35rem; }
+.markdown-content blockquote { margin: 0.8rem 0; padding: 0.65rem 0.9rem; border-left: 3px solid var(--blue-600); background: var(--blue-100); color: var(--ink-800); }
+.markdown-content a { overflow-wrap: anywhere; }
+.inline-code { padding: 0.12rem 0.35rem; border: 1px solid var(--line-strong); border-radius: 0.35rem; background: var(--surface-subtle); color: var(--ink-800); font-size: 0.9em; }
+.code-block { max-width: 100%; margin: 0.8rem 0; overflow-x: auto; border: 1px solid #263247; border-radius: var(--radius-sm); background: #172033; color: #eef4ff; padding: 0.9rem 1rem; font-size: 0.84rem; line-height: 1.55; }
+.code-block code { white-space: pre; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+.markdown-table-wrap { max-width: 100%; margin: 0.8rem 0; overflow-x: auto; }
+.markdown-table { min-width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.markdown-table th, .markdown-table td { border: 1px solid var(--line); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+.markdown-table th { background: var(--surface-subtle); color: var(--ink-800); font-weight: 800; }
 .message-bubble .message-label { margin-bottom: 0.35rem; color: var(--ink-500); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .message-user .message-label { color: var(--blue-700); }
 .message-composer { position: sticky; bottom: 1rem; margin-top: var(--space-4); padding: var(--space-5); }

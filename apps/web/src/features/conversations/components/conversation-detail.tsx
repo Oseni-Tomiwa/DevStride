@@ -9,6 +9,7 @@ import { createClient } from "../../../lib/supabase/client";
 import { retryConversationMessage, startInterview, streamConversation } from "../api";
 import { conversationDisplayTitle } from "../title";
 import type { Conversation, Message } from "../types";
+import { AssistantMarkdown } from "./assistant-markdown";
 
 const MESSAGE_MAX_LENGTH = 20_000;
 
@@ -364,7 +365,7 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
       </div> : messages.map((message) => (
           <article className={`message-bubble message-${message.role}`} key={message.id}>
             <p className="message-label">{message.role === "user" ? "You" : "DevStride assistant"}</p>
-            <p>{message.content}</p>
+          {message.role === "assistant" ? <AssistantMarkdown content={message.content} /> : <p className="message-content">{message.content}</p>}
           </article>
         ))}
         <div ref={historyEndRef} aria-hidden="true" />
