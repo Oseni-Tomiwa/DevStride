@@ -10,6 +10,7 @@ describe("protected routes", () => {
     expect(isProtectedPath("/account")).toBe(true);
     expect(isProtectedPath("/conversations")).toBe(true);
     expect(isProtectedPath("/conversations/123")).toBe(true);
+    expect(isProtectedPath("/progress")).toBe(true);
   });
 
   it("leaves public paths accessible", () => {

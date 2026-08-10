@@ -85,13 +85,14 @@ async def add_user_message(
     conversation_id: UUID,
     data: MessageCreateRequest,
 ) -> Message:
-    await get_conversation(session, user_id, conversation_id)
+    conversation = await get_conversation(session, user_id, conversation_id)
     message = Message(
         conversation_id=conversation_id,
         role="user",
         content=data.content,
     )
     await repository.create_message(session, message)
+    repository.touch_conversation_activity(conversation)
     await session.commit()
     return message
 

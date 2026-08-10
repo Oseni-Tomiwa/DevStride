@@ -6,6 +6,9 @@ import { InterviewEntry } from "../../features/conversations/components/intervie
 import { MentorEntry } from "../../features/conversations/components/mentor-entry";
 import { Profile } from "../../features/profile/types";
 import { getAuthenticatedProfile } from "../../features/profile/api";
+import { getProgressSummary } from "../../features/progress/api";
+import { ProgressOverview } from "../../features/progress/components/progress-overview";
+import type { ProgressSummary } from "../../features/progress/types";
 import { ApiError } from "../../lib/api/client";
 import { createClient } from "../../lib/supabase/server";
 
@@ -51,6 +54,13 @@ export default async function DashboardPage() {
     throw cause;
   }
 
+  let progress: ProgressSummary | null = null;
+  try {
+    progress = await getProgressSummary(supabase);
+  } catch (cause) {
+    if (cause instanceof ApiError && cause.status === 401) redirect("/login");
+  }
+
   return (
     <main className="page-shell app-page">
       <AppHeader current="dashboard" />
@@ -94,12 +104,12 @@ export default async function DashboardPage() {
             <h2 id="practice-title">Choose your next step</h2>
           </div>
           <div className="practice-grid">
-            <article className="practice-card">
+            <article className="practice-card" id="mentor-practice">
               <h3>Learn with Mentor</h3>
               <p className="muted">A profile-aware software-engineering learning space.</p>
               <MentorEntry />
             </article>
-            <article className="practice-card">
+            <article className="practice-card" id="interview-practice">
               <h3>Mock Interview</h3>
               <p className="muted">Practice technical and behavioral engineering interviews.</p>
               <InterviewEntry />
@@ -111,6 +121,7 @@ export default async function DashboardPage() {
             </article>
           </div>
         </section>
+        {progress && <ProgressOverview summary={progress} compact />}
       </section>
     </main>
   );

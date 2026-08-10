@@ -6,6 +6,7 @@ from app.auth.routes import router as auth_router
 from app.conversations.routes import router as conversations_router
 from app.core.config import settings
 from app.profiles.routes import router as profiles_router
+from app.progress.routes import router as progress_router
 
 app = FastAPI(
     title="DevStride API",
@@ -27,3 +28,4 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(conversations_router)
 app.include_router(profiles_router)
+app.include_router(progress_router)

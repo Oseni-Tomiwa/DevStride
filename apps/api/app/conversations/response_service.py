@@ -22,6 +22,7 @@ from app.profiles import repository as profile_repository
 
 logger = logging.getLogger(__name__)
 RECENT_MESSAGE_CONTEXT_LIMIT = 20
+FINAL_ASSESSMENT_REQUEST_PREFIX = "End the interview and provide my final practice assessment"
 
 
 class AssistantGenerationDisabledError(Exception):
@@ -67,6 +68,17 @@ class StreamInterviewPending:
 StreamEvent = (
     StreamUserMessage | StreamAssistantDelta | StreamAssistantComplete | StreamInterviewPending
 )
+
+
+def _is_final_assessment_request(content: str) -> bool:
+    return content.strip().startswith(FINAL_ASSESSMENT_REQUEST_PREFIX)
+
+
+def _mark_interview_completed(conversation: Conversation, assistant_message: Message) -> None:
+    metadata = dict(conversation.metadata_ or {})
+    metadata["interview_completed"] = True
+    metadata["final_assessment_message_id"] = str(assistant_message.id)
+    conversation.metadata_ = metadata
 
 
 def _provider_messages(messages: Sequence[Message]) -> list[ProviderMessage]:
@@ -164,6 +176,7 @@ async def start_interview_response(
         metadata_=message_metadata,
     )
     await repository.create_message(session, assistant_message)
+    repository.touch_conversation_activity(conversation)
     metadata.pop("interview_kickoff_started", None)
     metadata["interview_started"] = True
     conversation.metadata_ = metadata
@@ -205,6 +218,7 @@ async def generate_response(
         content=data.content,
     )
     await repository.create_message(session, user_message)
+    repository.touch_conversation_activity(conversation)
     await session.commit()
 
     recent_messages = await repository.get_recent_by_conversation_id(
@@ -241,6 +255,9 @@ async def generate_response(
         metadata_=metadata,
     )
     await repository.create_message(session, assistant_message)
+    if conversation.mode == "interview" and _is_final_assessment_request(data.content):
+        _mark_interview_completed(conversation, assistant_message)
+    repository.touch_conversation_activity(conversation)
     await session.commit()
     return user_message, assistant_message
 
@@ -262,6 +279,7 @@ async def stream_response(
         content=data.content,
     )
     await repository.create_message(session, user_message)
+    repository.touch_conversation_activity(conversation)
     await session.commit()
     yield StreamUserMessage(user_message)
 
@@ -316,6 +334,9 @@ async def stream_response(
         metadata_=metadata,
     )
     await repository.create_message(session, assistant_message)
+    if conversation.mode == "interview" and _is_final_assessment_request(data.content):
+        _mark_interview_completed(conversation, assistant_message)
+    repository.touch_conversation_activity(conversation)
     await session.commit()
     yield StreamAssistantComplete(assistant_message)
 
@@ -384,5 +405,8 @@ async def retry_stream_response(
         metadata_=metadata,
     )
     await repository.create_message(session, assistant_message)
+    if conversation.mode == "interview" and _is_final_assessment_request(user_message.content):
+        _mark_interview_completed(conversation, assistant_message)
+    repository.touch_conversation_activity(conversation)
     await session.commit()
     yield StreamAssistantComplete(assistant_message)

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -91,6 +92,10 @@ async def create_message(session: AsyncSession, message: Message) -> Message:
     await session.flush()
     await session.refresh(message)
     return message
+
+
+def touch_conversation_activity(conversation: Conversation) -> None:
+    conversation.updated_at = datetime.now(UTC)
 
 
 async def get_message_by_id_and_conversation_id(

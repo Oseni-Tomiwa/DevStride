@@ -263,6 +263,68 @@ async def test_streaming_provider_failure_keeps_user_without_assistant(
 
 
 @pytest.mark.asyncio
+async def test_successful_final_assessment_marks_interview_complete_after_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation_id = uuid4()
+    conversation = Conversation(
+        id=conversation_id,
+        user_id=uuid4(),
+        title="Technical interview",
+        mode="interview",
+        metadata_={"interview_started": True},
+    )
+    provider = FakeProvider(
+        GenerationResult(text="Final practice assessment", provider="openai", model="model")
+    )
+    added: list[Message] = []
+
+    async def fake_get_conversation(*args: Any) -> Conversation:
+        del args
+        return conversation
+
+    async def fake_create_message(_session: AsyncSession, message: Message) -> Message:
+        added.append(message)
+        return message
+
+    async def fake_recent(*args: Any, **kwargs: Any) -> list[Message]:
+        del args, kwargs
+        return added
+
+    async def fake_instruction(*args: Any) -> str:
+        del args
+        return "interview instruction"
+
+    monkeypatch.setattr(
+        "app.conversations.response_service.get_conversation", fake_get_conversation
+    )
+    monkeypatch.setattr("app.conversations.response_service.system_instruction", fake_instruction)
+    monkeypatch.setattr(repository, "create_message", fake_create_message)
+    monkeypatch.setattr(repository, "get_recent_by_conversation_id", fake_recent)
+
+    final_request = RespondRequest(
+        content="End the interview and provide my final practice assessment with strengths."
+    )
+    events = [
+        event
+        async for event in stream_response(
+            cast(AsyncSession, type("Session", (), {"commit": _commit})()),
+            conversation.user_id,
+            conversation_id,
+            final_request,
+            provider,
+        )
+    ]
+
+    assistant = next(
+        event.message for event in events if isinstance(event, StreamAssistantComplete)
+    )
+    assert assistant in added
+    assert conversation.metadata_["interview_completed"] is True
+    assert conversation.metadata_["final_assessment_message_id"] == str(assistant.id)
+
+
+@pytest.mark.asyncio
 async def test_retry_stream_reuses_user_message_and_persists_one_assistant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
