@@ -9,6 +9,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly detail?: unknown,
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -45,9 +46,14 @@ async function errorFromResponse(response: Response): Promise<ApiError> {
     }
   }
   return new ApiError(
-    response.status === 401 ? "Authentication required." : errorMessage(detail) ?? "The API request failed.",
+    response.status === 401
+      ? "Authentication required."
+      : response.status === 429
+        ? "Too many AI requests. Please try again shortly."
+        : errorMessage(detail) ?? "The API request failed.",
     response.status,
     detail,
+    response.status === 429 ? Number(response.headers.get("retry-after")) || undefined : undefined,
   );
 }
 

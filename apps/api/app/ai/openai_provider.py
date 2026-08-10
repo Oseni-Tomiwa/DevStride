@@ -16,15 +16,15 @@ from app.ai.provider import (
 
 OPENAI_PROVIDER_NAME = "openai"
 OPENAI_REQUEST_TIMEOUT_SECONDS = 30.0
-INTERVIEW_KICKOFF_INPUT = (
-    "Begin the interview by introducing it briefly and asking the first question."
-)
+PRACTICE_KICKOFF_INPUT = "Begin the configured practice session with the next appropriate prompt."
+# Backwards-compatible alias for existing provider tests/imports.
+INTERVIEW_KICKOFF_INPUT = PRACTICE_KICKOFF_INPUT
 logger = logging.getLogger(__name__)
 
 
 def _request_input(messages: Sequence[ProviderMessage]) -> list[dict[str, str]] | str:
     request_input = [{"role": message.role, "content": message.content} for message in messages]
-    return request_input or INTERVIEW_KICKOFF_INPUT
+    return request_input or PRACTICE_KICKOFF_INPUT
 
 
 class OpenAIProvider:

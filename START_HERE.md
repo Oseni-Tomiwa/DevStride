@@ -15,8 +15,10 @@ The product will eventually help users:
 - receive personalized coaching based on user-approved memories.
 
 ## Current goal
-Verify and stabilize the Milestone 0, Milestone 1, and current Milestone 2
-foundations without adding new product features.
+Verify and stabilize the implemented MVP foundations before production
+deployment. The current application includes authentication, onboarding,
+persistent streaming conversations, Mentor Mode, Interview Mode, Team Practice,
+progress/history, summaries, and bounded Long-Term Memory v1.
 
 Milestone 0 is complete when:
 - the Next.js app starts;
@@ -27,7 +29,7 @@ Milestone 0 is complete when:
 - CI is configured;
 - setup instructions work from a clean clone.
 
-## Build order
+## Implemented build order
 1. Foundation
 2. Authentication and onboarding
 3. Persistent streamed chat
@@ -36,24 +38,22 @@ Milestone 0 is complete when:
 6. User-controlled memory
 7. Team simulations
 8. Progress dashboard
-9. RAG
-10. Voice
-11. GitHub integration
-12. Production hardening
+9. Production hardening
 
-## Do not build yet
-- OpenAI integration;
-- assistant generation;
-- streaming;
-- frontend chat;
-- interviews;
-- memory;
-- RAG;
+The API applies bounded, authenticated per-user limits to expensive AI
+operations. The limiter is intentionally in-process for local development;
+distributed rate limiting is required before horizontal scale.
+
+## Deferred
+
+- RAG, embeddings, pgvector, vector search, and document retrieval;
 - voice;
-- Redis;
-- microservices;
+- GitHub ingestion;
+- code execution;
+- multiple LLM providers;
 - autonomous agents;
-- billing.
+- microservices;
+- billing and gamification.
 
 ## First Codex task
 Open `FIRST_CODEX_PROMPT.md` and give that task to Codex.

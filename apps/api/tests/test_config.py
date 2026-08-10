@@ -63,3 +63,23 @@ def test_jwt_issuer_must_be_supabase_auth_v1_url() -> None:
             database_url="postgresql+asyncpg://user:password@localhost:5432/db",
             supabase_jwt_issuer="https://test-project.supabase.co",
         )
+
+
+def test_cors_origins_must_be_explicit() -> None:
+    with pytest.raises(ValidationError, match="explicit origins"):
+        Settings(
+            app_env="test",
+            database_url="postgresql+asyncpg://user:password@localhost:5432/db",
+            supabase_jwt_issuer="https://test-project.supabase.co/auth/v1",
+            cors_origins="*",
+        )
+
+
+def test_production_cors_origins_must_use_https() -> None:
+    with pytest.raises(ValidationError, match="HTTPS origins"):
+        Settings(
+            app_env="production",
+            database_url="postgresql+asyncpg://user:password@localhost:5432/db",
+            supabase_jwt_issuer="https://test-project.supabase.co/auth/v1",
+            cors_origins="http://localhost:3000",
+        )

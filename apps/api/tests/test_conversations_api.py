@@ -10,6 +10,7 @@ from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.dependencies import get_ai_provider
+from app.ai.rate_limit import get_ai_rate_limiter
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations.models import Conversation, Message
@@ -19,6 +20,8 @@ from app.conversations.response_service import (
     StreamTeamPending,
 )
 from app.conversations.service import ConversationNotFoundError, RetryNotAllowedError
+from app.core.config import settings
+from app.core.rate_limit import InMemoryRateLimiter, RateLimitPolicy
 from app.database.session import get_db_session
 from app.main import app
 
@@ -526,6 +529,36 @@ def test_unauthenticated_response_returns_401() -> None:
     assert response.status_code == 401
 
 
+def test_unauthenticated_response_does_not_consume_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    limiter = InMemoryRateLimiter(lambda: 100.0)
+    app.dependency_overrides[get_ai_provider] = lambda: object()
+    app.dependency_overrides[get_ai_rate_limiter] = lambda: limiter
+    monkeypatch.setattr(settings, "ai_rate_limit_requests", 1)
+    conversation_id = uuid4()
+    user_message = make_message(conversation_id)
+    assistant_message = make_message(conversation_id)
+    assistant_message.role = "assistant"
+    monkeypatch.setattr(
+        "app.conversations.routes.generate_response",
+        AsyncMock(return_value=(user_message, assistant_message)),
+    )
+
+    try:
+        assert post_response(conversation_id, {"content": "Unauthenticated"}).status_code == 401
+        current_user = CurrentUser(id=USER_ID, email="ada@example.com")
+
+        async def override_db() -> AsyncIterator[AsyncSession]:
+            yield cast(AsyncSession, object())
+
+        app.dependency_overrides[get_current_user] = lambda: current_user
+        app.dependency_overrides[get_db_session] = override_db
+        assert post_response(conversation_id, {"content": "Authenticated"}).status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_response_returns_404_for_unowned_conversation(
     authenticated_client: tuple[TestClient, CurrentUser],
     monkeypatch: pytest.MonkeyPatch,
@@ -600,6 +633,81 @@ def test_response_hides_provider_failure_details(
     assert response.status_code == 502
     assert "secret provider detail" not in response.text
     assert response.json()["detail"] == "Assistant generation failed. Please try again."
+
+
+def test_response_rate_limit_rejects_before_generation(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation_id = uuid4()
+    user_message = make_message(conversation_id)
+    assistant_message = make_message(conversation_id)
+    assistant_message.role = "assistant"
+    respond = AsyncMock(return_value=(user_message, assistant_message))
+    limiter = InMemoryRateLimiter(lambda: 100.0)
+    app.dependency_overrides[get_ai_provider] = lambda: object()
+    app.dependency_overrides[get_ai_rate_limiter] = lambda: limiter
+    monkeypatch.setattr(settings, "ai_rate_limit_requests", 1)
+    monkeypatch.setattr(settings, "ai_rate_limit_window_seconds", 60)
+    monkeypatch.setattr("app.conversations.routes.generate_response", respond)
+
+    assert post_response(conversation_id, {"content": "Hello"}).status_code == 200
+    limited = post_response(conversation_id, {"content": "Again"})
+
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"] == "60"
+    assert respond.await_count == 1
+
+
+def test_stream_rate_limit_rejects_before_opening_sse(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    limiter = InMemoryRateLimiter(lambda: 100.0)
+    limiter.consume(USER_ID, "stream", RateLimitPolicy(limit=1, window_seconds=60))
+    app.dependency_overrides[get_ai_provider] = lambda: object()
+    app.dependency_overrides[get_ai_rate_limiter] = lambda: limiter
+    monkeypatch.setattr(settings, "ai_rate_limit_requests", 1)
+    stream_response = AsyncMock()
+    monkeypatch.setattr("app.conversations.routes.stream_response", stream_response)
+
+    response = post_stream(uuid4(), {"content": "Hello"})
+
+    assert response.status_code == 429
+    assert stream_response.await_count == 0
+
+
+@pytest.mark.parametrize(
+    ("path_suffix", "operation"),
+    [
+        ("interview-start", "kickoff"),
+        ("team-start", "kickoff"),
+        ("summary", "summary"),
+    ],
+)
+def test_kickoff_and_summary_rate_limits_run_before_generation(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+    path_suffix: str,
+    operation: str,
+) -> None:
+    limiter = InMemoryRateLimiter(lambda: 100.0)
+    limiter.consume(USER_ID, operation, RateLimitPolicy(limit=1, window_seconds=60))
+    app.dependency_overrides[get_ai_provider] = lambda: object()
+    app.dependency_overrides[get_ai_rate_limiter] = lambda: limiter
+    if operation == "kickoff":
+        monkeypatch.setattr(settings, "ai_rate_limit_kickoff_requests", 1)
+    else:
+        monkeypatch.setattr(settings, "ai_rate_limit_summary_requests", 1)
+
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/conversations/{uuid4()}/{path_suffix}"
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+
+    assert response.status_code == 429
 
 
 def test_response_rejects_client_controlled_metadata(

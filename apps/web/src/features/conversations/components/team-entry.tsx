@@ -38,6 +38,7 @@ export function TeamEntry() {
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) router.push("/login");
       else if (cause instanceof ApiError && cause.status === 0) setError("We could not reach DevStride. Check your connection and try again.");
+      else if (cause instanceof ApiError && cause.status === 429) setError(cause.message);
       else setError("Team Practice could not be started. Please try again.");
     } finally {
       setIsCreating(false);

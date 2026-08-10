@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.dependencies import get_ai_provider
 from app.ai.provider import AIProvider
+from app.ai.rate_limit import require_ai_rate_limit
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations.response_service import (
@@ -59,6 +60,10 @@ router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 Provider = Annotated[AIProvider | None, Depends(get_ai_provider)]
+RespondRateLimit = Annotated[None, Depends(require_ai_rate_limit("respond"))]
+StreamRateLimit = Annotated[None, Depends(require_ai_rate_limit("stream"))]
+RetryRateLimit = Annotated[None, Depends(require_ai_rate_limit("retry"))]
+KickoffRateLimit = Annotated[None, Depends(require_ai_rate_limit("kickoff"))]
 
 
 @router.post(
@@ -163,6 +168,7 @@ async def interview_start(
     session: Session,
     current_user: AuthenticatedUser,
     provider: Provider,
+    _rate_limit: KickoffRateLimit,
 ) -> StreamingResponse:
     try:
         conversation = await get_conversation(session, current_user.id, conversation_id)
@@ -243,6 +249,7 @@ async def team_start(
     session: Session,
     current_user: AuthenticatedUser,
     provider: Provider,
+    _rate_limit: KickoffRateLimit,
 ) -> StreamingResponse:
     try:
         conversation = await get_conversation(session, current_user.id, conversation_id)
@@ -337,6 +344,7 @@ async def respond(
     session: Session,
     current_user: AuthenticatedUser,
     provider: Provider,
+    _rate_limit: RespondRateLimit,
 ) -> RespondResponse:
     try:
         user_message, assistant_message = await generate_response(
@@ -378,6 +386,7 @@ async def stream(
     session: Session,
     current_user: AuthenticatedUser,
     provider: Provider,
+    _rate_limit: StreamRateLimit,
 ) -> StreamingResponse:
     # Validate ownership before opening the response so unowned conversations
     # receive a normal HTTP 404 rather than an SSE error after status 200.
@@ -455,6 +464,7 @@ async def retry_stream(
     session: Session,
     current_user: AuthenticatedUser,
     provider: Provider,
+    _rate_limit: RetryRateLimit,
 ) -> StreamingResponse:
     try:
         await get_retry_message(session, current_user.id, conversation_id, message_id)

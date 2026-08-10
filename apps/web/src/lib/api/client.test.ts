@@ -119,3 +119,19 @@ it("turns a plain-text 401 into an authentication error without JSON parsing", a
   await expect(authenticatedClient().get("/api/v1/profile/me"))
     .rejects.toMatchObject({ status: 401, message: "Authentication required." });
 });
+
+it("turns a rate limit response into a retryable user-facing error", async () => {
+  fetchMock.mockResolvedValue(
+    new Response(JSON.stringify({ detail: "Too many AI requests" }), {
+      status: 429,
+      headers: { "content-type": "application/json", "retry-after": "60" },
+    }),
+  );
+
+  await expect(authenticatedClient().get("/api/v1/conversations/conversation-id/summary"))
+    .rejects.toMatchObject({
+      status: 429,
+      message: "Too many AI requests. Please try again shortly.",
+      retryAfterSeconds: 60,
+    });
+});

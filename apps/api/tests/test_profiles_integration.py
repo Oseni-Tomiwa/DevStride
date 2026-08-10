@@ -33,7 +33,7 @@ from app.session_summaries.models import SessionSummary
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://test:test@localhost:5432/devstride_test",
+    "postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test",
 )
 TEST_ISSUER = cast(str, settings.supabase_jwt_issuer)
 

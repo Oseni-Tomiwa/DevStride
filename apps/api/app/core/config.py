@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
     ai_generation_enabled: bool = False
+    ai_rate_limit_enabled: bool = True
+    ai_rate_limit_requests: int = 20
+    ai_rate_limit_window_seconds: int = 60
+    ai_rate_limit_kickoff_requests: int = 5
+    ai_rate_limit_summary_requests: int = 5
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -71,12 +76,34 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def validate_cors_configuration(self) -> "Settings":
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if not origins or "*" in origins:
+            raise ValueError("CORS_ORIGINS must contain explicit origins and cannot use '*'")
+        if self.app_env == "production":
+            invalid_origins = [origin for origin in origins if not origin.startswith("https://")]
+            if invalid_origins:
+                raise ValueError("CORS_ORIGINS must use HTTPS origins in production")
+        return self
+
+    @model_validator(mode="after")
     def validate_ai_configuration(self) -> "Settings":
         if not self.openai_model.strip():
             raise ValueError("OPENAI_MODEL must not be blank")
         if self.ai_generation_enabled and not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY is required when AI_GENERATION_ENABLED is true")
+        if self.ai_rate_limit_requests <= 0 or self.ai_rate_limit_window_seconds <= 0:
+            raise ValueError("AI rate-limit requests and window must be positive")
+        if self.ai_rate_limit_kickoff_requests <= 0 or self.ai_rate_limit_summary_requests <= 0:
+            raise ValueError("AI rate-limit operation limits must be positive")
         return self
+
+    def ai_rate_limit_policy(self, operation: str) -> tuple[int, int]:
+        if operation == "kickoff":
+            return self.ai_rate_limit_kickoff_requests, self.ai_rate_limit_window_seconds
+        if operation == "summary":
+            return self.ai_rate_limit_summary_requests, self.ai_rate_limit_window_seconds
+        return self.ai_rate_limit_requests, self.ai_rate_limit_window_seconds
 
 
 @lru_cache

@@ -234,6 +234,8 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
         setError("This conversation or message could not be found.");
       } else if (cause instanceof ApiError && cause.status === 409) {
         setError("This message has already been answered and cannot be retried.");
+      } else if (cause instanceof ApiError && cause.status === 429) {
+        setError(cause.message);
       } else if (cause instanceof ApiError && cause.status === 503) {
         setError("Assistant generation is currently unavailable.");
       } else if (cause instanceof ApiError && cause.status === 0) {

@@ -17,7 +17,7 @@ FastAPI modular monolith
         |-- conversations
         |-- mentor
         |-- interviews
-        |-- simulations
+        |-- team practice
         |-- memory
         |-- goals
         |-- analytics
@@ -25,18 +25,23 @@ FastAPI modular monolith
         |
         |---------------------|
         v                     v
-PostgreSQL + pgvector     OpenAI API
+PostgreSQL                OpenAI API
 ```
 
-## Current Milestone 0 topology
+## Current application topology
 
 ```text
 Next.js application
 
 FastAPI application
-  └── GET /health
+  ├── authentication and ownership boundary
+  ├── profiles and onboarding
+  ├── conversations, messages, and SSE
+  ├── Mentor, Interview, and Team Practice modes
+  ├── session summaries and progress
+  └── bounded user-controlled memory
 
-PostgreSQL container
+PostgreSQL through SQLAlchemy async access and Alembic migrations
 ```
 
 The components are intentionally not connected to product functionality yet.
@@ -49,7 +54,14 @@ The components are intentionally not connected to product functionality yet.
 - Mode controls behavior; persona controls tone.
 - Messages will be stored as individual records.
 - User memories must be inspectable and deletable.
+- General conversations receive no memory context; only relevant saved memory
+  is bounded and injected into Mentor, Interview, and Team prompts.
+- OpenAI API keys and Supabase verification configuration remain backend-only.
+- Expensive AI operations use a small authenticated per-user rate-limit
+  abstraction. The current implementation stores counters in process memory;
+  a distributed implementation is required before horizontal scaling.
 
 ## Deferred infrastructure
-Do not add Redis, queues, microservices, Kubernetes, WebSockets, or agent
-frameworks until a demonstrated requirement exists.
+Do not add Redis, queues, microservices, Kubernetes, WebSockets, pgvector,
+embeddings, vector search, or agent frameworks until a demonstrated requirement
+exists.
