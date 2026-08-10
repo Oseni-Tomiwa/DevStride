@@ -84,6 +84,34 @@ describe("ConversationDetail", () => {
     expect(screen.getByRole("heading", { name: "Explain what a REST API is in two sentences" })).toBeInTheDocument();
   });
 
+  it("renders Mentor Mode context and quick actions", async () => {
+    streamConversation.mockResolvedValue(sseResponse([{ event: "done", data: {} }]));
+    render(<ConversationDetail
+      conversation={{ ...conversation, mode: "mentor" }}
+      initialMessages={[]}
+      mentorContext={{ currentLevel: "junior", targetRole: "backend_engineer" }}
+    />);
+
+    expect(screen.getByText("Mentor Mode")).toBeInTheDocument();
+    expect(screen.getByText("backend engineer · junior")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Quiz me" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Explain simpler" }));
+
+    await waitFor(() => expect(streamConversation).toHaveBeenCalledWith(
+      {},
+      "conversation-id",
+      { content: "Explain simpler" },
+      expect.any(AbortSignal),
+    ));
+  });
+
+  it("does not show Mentor Mode controls for general conversations", () => {
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    expect(screen.queryByText("Mentor Mode")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quiz me" })).not.toBeInTheDocument();
+  });
+
   it("prevents blank submissions", () => {
     render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
 

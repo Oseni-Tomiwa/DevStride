@@ -12,7 +12,11 @@ import type { Conversation, Message } from "../types";
 
 const MESSAGE_MAX_LENGTH = 20_000;
 
-type ConversationDetailProps = { conversation: Conversation; initialMessages: Message[] };
+type ConversationDetailProps = {
+  conversation: Conversation;
+  initialMessages: Message[];
+  mentorContext?: { currentLevel: string; targetRole: string };
+};
 type SseEvent = { event: string; data: unknown };
 type SseRecord = Record<string, unknown>;
 
@@ -67,7 +71,7 @@ async function* readSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<
   }
 }
 
-export function ConversationDetail({ conversation, initialMessages }: ConversationDetailProps) {
+export function ConversationDetail({ conversation, initialMessages, mentorContext }: ConversationDetailProps) {
   const router = useRouter();
   const [messages, setMessages] = useState(() => chronologicalMessages(initialMessages));
   const [content, setContent] = useState("");
@@ -180,9 +184,8 @@ export function ConversationDetail({ conversation, initialMessages }: Conversati
     setIsSending(false);
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmedContent = content.trim();
+  async function submitMessage(rawContent: string) {
+    const trimmedContent = rawContent.trim();
     if (!trimmedContent) { setError("Write a message before sending."); return; }
     if (trimmedContent.length > MESSAGE_MAX_LENGTH) {
       setError(`Messages must be ${MESSAGE_MAX_LENGTH.toLocaleString()} characters or fewer.`);
@@ -192,6 +195,11 @@ export function ConversationDetail({ conversation, initialMessages }: Conversati
     setRetryMessageId(null);
     setError(null);
     await runGeneration((signal) => streamConversation(createClient(), conversation.id, { content: trimmedContent }, signal));
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitMessage(content);
   }
 
   async function handleRetry() {
@@ -207,15 +215,29 @@ export function ConversationDetail({ conversation, initialMessages }: Conversati
     }
   }
 
+  const quickActions = [
+    "Explain simpler",
+    "Give an example",
+    "Quiz me",
+    "Give me an exercise",
+    "Challenge my answer",
+  ];
+  const profileLabel = (value: string) => value.replaceAll("_", " ");
+
   const displayTitle = conversationDisplayTitle(conversation, messages);
 
   return (
     <section className="conversation-shell conversation-detail" aria-labelledby="conversation-title">
       <div className="conversation-detail-header">
         <Link href="/conversations" className="back-link">← All conversations</Link>
-        <p className="eyebrow">{conversation.mode}</p>
+        <p className="eyebrow">{conversation.mode === "mentor" ? "Mentor Mode" : conversation.mode}</p>
         <h1 id="conversation-title">{displayTitle}</h1>
         <p className="muted">Your messages and assistant responses are saved in this conversation.</p>
+        {conversation.mode === "mentor" && mentorContext && (
+          <p className="conversation-context">
+            {profileLabel(mentorContext.targetRole)} · {profileLabel(mentorContext.currentLevel)}
+          </p>
+        )}
       </div>
       <div className="message-history" aria-live="polite">
         {messages.length === 0 ? <div className="message-empty"><h2>Start with a question</h2><p className="muted">Ask something to begin this conversation.</p></div> : messages.map((message) => (
@@ -226,6 +248,21 @@ export function ConversationDetail({ conversation, initialMessages }: Conversati
         ))}
         <div ref={historyEndRef} aria-hidden="true" />
       </div>
+      {conversation.mode === "mentor" && (
+        <div className="mentor-actions" aria-label="Mentor quick actions">
+          {quickActions.map((action) => (
+            <button
+              type="button"
+              className="button-secondary"
+              key={action}
+              disabled={isSending}
+              onClick={() => void submitMessage(action)}
+            >
+              {action}
+            </button>
+          ))}
+        </div>
+      )}
       <form className="message-composer" onSubmit={handleSubmit}>
         <label htmlFor="message-content">Your message</label>
         <textarea id="message-content" value={content} maxLength={MESSAGE_MAX_LENGTH} placeholder="Ask a question or describe what you want to practise…" onChange={(event) => { setContent(event.target.value); setError(null); }} onKeyDown={handleComposerKeyDown} rows={4} disabled={isSending} />

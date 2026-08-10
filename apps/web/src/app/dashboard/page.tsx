@@ -2,6 +2,7 @@ import React from "react";
 import { redirect } from "next/navigation";
 
 import { AppHeader } from "../../components/app-header";
+import { MentorEntry } from "../../features/conversations/components/mentor-entry";
 import { Profile } from "../../features/profile/types";
 import { getAuthenticatedProfile } from "../../features/profile/api";
 import { ApiError } from "../../lib/api/client";
@@ -92,7 +93,12 @@ export default async function DashboardPage() {
             <h2 id="practice-title">Choose your next step</h2>
           </div>
           <div className="practice-grid">
-            {["Learn with Mentor", "Mock Interview", "Team Practice"].map((title) => (
+            <article className="practice-card">
+              <h3>Learn with Mentor</h3>
+              <p className="muted">A profile-aware software-engineering learning space.</p>
+              <MentorEntry />
+            </article>
+            {["Mock Interview", "Team Practice"].map((title) => (
               <article className="practice-card" key={title}>
                 <h3>{title}</h3>
                 <p className="muted">Structured practice is coming soon.</p>

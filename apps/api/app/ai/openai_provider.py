@@ -21,13 +21,18 @@ class OpenAIProvider:
         self.model = model
         self.client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_REQUEST_TIMEOUT_SECONDS)
 
-    async def generate(self, messages: Sequence[ProviderMessage]) -> GenerationResult:
+    async def generate(
+        self,
+        messages: Sequence[ProviderMessage],
+        *,
+        system_instruction: str = SYSTEM_INSTRUCTION,
+    ) -> GenerationResult:
         started_at = perf_counter()
         request_input = [{"role": message.role, "content": message.content} for message in messages]
         try:
             response = await self.client.responses.create(
                 model=self.model,
-                instructions=SYSTEM_INSTRUCTION,
+                instructions=system_instruction,
                 input=cast(Any, request_input),
                 timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,
             )
@@ -56,14 +61,17 @@ class OpenAIProvider:
         )
 
     async def stream(
-        self, messages: Sequence[ProviderMessage]
+        self,
+        messages: Sequence[ProviderMessage],
+        *,
+        system_instruction: str = SYSTEM_INSTRUCTION,
     ) -> AsyncIterator[GenerationStreamChunk]:
         started_at = perf_counter()
         request_input = [{"role": message.role, "content": message.content} for message in messages]
         try:
             stream = await self.client.responses.create(
                 model=self.model,
-                instructions=SYSTEM_INSTRUCTION,
+                instructions=system_instruction,
                 input=cast(Any, request_input),
                 stream=True,
                 timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.prompts import SYSTEM_INSTRUCTION
 from app.ai.provider import (
     AIProvider,
     AIProviderError,
@@ -15,6 +16,8 @@ from app.conversations import repository
 from app.conversations.models import Message
 from app.conversations.schemas import RespondRequest
 from app.conversations.service import get_conversation, get_retry_message
+from app.mentor.prompts import build_mentor_instruction
+from app.profiles import repository as profile_repository
 
 logger = logging.getLogger(__name__)
 RECENT_MESSAGE_CONTEXT_LIMIT = 20
@@ -25,6 +28,10 @@ class AssistantGenerationDisabledError(Exception):
 
 
 class AssistantGenerationError(Exception):
+    pass
+
+
+class MentorProfileRequiredError(Exception):
     pass
 
 
@@ -50,6 +57,15 @@ def _provider_messages(messages: Sequence[Message]) -> list[ProviderMessage]:
     return [ProviderMessage(role=message.role, content=message.content) for message in messages]
 
 
+async def _system_instruction(session: AsyncSession, user_id: UUID, conversation_mode: str) -> str:
+    if conversation_mode != "mentor":
+        return SYSTEM_INSTRUCTION
+    profile = await profile_repository.get_profile_by_user_id(session, user_id)
+    if profile is None:
+        raise MentorProfileRequiredError
+    return build_mentor_instruction(profile)
+
+
 async def generate_response(
     session: AsyncSession,
     user_id: UUID,
@@ -57,9 +73,10 @@ async def generate_response(
     data: RespondRequest,
     provider: AIProvider | None,
 ) -> tuple[Message, Message]:
-    await get_conversation(session, user_id, conversation_id)
+    conversation = await get_conversation(session, user_id, conversation_id)
     if provider is None:
         raise AssistantGenerationDisabledError
+    system_instruction = await _system_instruction(session, user_id, conversation.mode)
 
     user_message = Message(
         conversation_id=conversation_id,
@@ -74,7 +91,7 @@ async def generate_response(
     )
     context = _provider_messages(list(reversed(recent_messages)))
     try:
-        result = await provider.generate(context)
+        result = await provider.generate(context, system_instruction=system_instruction)
     except AIProviderError as exc:
         logger.warning(
             "AI generation failed",
@@ -115,7 +132,8 @@ async def stream_response(
     provider: AIProvider | None,
 ) -> AsyncIterator[StreamEvent]:
     """Persist the user turn, stream normalized deltas, then persist one assistant turn."""
-    await get_conversation(session, user_id, conversation_id)
+    conversation = await get_conversation(session, user_id, conversation_id)
+    system_instruction = await _system_instruction(session, user_id, conversation.mode)
 
     user_message = Message(
         conversation_id=conversation_id,
@@ -136,7 +154,7 @@ async def stream_response(
     chunks: list[str] = []
     final_result: GenerationResult | None = None
     try:
-        async for chunk in provider.stream(context):
+        async for chunk in provider.stream(context, system_instruction=system_instruction):
             if chunk.delta:
                 chunks.append(chunk.delta)
                 yield StreamAssistantDelta(chunk.delta)
@@ -195,6 +213,8 @@ async def retry_stream_response(
     if provider is None:
         raise AssistantGenerationDisabledError
 
+    conversation = await get_conversation(session, user_id, conversation_id)
+    system_instruction = await _system_instruction(session, user_id, conversation.mode)
     recent_messages = await repository.get_recent_by_conversation_id(
         session, conversation_id, limit=RECENT_MESSAGE_CONTEXT_LIMIT
     )
@@ -202,7 +222,7 @@ async def retry_stream_response(
     chunks: list[str] = []
     final_result: GenerationResult | None = None
     try:
-        async for chunk in provider.stream(context):
+        async for chunk in provider.stream(context, system_instruction=system_instruction):
             if chunk.delta:
                 chunks.append(chunk.delta)
                 yield StreamAssistantDelta(chunk.delta)

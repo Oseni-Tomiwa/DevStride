@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MESSAGE_CONTENT_MAX_LENGTH = 20_000
+ConversationMode = Literal["general", "mentor"]
 
 
 class ConversationCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(max_length=200)
-    mode: str = "general"
+    mode: ConversationMode = "general"
     persona: str | None = None
 
     @field_validator("title")

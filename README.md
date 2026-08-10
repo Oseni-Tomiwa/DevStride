@@ -157,13 +157,15 @@ last two require an authenticated Supabase session.
 ## Current scope
 
 The current implementation includes the Milestone 1 foundations and the
-first disabled-by-default assistant-generation boundary. Mentor Mode,
-interviews, memory, and other advanced product features remain out of scope.
+first disabled-by-default assistant-generation boundary. Interview Mode,
+memory, and other advanced product features remain out of scope.
 
 Conversation messages are currently limited to 20,000 characters while
 persistence APIs are being established. Assistant generation is available only
 when the backend-only `AI_GENERATION_ENABLED` flag is set to `true` and a
-server-side `OPENAI_API_KEY` is configured. Streaming remains deferred.
+server-side `OPENAI_API_KEY` is configured. Mentor conversations use the
+authenticated user's onboarding profile to tailor the versioned mentor prompt;
+generic conversations remain profile-agnostic.
 
 The authenticated response boundaries are `POST
 /api/v1/conversations/{conversation_id}/respond` for a complete response and

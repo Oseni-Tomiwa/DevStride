@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { AppHeader } from "../../../components/app-header";
 import { ConversationDetail } from "../../../features/conversations/components/conversation-detail";
 import { getConversation, listMessages } from "../../../features/conversations/api";
+import { getAuthenticatedProfile } from "../../../features/profile/api";
+import type { Profile } from "../../../features/profile/types";
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/server";
 
@@ -23,11 +25,27 @@ export default async function ConversationPage({ params }: ConversationPageProps
       getConversation(supabase, conversationId),
       listMessages(supabase, conversationId),
     ]);
+    let mentorProfile: Profile | null = null;
+    if (conversation.mode === "mentor") {
+      try {
+        mentorProfile = await getAuthenticatedProfile(supabase);
+      } catch (cause) {
+        if (cause instanceof ApiError && cause.status === 404) redirect("/onboarding");
+        throw cause;
+      }
+    }
     return (
       <main className="page-shell app-page">
         <AppHeader current="conversations" />
         <section className="page-content">
-          <ConversationDetail conversation={conversation} initialMessages={messages} />
+          <ConversationDetail
+            conversation={conversation}
+            initialMessages={messages}
+            mentorContext={mentorProfile ? {
+              currentLevel: mentorProfile.current_level,
+              targetRole: mentorProfile.target_role,
+            } : undefined}
+          />
         </section>
       </main>
     );

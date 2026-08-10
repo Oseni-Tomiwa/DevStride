@@ -174,6 +174,32 @@ def test_user_creates_owned_conversation(
     assert create.await_args.args[2].title == "Practice session"
 
 
+def test_user_creates_owned_mentor_conversation(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, current_user = authenticated_client
+    conversation = make_conversation(current_user.id)
+    conversation.mode = "mentor"
+    create = AsyncMock(return_value=conversation)
+    monkeypatch.setattr("app.conversations.routes.create_conversation", create)
+
+    response = post_conversation({"title": "Mentor session", "mode": "mentor"})
+
+    assert response.status_code == 201
+    assert response.json()["mode"] == "mentor"
+    assert create.await_args is not None
+    assert create.await_args.args[2].mode == "mentor"
+
+
+def test_unsupported_conversation_mode_is_rejected(
+    authenticated_client: tuple[TestClient, CurrentUser],
+) -> None:
+    response = post_conversation({"title": "Unsupported", "mode": "interview"})
+
+    assert response.status_code == 422
+
+
 def test_list_returns_only_current_users_conversations(
     authenticated_client: tuple[TestClient, CurrentUser],
     monkeypatch: pytest.MonkeyPatch,

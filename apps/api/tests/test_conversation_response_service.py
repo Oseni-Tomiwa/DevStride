@@ -12,7 +12,7 @@ from app.ai.provider import (
     ProviderMessage,
 )
 from app.conversations import repository
-from app.conversations.models import Message
+from app.conversations.models import Conversation, Message
 from app.conversations.response_service import (
     RECENT_MESSAGE_CONTEXT_LIMIT,
     AssistantGenerationError,
@@ -24,6 +24,7 @@ from app.conversations.response_service import (
     stream_response,
 )
 from app.conversations.schemas import RespondRequest
+from app.profiles.models import Profile
 
 
 class FakeProvider:
@@ -31,18 +32,23 @@ class FakeProvider:
         self.result = result
         self.error = error
         self.messages: Sequence[ProviderMessage] = []
+        self.system_instructions: list[str] = []
 
-    async def generate(self, messages: Sequence[ProviderMessage]) -> GenerationResult:
+    async def generate(
+        self, messages: Sequence[ProviderMessage], *, system_instruction: str
+    ) -> GenerationResult:
         self.messages = messages
+        self.system_instructions.append(system_instruction)
         if self.error:
             raise self.error
         assert self.result is not None
         return self.result
 
     async def stream(
-        self, messages: Sequence[ProviderMessage]
+        self, messages: Sequence[ProviderMessage], *, system_instruction: str
     ) -> AsyncIterator[GenerationStreamChunk]:
         self.messages = messages
+        self.system_instructions.append(system_instruction)
         if self.error:
             raise self.error
         assert self.result is not None
@@ -79,7 +85,7 @@ async def test_generation_uses_bounded_chronological_context_and_persists_both_m
     added: list[Message] = []
 
     async def fake_get_conversation(*args: Any) -> object:
-        return object()
+        return Conversation(user_id=uuid4(), title="Test", mode="general")
 
     async def fake_create_message(_session: AsyncSession, message: Message) -> Message:
         added.append(message)
@@ -111,6 +117,7 @@ async def test_generation_uses_bounded_chronological_context_and_persists_both_m
     assert [item.content for item in provider.messages] == [
         f"message {index}" for index in range(RECENT_MESSAGE_CONTEXT_LIMIT)
     ]
+    assert "Learner profile:" not in provider.system_instructions[0]
     assert added == [user_message, assistant_message]
 
 
@@ -127,7 +134,7 @@ async def test_provider_failure_preserves_user_message_without_assistant(
     added: list[Message] = []
 
     async def fake_get_conversation(*args: Any) -> object:
-        return object()
+        return Conversation(user_id=uuid4(), title="Test", mode="general")
 
     async def fake_create_message(_session: AsyncSession, message: Message) -> Message:
         added.append(message)
@@ -177,7 +184,7 @@ async def test_streaming_uses_bounded_context_and_persists_one_assistant(
     added: list[Message] = []
 
     async def fake_get_conversation(*args: Any) -> object:
-        return object()
+        return Conversation(user_id=uuid4(), title="Test", mode="general")
 
     async def fake_create_message(_session: AsyncSession, message: Message) -> Message:
         added.append(message)
@@ -219,7 +226,7 @@ async def test_streaming_provider_failure_keeps_user_without_assistant(
     added: list[Message] = []
 
     async def fake_get_conversation(*args: Any) -> object:
-        return object()
+        return Conversation(user_id=uuid4(), title="Test", mode="general")
 
     async def fake_create_message(_session: AsyncSession, message: Message) -> Message:
         added.append(message)
@@ -278,7 +285,15 @@ async def test_retry_stream_reuses_user_message_and_persists_one_assistant(
         del args, kwargs
         return [user_message]
 
+    async def fake_conversation(*args: Any) -> Conversation:
+        del args
+        return Conversation(user_id=uuid4(), title="Test", mode="general")
+
     monkeypatch.setattr("app.conversations.response_service.get_retry_message", fake_retry_message)
+    monkeypatch.setattr(
+        "app.conversations.response_service.get_conversation",
+        fake_conversation,
+    )
     monkeypatch.setattr(repository, "create_message", fake_create_message)
     monkeypatch.setattr(repository, "get_recent_by_conversation_id", fake_recent)
 
@@ -297,3 +312,81 @@ async def test_retry_stream_reuses_user_message_and_persists_one_assistant(
     complete = next(event for event in events if isinstance(event, StreamAssistantComplete))
     assert complete.message.role == "assistant"
     assert [message.role for message in added] == ["assistant"]
+
+
+@pytest.mark.asyncio
+async def test_mentor_stream_uses_current_profile_without_changing_history_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation_id = uuid4()
+    user_id = uuid4()
+    provider = FakeProvider(
+        GenerationResult(
+            text="Mentor response",
+            provider="openai",
+            model="configured-model",
+            latency_ms=18,
+        )
+    )
+    conversation = Conversation(
+        id=conversation_id,
+        user_id=user_id,
+        title="Mentor session",
+        mode="mentor",
+    )
+    profile = Profile(
+        user_id=user_id,
+        display_name="Ada",
+        current_level="junior",
+        target_role="backend_engineer",
+        preferred_stack=["Python", "PostgreSQL"],
+        communication_goal="technical_interviews",
+        feedback_preference="direct",
+        onboarding_completed=True,
+    )
+    added: list[Message] = []
+
+    async def fake_get_conversation(*args: Any) -> Conversation:
+        del args
+        return conversation
+
+    async def fake_profile(*args: Any) -> Profile:
+        assert args[1] == user_id
+        return profile
+
+    async def fake_create_message(_session: AsyncSession, message: Message) -> Message:
+        added.append(message)
+        return message
+
+    async def fake_recent(*args: Any, **kwargs: Any) -> list[Message]:
+        assert kwargs["limit"] == RECENT_MESSAGE_CONTEXT_LIMIT
+        return []
+
+    monkeypatch.setattr(
+        "app.conversations.response_service.get_conversation", fake_get_conversation
+    )
+    monkeypatch.setattr(
+        "app.conversations.response_service.profile_repository.get_profile_by_user_id",
+        fake_profile,
+    )
+    monkeypatch.setattr(repository, "create_message", fake_create_message)
+    monkeypatch.setattr(repository, "get_recent_by_conversation_id", fake_recent)
+
+    events = [
+        event
+        async for event in stream_response(
+            cast(AsyncSession, type("Session", (), {"commit": _commit})()),
+            user_id,
+            conversation_id,
+            RespondRequest(content="Explain APIs"),
+            provider,
+        )
+    ]
+
+    assert isinstance(events[0], StreamUserMessage)
+    instruction = provider.system_instructions[0]
+    assert "junior" in instruction
+    assert "backend_engineer" in instruction
+    assert "direct" in instruction
+    assert "Python, PostgreSQL" in instruction
+    assert [message.role for message in added] == ["user", "assistant"]

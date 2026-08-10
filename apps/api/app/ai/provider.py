@@ -33,10 +33,14 @@ class AIProviderError(Exception):
 
 
 class AIProvider(Protocol):
-    async def generate(self, messages: Sequence[ProviderMessage]) -> GenerationResult:
+    async def generate(
+        self, messages: Sequence[ProviderMessage], *, system_instruction: str
+    ) -> GenerationResult:
         """Generate one assistant response from bounded conversation context."""
         ...
 
-    def stream(self, messages: Sequence[ProviderMessage]) -> AsyncIterator[GenerationStreamChunk]:
+    def stream(
+        self, messages: Sequence[ProviderMessage], *, system_instruction: str
+    ) -> AsyncIterator[GenerationStreamChunk]:
         """Stream normalized assistant deltas and one final provider result."""
         ...
