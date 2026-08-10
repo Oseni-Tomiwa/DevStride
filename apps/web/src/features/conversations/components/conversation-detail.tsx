@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
-import { retryConversationMessage, streamConversation } from "../api";
+import { retryConversationMessage, startInterview, streamConversation } from "../api";
 import { conversationDisplayTitle } from "../title";
 import type { Conversation, Message } from "../types";
 
@@ -85,9 +85,15 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryMessageId, setRetryMessageId] = useState<string | null>(null);
+  const [interviewKickoffPending, setInterviewKickoffPending] = useState(
+    conversation.mode === "interview" && initialMessages.length === 0,
+  );
+  const [interviewKickoffFailed, setInterviewKickoffFailed] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const generationIdRef = useRef(0);
   const persistedUserMessageIdRef = useRef<string | null>(null);
+  const interviewKickoffRequestedRef = useRef(false);
+  const unmountCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const historyEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -95,12 +101,29 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
     historyEndRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [messages]);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    abortControllerRef.current?.abort();
+  useEffect(() => {
+    mountedRef.current = true;
+    if (unmountCleanupTimerRef.current !== null) {
+      clearTimeout(unmountCleanupTimerRef.current);
+      unmountCleanupTimerRef.current = null;
+    }
+    return () => {
+      mountedRef.current = false;
+      unmountCleanupTimerRef.current = setTimeout(() => {
+        unmountCleanupTimerRef.current = null;
+        if (!mountedRef.current) {
+          generationIdRef.current += 1;
+          abortControllerRef.current?.abort();
+          abortControllerRef.current = null;
+        }
+      }, 0);
+    };
   }, []);
 
-  async function runGeneration(request: (signal: AbortSignal) => Promise<Response>) {
+  async function runGeneration(
+    request: (signal: AbortSignal) => Promise<Response>,
+    onCompleted?: () => void,
+  ) {
     const generationId = generationIdRef.current + 1;
     generationIdRef.current = generationId;
     setIsSending(true);
@@ -156,6 +179,7 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
           if (terminal !== "active") break;
           setRetryMessageId(null);
           setMessages((current) => chronologicalMessages([...current.filter((item) => item.id !== temporaryAssistantId && item.id !== message.id), message]));
+          onCompleted?.();
           finish("completed");
           // assistant_complete is authoritative. Do not wait forever for done.
           clearGeneration();
@@ -170,6 +194,10 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
           if (terminal !== "active") break;
           setError("The assistant connection ended before completion. Please try again.");
           finish("failed");
+          break;
+        } else if (event.event === "interview_pending") {
+          if (terminal !== "active") break;
+          finish("completed");
           break;
         }
       }
@@ -243,6 +271,41 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
     await runGeneration((signal) => retryConversationMessage(createClient(), conversation.id, retryMessageId, signal));
   }
 
+  async function startInterviewKickoff() {
+    setError(null);
+    setInterviewKickoffFailed(false);
+    setInterviewKickoffPending(true);
+    let completed = false;
+    try {
+      await runGeneration(
+        (signal) => startInterview(createClient(), conversation.id, signal),
+        () => { completed = true; },
+      );
+    } finally {
+      if (mountedRef.current) {
+        setInterviewKickoffPending(false);
+        setInterviewKickoffFailed(!completed);
+      }
+    }
+  }
+
+  function retryInterviewKickoff() {
+    void startInterviewKickoff();
+  }
+
+  useEffect(() => {
+    if (
+      conversation.mode === "interview" &&
+      initialMessages.length === 0 &&
+      !interviewKickoffRequestedRef.current
+    ) {
+      interviewKickoffRequestedRef.current = true;
+      void startInterviewKickoff();
+    }
+    // The server-provided empty history is the idempotent kickoff condition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.id, conversation.mode, initialMessages.length]);
+
   async function endInterview() {
     await submitMessage("End the interview and provide my final practice assessment with strengths, areas to improve, gaps, and next practice areas. Include practice ratings for correctness, clarity, depth, and reasoning from 1 to 5, and clearly state that they are not hiring predictions.");
   }
@@ -286,7 +349,19 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
         )}
       </div>
       <div className="message-history" aria-live="polite">
-        {messages.length === 0 ? <div className="message-empty"><h2>Start with a question</h2><p className="muted">Ask something to begin this conversation.</p></div> : messages.map((message) => (
+      {messages.length === 0 ? <div className="message-empty">
+        {conversation.mode === "interview" ? (
+          interviewKickoffPending ? (
+            <><h2>Your interviewer is preparing the first question…</h2><p className="muted">Your interview will begin in a moment.</p></>
+          ) : interviewKickoffFailed ? (
+            <><h2>Interview could not start</h2><p className="muted">{error ?? "We could not prepare the first question."}</p><button type="button" onClick={retryInterviewKickoff}>Retry starting interview</button></>
+          ) : (
+            <><h2>Your interviewer is preparing the first question…</h2><p className="muted">Refresh to check the interview status.</p></>
+          )
+        ) : (
+          <><h2>Start with a question</h2><p className="muted">Ask something to begin this conversation.</p></>
+        )}
+      </div> : messages.map((message) => (
           <article className={`message-bubble message-${message.role}`} key={message.id}>
             <p className="message-label">{message.role === "user" ? "You" : "DevStride assistant"}</p>
             <p>{message.content}</p>
@@ -309,9 +384,9 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
           ))}
         </div>
       )}
-      {conversation.mode === "interview" && (
+      {conversation.mode === "interview" && messages.some((message) => message.role === "assistant" && !message.id.startsWith("streaming-")) && (
         <div className="interview-actions">
-          <button type="button" className="button-secondary" onClick={() => void endInterview()} disabled={isSending}>
+          <button type="button" className="button-secondary" onClick={() => void endInterview()} disabled={isSending || interviewKickoffPending}>
             End interview
           </button>
         </div>

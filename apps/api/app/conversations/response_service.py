@@ -40,6 +40,10 @@ class InterviewProfileRequiredError(Exception):
     pass
 
 
+class InterviewStartNotAllowedError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class StreamUserMessage:
     message: Message
@@ -55,11 +59,116 @@ class StreamAssistantComplete:
     message: Message
 
 
-StreamEvent = StreamUserMessage | StreamAssistantDelta | StreamAssistantComplete
+@dataclass(frozen=True)
+class StreamInterviewPending:
+    """Signals that another request owns the in-progress interview kickoff."""
+
+
+StreamEvent = (
+    StreamUserMessage | StreamAssistantDelta | StreamAssistantComplete | StreamInterviewPending
+)
 
 
 def _provider_messages(messages: Sequence[Message]) -> list[ProviderMessage]:
     return [ProviderMessage(role=message.role, content=message.content) for message in messages]
+
+
+async def start_interview_response(
+    session: AsyncSession,
+    user_id: UUID,
+    conversation_id: UUID,
+    provider: AIProvider | None,
+) -> AsyncIterator[StreamEvent]:
+    """Generate the first interviewer question without creating a fake user turn."""
+    conversation = await repository.get_by_id_and_user_id_for_update(
+        session, conversation_id, user_id
+    )
+    if conversation is None:
+        raise InterviewStartNotAllowedError
+    if conversation.mode != "interview":
+        raise InterviewStartNotAllowedError
+
+    messages = await repository.list_by_conversation_id(session, conversation_id)
+    existing_assistant = next(
+        (message for message in messages if message.role == "assistant"), None
+    )
+    if existing_assistant is not None:
+        yield StreamAssistantComplete(existing_assistant)
+        return
+
+    metadata = dict(conversation.metadata_ or {})
+    if metadata.get("interview_kickoff_started"):
+        yield StreamInterviewPending()
+        return
+    if provider is None:
+        raise AssistantGenerationDisabledError
+
+    instruction = await system_instruction(session, user_id, conversation)
+    metadata["interview_kickoff_started"] = True
+    conversation.metadata_ = metadata
+    await session.commit()
+
+    chunks: list[str] = []
+    final_result: GenerationResult | None = None
+    try:
+        async for chunk in provider.stream([], system_instruction=instruction):
+            if chunk.delta:
+                chunks.append(chunk.delta)
+                yield StreamAssistantDelta(chunk.delta)
+            if chunk.result is not None:
+                final_result = chunk.result
+    except AIProviderError as exc:
+        metadata.pop("interview_kickoff_started", None)
+        conversation.metadata_ = metadata
+        await session.commit()
+        logger.warning(
+            "AI interview kickoff failed",
+            extra={"provider": provider.__class__.__name__, "error_type": type(exc).__name__},
+        )
+        raise AssistantGenerationError from exc
+    except Exception as exc:
+        metadata.pop("interview_kickoff_started", None)
+        conversation.metadata_ = metadata
+        await session.commit()
+        logger.warning(
+            "AI interview kickoff failed",
+            extra={"provider": provider.__class__.__name__, "error_type": type(exc).__name__},
+        )
+        raise AssistantGenerationError from exc
+
+    if final_result is None:
+        metadata.pop("interview_kickoff_started", None)
+        conversation.metadata_ = metadata
+        await session.commit()
+        raise AssistantGenerationError
+
+    text = "".join(chunks).strip() or final_result.text.strip()
+    if not text:
+        metadata.pop("interview_kickoff_started", None)
+        conversation.metadata_ = metadata
+        await session.commit()
+        raise AssistantGenerationError
+
+    message_metadata = {}
+    if final_result.provider_response_id:
+        message_metadata["provider_response_id"] = final_result.provider_response_id
+    assistant_message = Message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content=text,
+        provider=final_result.provider,
+        model=final_result.model,
+        input_tokens=final_result.input_tokens,
+        output_tokens=final_result.output_tokens,
+        latency_ms=final_result.latency_ms,
+        metadata_=message_metadata,
+    )
+    await repository.create_message(session, assistant_message)
+    metadata.pop("interview_kickoff_started", None)
+    metadata["interview_started"] = True
+    conversation.metadata_ = metadata
+    await session.commit()
+    yield StreamAssistantComplete(assistant_message)
 
 
 async def system_instruction(

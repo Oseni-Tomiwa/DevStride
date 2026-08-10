@@ -15,11 +15,15 @@ from app.conversations.response_service import (
     AssistantGenerationDisabledError,
     AssistantGenerationError,
     InterviewProfileRequiredError,
+    InterviewStartNotAllowedError,
     MentorProfileRequiredError,
+    StreamAssistantComplete,
     StreamAssistantDelta,
+    StreamInterviewPending,
     StreamUserMessage,
     generate_response,
     retry_stream_response,
+    start_interview_response,
     stream_response,
 )
 from app.conversations.schemas import (
@@ -146,6 +150,86 @@ async def create_message(
     return MessageResponse.model_validate(message)
 
 
+@router.post(
+    "/{conversation_id}/interview-start",
+    response_class=StreamingResponse,
+)
+async def interview_start(
+    conversation_id: UUID,
+    session: Session,
+    current_user: AuthenticatedUser,
+    provider: Provider,
+) -> StreamingResponse:
+    try:
+        conversation = await get_conversation(session, current_user.id, conversation_id)
+    except ConversationNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        ) from None
+    if conversation.mode != "interview":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Interview start is only available for Interview Mode conversations",
+        )
+
+    async def event_stream() -> AsyncIterator[str]:
+        try:
+            async for event in start_interview_response(
+                session, current_user.id, conversation_id, provider
+            ):
+                if isinstance(event, StreamAssistantDelta):
+                    yield _sse_event("assistant_delta", {"delta": event.delta})
+                elif isinstance(event, StreamInterviewPending):
+                    yield _sse_event("interview_pending", {})
+                elif isinstance(event, StreamAssistantComplete):
+                    payload = MessageResponse.model_validate(event.message).model_dump(mode="json")
+                    yield _sse_event("assistant_complete", payload)
+        except InterviewStartNotAllowedError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "interview_start_not_allowed",
+                    "message": "Interview start is not available",
+                },
+            )
+        except AssistantGenerationDisabledError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "generation_disabled",
+                    "message": "Assistant generation is currently disabled",
+                },
+            )
+        except AssistantGenerationError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "generation_failed",
+                    "message": "Assistant generation failed. Please try again.",
+                },
+            )
+        except InterviewProfileRequiredError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "interview_profile_required",
+                    "message": "Complete onboarding before using Interview Mode",
+                },
+            )
+        finally:
+            yield _sse_event("done", {})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/{conversation_id}/messages", response_model=list[MessageResponse])
 async def list_messages(
     conversation_id: UUID,
@@ -235,7 +319,7 @@ async def stream(
                     yield _sse_event("user_message", payload)
                 elif isinstance(event, StreamAssistantDelta):
                     yield _sse_event("assistant_delta", {"delta": event.delta})
-                else:
+                elif isinstance(event, StreamAssistantComplete):
                     payload = MessageResponse.model_validate(event.message).model_dump(mode="json")
                     yield _sse_event("assistant_complete", payload)
         except AssistantGenerationDisabledError:
@@ -311,7 +395,7 @@ async def retry_stream(
                     yield _sse_event("user_message", payload)
                 elif isinstance(event, StreamAssistantDelta):
                     yield _sse_event("assistant_delta", {"delta": event.delta})
-                else:
+                elif isinstance(event, StreamAssistantComplete):
                     payload = MessageResponse.model_validate(event.message).model_dump(mode="json")
                     yield _sse_event("assistant_complete", payload)
         except AssistantGenerationDisabledError:

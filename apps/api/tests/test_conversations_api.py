@@ -13,6 +13,7 @@ from app.ai.dependencies import get_ai_provider
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations.models import Conversation, Message
+from app.conversations.response_service import StreamAssistantComplete, StreamAssistantDelta
 from app.conversations.service import ConversationNotFoundError, RetryNotAllowedError
 from app.database.session import get_db_session
 from app.main import app
@@ -247,6 +248,67 @@ def test_behavioral_interview_rejects_technical_focus(
     )
 
     assert response.status_code == 422
+
+
+def test_interview_start_streams_opening_question_and_done(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, current_user = authenticated_client
+    conversation = make_conversation(current_user.id)
+    conversation.mode = "interview"
+    opening = make_message(conversation.id)
+    opening.role = "assistant"
+    opening.content = "How would you design a versioned API?"
+
+    async def fake_get_conversation(*args: object) -> Conversation:
+        del args
+        return conversation
+
+    async def fake_start(*args: object) -> AsyncIterator[object]:
+        del args
+        yield StreamAssistantDelta(delta=opening.content)
+        yield StreamAssistantComplete(opening)
+
+    monkeypatch.setattr("app.conversations.routes.get_conversation", fake_get_conversation)
+    monkeypatch.setattr("app.conversations.routes.start_interview_response", fake_start)
+
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/conversations/{conversation.id}/interview-start"
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+
+    assert response.status_code == 200
+    assert "event: assistant_delta" in response.text
+    assert "event: assistant_complete" in response.text
+    assert response.text.index("event: assistant_delta") < response.text.index(
+        "event: assistant_complete"
+    )
+    assert response.text.endswith("event: done\ndata: {}\n\n")
+
+
+def test_non_interview_cannot_use_interview_start_stream(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = make_conversation()
+
+    async def fake_get_conversation(*args: object) -> Conversation:
+        del args
+        return conversation
+
+    monkeypatch.setattr("app.conversations.routes.get_conversation", fake_get_conversation)
+
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/conversations/{conversation.id}/interview-start"
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+
+    assert response.status_code == 409
 
 
 def test_list_returns_only_current_users_conversations(

@@ -16,11 +16,13 @@ from app.conversations.models import Conversation, Message
 from app.conversations.response_service import (
     RECENT_MESSAGE_CONTEXT_LIMIT,
     AssistantGenerationError,
+    InterviewStartNotAllowedError,
     StreamAssistantComplete,
     StreamAssistantDelta,
     StreamUserMessage,
     generate_response,
     retry_stream_response,
+    start_interview_response,
     stream_response,
     system_instruction,
 )
@@ -484,3 +486,163 @@ async def test_interview_mode_selects_interview_prompt_server_side(
     assert "Behavioral" in instruction
     assert "You are a professional DevStride software-engineering interviewer." in instruction
     assert "You are DevStride Mentor" not in instruction
+
+
+@pytest.mark.asyncio
+async def test_empty_owned_interview_kickoff_persists_one_assistant_and_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    conversation = Conversation(
+        id=uuid4(),
+        user_id=user_id,
+        title="Technical interview",
+        mode="interview",
+        metadata_={"interview_type": "technical", "interview_focus": "apis"},
+    )
+    profile = Profile(
+        user_id=user_id,
+        display_name="Ada",
+        current_level="junior",
+        target_role="backend_engineer",
+        preferred_stack=["Python"],
+        communication_goal="technical_interviews",
+        feedback_preference="balanced",
+        onboarding_completed=True,
+    )
+    provider = FakeProvider(
+        GenerationResult(
+            text="Welcome to your API interview. How would you design a versioned endpoint?",
+            provider="openai",
+            model="configured-model",
+        )
+    )
+    session = cast(AsyncSession, type("Session", (), {"commit": _commit})())
+    added: list[Message] = []
+
+    async def fake_locked(*args: Any) -> Conversation:
+        del args
+        return conversation
+
+    async def fake_messages(*args: Any) -> list[Message]:
+        del args
+        return added
+
+    async def fake_profile(*args: Any) -> Profile:
+        del args
+        return profile
+
+    async def fake_create(_session: AsyncSession, message: Message) -> Message:
+        added.append(message)
+        return message
+
+    monkeypatch.setattr(repository, "get_by_id_and_user_id_for_update", fake_locked)
+    monkeypatch.setattr(repository, "list_by_conversation_id", fake_messages)
+    monkeypatch.setattr(repository, "create_message", fake_create)
+    monkeypatch.setattr(
+        "app.conversations.response_service.profile_repository.get_profile_by_user_id",
+        fake_profile,
+    )
+
+    events = [
+        event
+        async for event in start_interview_response(session, user_id, conversation.id, provider)
+    ]
+
+    assert [type(event) for event in events] == [StreamAssistantDelta, StreamAssistantComplete]
+    assert len(added) == 1
+    assert added[0].role == "assistant"
+    assert "APIs" in provider.system_instructions[0]
+    assert conversation.metadata_["interview_started"] is True
+
+    second_events = [
+        event
+        async for event in start_interview_response(session, user_id, conversation.id, provider)
+    ]
+
+    assert len(added) == 1
+    assert len(second_events) == 1
+    assert isinstance(second_events[0], StreamAssistantComplete)
+
+
+@pytest.mark.asyncio
+async def test_interview_kickoff_rejects_unowned_and_non_interview_conversations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = cast(AsyncSession, object())
+    provider = FakeProvider(GenerationResult(text="Question", provider="openai", model="model"))
+
+    async def no_conversation(*args: Any) -> None:
+        del args
+        return None
+
+    monkeypatch.setattr(repository, "get_by_id_and_user_id_for_update", no_conversation)
+    with pytest.raises(InterviewStartNotAllowedError):
+        [event async for event in start_interview_response(session, uuid4(), uuid4(), provider)]
+
+    general = Conversation(user_id=uuid4(), title="General", mode="general", metadata_={})
+
+    async def general_conversation(*args: Any) -> Conversation:
+        del args
+        return general
+
+    monkeypatch.setattr(repository, "get_by_id_and_user_id_for_update", general_conversation)
+    with pytest.raises(InterviewStartNotAllowedError):
+        [event async for event in start_interview_response(session, uuid4(), uuid4(), provider)]
+
+
+@pytest.mark.asyncio
+async def test_interview_kickoff_provider_failure_clears_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    conversation = Conversation(
+        id=uuid4(),
+        user_id=user_id,
+        title="Technical interview",
+        mode="interview",
+        metadata_={"interview_type": "technical", "interview_focus": "apis"},
+    )
+    profile = Profile(
+        user_id=user_id,
+        display_name="Ada",
+        current_level="junior",
+        target_role="backend_engineer",
+        preferred_stack=["Python"],
+        communication_goal="technical_interviews",
+        feedback_preference="balanced",
+        onboarding_completed=True,
+    )
+    session = cast(AsyncSession, type("Session", (), {"commit": _commit})())
+
+    async def fake_locked(*args: Any) -> Conversation:
+        del args
+        return conversation
+
+    async def fake_messages(*args: Any) -> list[Message]:
+        del args
+        return []
+
+    async def fake_profile(*args: Any) -> Profile:
+        del args
+        return profile
+
+    monkeypatch.setattr(repository, "get_by_id_and_user_id_for_update", fake_locked)
+    monkeypatch.setattr(repository, "list_by_conversation_id", fake_messages)
+    monkeypatch.setattr(
+        "app.conversations.response_service.profile_repository.get_profile_by_user_id",
+        fake_profile,
+    )
+
+    with pytest.raises(AssistantGenerationError):
+        [
+            event
+            async for event in start_interview_response(
+                session,
+                user_id,
+                conversation.id,
+                FakeProvider(error=AIProviderError("provider failure")),
+            )
+        ]
+
+    assert "interview_kickoff_started" not in conversation.metadata_

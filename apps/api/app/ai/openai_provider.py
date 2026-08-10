@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator, Sequence
 from time import perf_counter
 from typing import Any, cast
@@ -14,6 +15,15 @@ from app.ai.provider import (
 
 OPENAI_PROVIDER_NAME = "openai"
 OPENAI_REQUEST_TIMEOUT_SECONDS = 30.0
+INTERVIEW_KICKOFF_INPUT = (
+    "Begin the interview by introducing it briefly and asking the first question."
+)
+logger = logging.getLogger(__name__)
+
+
+def _request_input(messages: Sequence[ProviderMessage]) -> list[dict[str, str]] | str:
+    request_input = [{"role": message.role, "content": message.content} for message in messages]
+    return request_input or INTERVIEW_KICKOFF_INPUT
 
 
 class OpenAIProvider:
@@ -28,7 +38,7 @@ class OpenAIProvider:
         system_instruction: str = SYSTEM_INSTRUCTION,
     ) -> GenerationResult:
         started_at = perf_counter()
-        request_input = [{"role": message.role, "content": message.content} for message in messages]
+        request_input = _request_input(messages)
         try:
             response = await self.client.responses.create(
                 model=self.model,
@@ -37,6 +47,10 @@ class OpenAIProvider:
                 timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,
             )
         except Exception as exc:
+            logger.warning(
+                "AI provider request failed",
+                extra={"operation": "generate", "error_type": type(exc).__name__},
+            )
             raise AIProviderError from exc
 
         response_data = cast(Any, response)
@@ -67,7 +81,7 @@ class OpenAIProvider:
         system_instruction: str = SYSTEM_INSTRUCTION,
     ) -> AsyncIterator[GenerationStreamChunk]:
         started_at = perf_counter()
-        request_input = [{"role": message.role, "content": message.content} for message in messages]
+        request_input = _request_input(messages)
         try:
             stream = await self.client.responses.create(
                 model=self.model,
@@ -101,6 +115,10 @@ class OpenAIProvider:
                         )
                     )
         except Exception as exc:
+            logger.warning(
+                "AI provider request failed",
+                extra={"operation": "stream", "error_type": type(exc).__name__},
+            )
             raise AIProviderError from exc
 
 

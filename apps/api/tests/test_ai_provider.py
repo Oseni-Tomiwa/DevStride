@@ -3,7 +3,7 @@ from typing import Any, cast
 
 import pytest
 
-from app.ai.openai_provider import OpenAIProvider
+from app.ai.openai_provider import INTERVIEW_KICKOFF_INPUT, OpenAIProvider
 from app.ai.provider import AIProviderError, ProviderMessage
 
 
@@ -78,9 +78,27 @@ async def test_openai_provider_wraps_sdk_failures(
     provider = OpenAIProvider("test-key", "configured-model")
 
     with pytest.raises(AIProviderError) as error:
-        await provider.generate([])
+        await provider.generate([ProviderMessage(role="user", content="Question")])
 
     assert str(error.value) == ""
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_uses_non_message_kickoff_input_for_empty_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_client = FakeClient()
+
+    def make_client(**kwargs: Any) -> FakeClient:
+        del kwargs
+        return fake_client
+
+    monkeypatch.setattr("app.ai.openai_provider.AsyncOpenAI", cast(Any, make_client))
+    provider = OpenAIProvider("test-key", "configured-model")
+
+    await provider.generate([])
+
+    assert fake_client.responses.calls[0]["input"] == INTERVIEW_KICKOFF_INPUT
 
 
 @pytest.mark.asyncio

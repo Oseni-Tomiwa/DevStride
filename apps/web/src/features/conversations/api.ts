@@ -102,3 +102,15 @@ export function retryConversationMessage(
     signal,
   );
 }
+
+export function startInterview(
+  supabase: SupabaseClient,
+  conversationId: string,
+  signal?: AbortSignal,
+) {
+  return createAuthenticatedApiClient(supabase).stream(
+    `/api/v1/conversations/${conversationId}/interview-start`,
+    {},
+    signal,
+  );
+}

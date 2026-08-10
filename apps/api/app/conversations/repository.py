@@ -27,6 +27,20 @@ async def get_by_id_and_user_id(
     return result.scalar_one_or_none()
 
 
+async def get_by_id_and_user_id_for_update(
+    session: AsyncSession, conversation_id: UUID, user_id: UUID
+) -> Conversation | None:
+    result = await session.execute(
+        select(Conversation)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user_id,
+        )
+        .with_for_update()
+    )
+    return result.scalar_one_or_none()
+
+
 async def list_by_user_id(session: AsyncSession, user_id: UUID) -> list[Conversation]:
     result = await session.execute(
         select(Conversation)

@@ -6,9 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/api/client";
 import { ConversationDetail } from "./conversation-detail";
 
-const { push, retryConversationMessage, streamConversation } = vi.hoisted(() => ({
+const { push, retryConversationMessage, startInterview, streamConversation } = vi.hoisted(() => ({
   push: vi.fn(),
   retryConversationMessage: vi.fn(),
+  startInterview: vi.fn(),
   streamConversation: vi.fn(),
 }));
 
@@ -17,7 +18,7 @@ vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
 vi.mock("../../../lib/supabase/client", () => ({ createClient: () => ({}) }));
-vi.mock("../api", () => ({ retryConversationMessage, streamConversation }));
+vi.mock("../api", () => ({ retryConversationMessage, startInterview, streamConversation }));
 
 const conversation = {
   id: "conversation-id",
@@ -62,6 +63,7 @@ function sseResponse(events: Array<{ event: string; data: unknown }>): Response 
 describe("ConversationDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    startInterview.mockResolvedValue(sseResponse([{ event: "interview_pending", data: {} }]));
   });
 
   it("renders persisted history chronologically", () => {
@@ -110,12 +112,75 @@ describe("ConversationDetail", () => {
 
     expect(screen.queryByText("Mentor Mode")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Quiz me" })).not.toBeInTheDocument();
+    expect(startInterview).not.toHaveBeenCalled();
+  });
+
+  it("automatically starts a new interview and renders the first question", async () => {
+    const firstQuestion = message("first-question", "How would you design a versioned API?", "2026-08-01T12:00:00Z", "assistant");
+    startInterview.mockResolvedValueOnce(sseResponse([
+      { event: "assistant_delta", data: { delta: "How would you design a versioned API?" } },
+      { event: "assistant_complete", data: firstQuestion },
+    ]));
+    render(<ConversationDetail
+      conversation={{ ...conversation, mode: "interview" }}
+      initialMessages={[]}
+      interviewContext={{ interviewType: "technical", interviewFocus: "apis", currentLevel: "junior", targetRole: "backend_engineer" }}
+    />);
+
+    expect(screen.getByText("Your interviewer is preparing the first question…")).toBeInTheDocument();
+    await waitFor(() => expect(startInterview).toHaveBeenCalledWith({}, "conversation-id", expect.any(AbortSignal)));
+    expect(await screen.findByText("How would you design a versioned API?")).toBeInTheDocument();
+    expect(screen.queryByText("Start with a question")).not.toBeInTheDocument();
+  });
+
+  it("starts kickoff exactly once under React Strict Mode", async () => {
+    const firstQuestion = message("strict-question", "Tell me about API versioning.", "2026-08-01T12:00:00Z", "assistant");
+    startInterview.mockResolvedValueOnce(sseResponse([
+      { event: "assistant_complete", data: firstQuestion },
+      { event: "done", data: {} },
+    ]));
+
+    render(
+      <React.StrictMode>
+        <ConversationDetail conversation={{ ...conversation, mode: "interview" }} initialMessages={[]} />
+      </React.StrictMode>,
+    );
+
+    await waitFor(() => expect(startInterview).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Tell me about API versioning.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop generating" })).not.toBeInTheDocument();
+  });
+
+  it("does not restart an interview when persisted history is present after refresh", () => {
+    render(<ConversationDetail
+      conversation={{ ...conversation, mode: "interview" }}
+      initialMessages={[message("first-question", "Persisted first question", "2026-08-01T12:00:00Z", "assistant")]}
+    />);
+
+    expect(screen.getByText("Persisted first question")).toBeInTheDocument();
+    expect(startInterview).not.toHaveBeenCalled();
+  });
+
+  it("shows interview-specific retry state after kickoff failure", async () => {
+    startInterview.mockRejectedValueOnce(new Error("kickoff failed"));
+    render(<ConversationDetail conversation={{ ...conversation, mode: "interview" }} initialMessages={[]} />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Retry starting interview" })).toBeInTheDocument());
+    expect(screen.queryByText("Start with a question")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "End interview" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer End interview before an opening question persists", () => {
+    startInterview.mockReturnValueOnce(new Promise(() => {}));
+    render(<ConversationDetail conversation={{ ...conversation, mode: "interview" }} initialMessages={[]} />);
+
+    expect(screen.queryByRole("button", { name: "End interview" })).not.toBeInTheDocument();
   });
 
   it("renders Interview Mode context and only interview controls", () => {
     render(<ConversationDetail
       conversation={{ ...conversation, mode: "interview" }}
-      initialMessages={[]}
+      initialMessages={[message("started", "First question", "2026-08-01T12:00:00Z", "assistant")]}
       interviewContext={{ interviewType: "technical", interviewFocus: "apis", currentLevel: "junior", targetRole: "backend_engineer" }}
     />);
 
@@ -127,7 +192,10 @@ describe("ConversationDetail", () => {
 
   it("sends the approved final-assessment instruction when ending an interview", async () => {
     streamConversation.mockResolvedValue(sseResponse([{ event: "done", data: {} }]));
-    render(<ConversationDetail conversation={{ ...conversation, mode: "interview" }} initialMessages={[]} />);
+    render(<ConversationDetail
+      conversation={{ ...conversation, mode: "interview" }}
+      initialMessages={[message("started", "First question", "2026-08-01T12:00:00Z", "assistant")]}
+    />);
 
     fireEvent.click(screen.getByRole("button", { name: "End interview" }));
 
