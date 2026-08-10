@@ -65,3 +65,14 @@ The components are intentionally not connected to product functionality yet.
 Do not add Redis, queues, microservices, Kubernetes, WebSockets, pgvector,
 embeddings, vector search, or agent frameworks until a demonstrated requirement
 exists.
+
+## Deployment topology
+
+The first deployment target is Vercel for Next.js, Render for one FastAPI
+instance, and the existing Supabase PostgreSQL/Auth project. OpenAI remains
+backend-only through Render secrets. Render runs `alembic upgrade head` as a
+pre-deploy command before application traffic is received. The API Dockerfile
+uses Python 3.12 and one Uvicorn process; `PORT` is supplied by Render.
+
+The API must remain at one instance while the rate limiter is process-local.
+Replace that backend with distributed storage before horizontal scaling.

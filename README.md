@@ -201,9 +201,11 @@ pgvector, vector search, or document retrieval.
 
 ## Production configuration
 
-Production requires a deployment target and managed PostgreSQL/Supabase setup;
-this repository currently provides development Docker Compose only. Configure
-the following without committing values:
+The approved deployment topology is Vercel for the web app, Render for one
+FastAPI instance, and the existing Supabase PostgreSQL/Auth project. See
+[`infrastructure/DEPLOYMENT.md`](infrastructure/DEPLOYMENT.md) for platform
+settings, migration, backup, rollback, and staging procedures. Configure the
+following without committing values:
 
 - API: `APP_ENV=production`, `DATABASE_URL`, `CORS_ORIGINS`,
   `SUPABASE_JWT_ISSUER`, `SUPABASE_JWT_ALGORITHMS`.
