@@ -100,7 +100,7 @@ describe("ConversationDetail", () => {
     await waitFor(() => expect(streamConversation).toHaveBeenCalledWith(
       {},
       "conversation-id",
-      { content: "Explain simpler" },
+      { content: "Explain the previous concept more simply." },
       expect.any(AbortSignal),
     ));
   });

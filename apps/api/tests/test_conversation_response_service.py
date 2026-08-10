@@ -24,6 +24,7 @@ from app.conversations.response_service import (
     stream_response,
 )
 from app.conversations.schemas import RespondRequest
+from app.mentor.prompts import build_mentor_instruction
 from app.profiles.models import Profile
 
 
@@ -390,3 +391,27 @@ async def test_mentor_stream_uses_current_profile_without_changing_history_bound
     assert "direct" in instruction
     assert "Python, PostgreSQL" in instruction
     assert [message.role for message in added] == ["user", "assistant"]
+
+
+def test_mentor_prompt_uses_safe_profile_context_and_feedback_guidance() -> None:
+    profile = Profile(
+        user_id=uuid4(),
+        display_name="Private name",
+        current_level="beginner",
+        target_role="backend_engineer",
+        preferred_stack=["Python"],
+        communication_goal="technical_interviews",
+        feedback_preference="strict",
+        onboarding_completed=True,
+    )
+
+    instruction = build_mentor_instruction(profile)
+
+    assert "beginner" in instruction
+    assert "backend_engineer" in instruction
+    assert "Python" in instruction
+    assert "technical_interviews" in instruction
+    assert "strict" in instruction
+    assert "require precise answers" in instruction
+    assert "Private name" not in instruction
+    assert str(profile.user_id) not in instruction

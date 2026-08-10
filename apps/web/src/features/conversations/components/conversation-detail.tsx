@@ -250,11 +250,11 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
   }
 
   const quickActions = [
-    "Explain simpler",
-    "Give an example",
-    "Quiz me",
-    "Give me an exercise",
-    "Challenge my answer",
+    { label: "Explain simpler", content: "Explain the previous concept more simply." },
+    { label: "Give an example", content: "Give me a practical example of the concept we are currently discussing." },
+    { label: "Quiz me", content: "Quiz me on the topic we are currently discussing. Ask one question at a time." },
+    { label: "Give me an exercise", content: "Give me a practical exercise based on what we are currently learning. Do not give the solution immediately." },
+    { label: "Challenge my answer", content: "Challenge my most recent answer. Point out weak assumptions and ask me to improve it." },
   ];
   const profileLabel = (value: string) => value.replaceAll("_", " ");
 
@@ -288,11 +288,11 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
             <button
               type="button"
               className="button-secondary"
-              key={action}
+              key={action.label}
               disabled={isSending}
-              onClick={() => void submitMessage(action)}
+              onClick={() => void submitMessage(action.content)}
             >
-              {action}
+              {action.label}
             </button>
           ))}
         </div>
