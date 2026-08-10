@@ -29,6 +29,7 @@ from app.main import app
 from app.memory.models import MemoryRecord
 from app.memory.service import retrieve_for_prompt
 from app.profiles.models import Profile
+from app.session_summaries.models import SessionSummary
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
@@ -187,6 +188,49 @@ async def test_onboarding_creates_real_profile_row(
     assert profile is not None
     assert profile.onboarding_completed is True
     assert profile.display_name == "Integration User"
+
+
+@pytest.mark.asyncio
+async def test_team_conversation_and_summary_use_migration_backed_schema(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, factory = integration_client
+    user_id = uuid4()
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/conversations",
+            json={
+                "title": "Team Practice",
+                "mode": "team",
+                "team_scenario": "architecture_discussion",
+                "team_difficulty": "realistic",
+            },
+            headers=auth_headers(signing_key, user_id),
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+    assert response.status_code == 201
+    conversation_id = UUID(response.json()["id"])
+
+    async with factory() as session:
+        summary = SessionSummary(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            session_mode="team",
+            summary="Practiced architecture trade-offs.",
+            topics_covered=["boundaries"],
+            strengths=["clear trade-offs"],
+            weaknesses=[],
+            recommended_next_steps=["State assumptions earlier"],
+        )
+        session.add(summary)
+        await session.commit()
+        result = await session.execute(
+            select(SessionSummary).where(SessionSummary.conversation_id == conversation_id)
+        )
+        persisted = result.scalar_one()
+
+    assert persisted.session_mode == "team"
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-export type ProgressMode = "general" | "mentor" | "interview";
+export type ProgressMode = "general" | "mentor" | "interview" | "team";
 
 export type ProgressSession = {
   id: string;
@@ -6,6 +6,7 @@ export type ProgressSession = {
   mode: ProgressMode;
   interview_type: string | null;
   interview_focus: string | null;
+  team_scenario: string | null;
   updated_at: string;
   message_count: number;
   has_messages: boolean;
@@ -20,5 +21,6 @@ export type ProgressSummary = {
   mentor_sessions: number;
   interview_sessions: number;
   general_sessions: number;
+  team_sessions: number;
   recent_sessions: ProgressSession[];
 };

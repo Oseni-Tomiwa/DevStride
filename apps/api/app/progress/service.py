@@ -26,6 +26,16 @@ def _session_title(conversation: Conversation, first_user_content: str | None) -
         if interview_focus:
             return f"{prefix} — {interview_focus.replace('_', ' ').title()}"
         return prefix
+    if mode == "team":
+        scenario = _metadata_value(conversation.metadata_, "team_scenario")
+        labels = {
+            "code_review": "Code Review Practice",
+            "architecture_discussion": "Architecture Discussion",
+            "sprint_planning": "Sprint Planning",
+            "debugging_incident": "Debugging Incident",
+            "technical_decision": "Technical Decision",
+        }
+        return labels.get(scenario or "", "Team Practice")
     title = conversation.title
     if title != DEFAULT_CONVERSATION_TITLE or not first_user_content:
         return title
@@ -44,6 +54,7 @@ async def get_progress_summary(session: AsyncSession, user_id: UUID) -> Progress
                 mode=cast(ProgressMode, conversation.mode),
                 interview_type=_metadata_value(metadata, "interview_type"),
                 interview_focus=_metadata_value(metadata, "interview_focus"),
+                team_scenario=_metadata_value(metadata, "team_scenario"),
                 updated_at=conversation.updated_at,
                 message_count=message_count,
                 has_messages=message_count > 0,
@@ -59,5 +70,6 @@ async def get_progress_summary(session: AsyncSession, user_id: UUID) -> Progress
         mentor_sessions=sum(item.mode == "mentor" for item in sessions),
         interview_sessions=sum(item.mode == "interview" for item in sessions),
         general_sessions=sum(item.mode == "general" for item in sessions),
+        team_sessions=sum(item.mode == "team" for item in sessions),
         recent_sessions=sessions[:20],
     )

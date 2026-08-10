@@ -20,10 +20,14 @@ from app.conversations.response_service import (
     StreamAssistantComplete,
     StreamAssistantDelta,
     StreamInterviewPending,
+    StreamTeamPending,
     StreamUserMessage,
+    TeamProfileRequiredError,
+    TeamStartNotAllowedError,
     generate_response,
     retry_stream_response,
     start_interview_response,
+    start_team_response,
     stream_response,
 )
 from app.conversations.schemas import (
@@ -230,6 +234,83 @@ async def interview_start(
     )
 
 
+@router.post(
+    "/{conversation_id}/team-start",
+    response_class=StreamingResponse,
+)
+async def team_start(
+    conversation_id: UUID,
+    session: Session,
+    current_user: AuthenticatedUser,
+    provider: Provider,
+) -> StreamingResponse:
+    try:
+        conversation = await get_conversation(session, current_user.id, conversation_id)
+    except ConversationNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        ) from None
+    if conversation.mode != "team":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Team Practice start is only available for team conversations",
+        )
+
+    async def event_stream() -> AsyncIterator[str]:
+        try:
+            async for event in start_team_response(
+                session, current_user.id, conversation_id, provider
+            ):
+                if isinstance(event, StreamAssistantDelta):
+                    yield _sse_event("assistant_delta", {"delta": event.delta})
+                elif isinstance(event, StreamTeamPending):
+                    yield _sse_event("team_pending", {})
+                elif isinstance(event, StreamAssistantComplete):
+                    payload = MessageResponse.model_validate(event.message).model_dump(mode="json")
+                    yield _sse_event("assistant_complete", payload)
+        except TeamStartNotAllowedError:
+            yield _sse_event(
+                "error",
+                {"code": "team_start_not_allowed", "message": "Team Practice is not available"},
+            )
+        except AssistantGenerationDisabledError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "generation_disabled",
+                    "message": "Assistant generation is currently disabled",
+                },
+            )
+        except AssistantGenerationError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "generation_failed",
+                    "message": "Assistant generation failed. Please try again.",
+                },
+            )
+        except TeamProfileRequiredError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "team_profile_required",
+                    "message": "Complete onboarding before using Team Practice",
+                },
+            )
+        finally:
+            yield _sse_event("done", {})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/{conversation_id}/messages", response_model=list[MessageResponse])
 async def list_messages(
     conversation_id: UUID,
@@ -275,10 +356,10 @@ async def respond(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Assistant generation failed. Please try again.",
         ) from None
-    except (MentorProfileRequiredError, InterviewProfileRequiredError):
+    except (MentorProfileRequiredError, InterviewProfileRequiredError, TeamProfileRequiredError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Complete onboarding before using Mentor Mode",
+            detail="Complete onboarding before using this practice mode",
         ) from None
 
     return RespondResponse(
@@ -338,12 +419,16 @@ async def stream(
                     "message": "Assistant generation failed. Please try again.",
                 },
             )
-        except (MentorProfileRequiredError, InterviewProfileRequiredError):
+        except (
+            MentorProfileRequiredError,
+            InterviewProfileRequiredError,
+            TeamProfileRequiredError,
+        ):
             yield _sse_event(
                 "error",
                 {
-                    "code": "mentor_profile_required",
-                    "message": "Complete onboarding before using Mentor Mode",
+                    "code": "profile_required",
+                    "message": "Complete onboarding before using this practice mode",
                 },
             )
         finally:
@@ -414,12 +499,16 @@ async def retry_stream(
                     "message": "Assistant generation failed. Please try again.",
                 },
             )
-        except (MentorProfileRequiredError, InterviewProfileRequiredError):
+        except (
+            MentorProfileRequiredError,
+            InterviewProfileRequiredError,
+            TeamProfileRequiredError,
+        ):
             yield _sse_event(
                 "error",
                 {
-                    "code": "mentor_profile_required",
-                    "message": "Complete onboarding before using Mentor Mode",
+                    "code": "profile_required",
+                    "message": "Complete onboarding before using this practice mode",
                 },
             )
         finally:

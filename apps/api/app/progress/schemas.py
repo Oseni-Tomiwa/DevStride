@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-ProgressMode = Literal["general", "mentor", "interview"]
+ProgressMode = Literal["general", "mentor", "interview", "team"]
 
 
 class ProgressSessionResponse(BaseModel):
@@ -15,6 +15,7 @@ class ProgressSessionResponse(BaseModel):
     mode: ProgressMode
     interview_type: str | None
     interview_focus: str | None
+    team_scenario: str | None
     updated_at: datetime
     message_count: int
     has_messages: bool
@@ -29,4 +30,5 @@ class ProgressSummaryResponse(BaseModel):
     mentor_sessions: int
     interview_sessions: int
     general_sessions: int
+    team_sessions: int
     recent_sessions: list[ProgressSessionResponse]

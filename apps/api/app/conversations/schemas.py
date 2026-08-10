@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MESSAGE_CONTENT_MAX_LENGTH = 20_000
-ConversationMode = Literal["general", "mentor", "interview"]
+ConversationMode = Literal["general", "mentor", "interview", "team"]
 InterviewType = Literal["technical", "behavioral"]
 InterviewFocus = Literal[
     "general_backend",
@@ -17,6 +17,14 @@ InterviewFocus = Literal[
     "python",
     "system_design",
 ]
+TeamScenario = Literal[
+    "code_review",
+    "architecture_discussion",
+    "sprint_planning",
+    "debugging_incident",
+    "technical_decision",
+]
+TeamDifficulty = Literal["guided", "realistic", "challenging"]
 
 
 class ConversationCreateRequest(BaseModel):
@@ -27,6 +35,8 @@ class ConversationCreateRequest(BaseModel):
     persona: str | None = None
     interview_type: InterviewType | None = None
     interview_focus: InterviewFocus | None = None
+    team_scenario: TeamScenario | None = None
+    team_difficulty: TeamDifficulty | None = None
 
     @model_validator(mode="after")
     def validate_interview_configuration(self) -> ConversationCreateRequest:
@@ -38,6 +48,12 @@ class ConversationCreateRequest(BaseModel):
             raise ValueError("interview configuration is only valid for interview conversations")
         if self.interview_type == "behavioral" and self.interview_focus is not None:
             raise ValueError("interview_focus is only valid for technical interviews")
+        if self.mode == "team" and self.team_scenario is None:
+            raise ValueError("team_scenario is required for team conversations")
+        if self.mode != "team" and self.team_scenario is not None:
+            raise ValueError("team configuration is only valid for team conversations")
+        if self.mode != "team" and self.team_difficulty is not None:
+            raise ValueError("team configuration is only valid for team conversations")
         return self
 
     @field_validator("title")

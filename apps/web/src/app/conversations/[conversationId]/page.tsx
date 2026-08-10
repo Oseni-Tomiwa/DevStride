@@ -28,14 +28,14 @@ export default async function ConversationPage({ params }: ConversationPageProps
     ]);
     let mentorProfile: Profile | null = null;
     let sessionSummary: SessionSummary | null = null;
-    if (conversation.mode === "mentor" || conversation.mode === "interview") {
+    if (conversation.mode === "mentor" || conversation.mode === "interview" || conversation.mode === "team") {
       try {
         sessionSummary = await getConversationSummary(supabase, conversationId);
       } catch (cause) {
         if (!(cause instanceof ApiError && cause.status === 404)) throw cause;
       }
     }
-    if (conversation.mode === "mentor" || conversation.mode === "interview") {
+    if (conversation.mode === "mentor" || conversation.mode === "interview" || conversation.mode === "team") {
       try {
         mentorProfile = await getAuthenticatedProfile(supabase);
       } catch (cause) {

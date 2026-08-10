@@ -53,7 +53,7 @@ async def create(
     except SessionSummaryNotAllowedError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Summaries are only available for Mentor and Interview sessions",
+            detail="Summaries are only available for Mentor, Interview, and Team Practice sessions",
         ) from None
     except SessionSummaryGenerationError:
         raise HTTPException(

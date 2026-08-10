@@ -11,6 +11,13 @@ const focusLabels: Record<string, string> = {
   python: "Python",
   system_design: "System design",
 };
+const teamScenarioLabels: Record<string, string> = {
+  code_review: "Code review",
+  architecture_discussion: "Architecture discussion",
+  sprint_planning: "Sprint planning",
+  debugging_incident: "Debugging incident",
+  technical_decision: "Technical decision",
+};
 
 function formatUpdatedAt(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -19,6 +26,7 @@ function formatUpdatedAt(value: string): string {
 function modeLabel(session: ProgressSession): string {
   if (session.mode === "mentor") return "Mentor session";
   if (session.mode === "interview") return session.interview_type === "behavioral" ? "Behavioral interview" : "Technical interview";
+  if (session.mode === "team") return "Team Practice";
   return "General conversation";
 }
 
@@ -40,6 +48,7 @@ function SessionItem({ session }: { session: ProgressSession }) {
             <span className="progress-session-meta">
               {modeLabel(session)}
               {session.interview_focus ? ` · ${focusLabels[session.interview_focus] ?? session.interview_focus}` : ""}
+              {session.team_scenario ? ` · ${teamScenarioLabels[session.team_scenario] ?? session.team_scenario}` : ""}
               {` · ${session.has_messages ? `${session.message_count} messages` : "No messages yet"}`}
             </span>
           </span>
@@ -75,6 +84,7 @@ export function ProgressOverview({ summary, compact = false }: ProgressOverviewP
         <div><strong>{summary.mentor_sessions}</strong><span>Mentor sessions</span></div>
         <div><strong>{summary.interview_sessions}</strong><span>Mock interviews</span></div>
         <div><strong>{summary.general_sessions}</strong><span>General conversations</span></div>
+        <div><strong>{summary.team_sessions}</strong><span>Team sessions</span></div>
       </div>
       <div className="progress-history">
         <h3>Recent practice</h3>

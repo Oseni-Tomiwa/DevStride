@@ -116,6 +116,18 @@ export function startInterview(
   );
 }
 
+export function startTeam(
+  supabase: SupabaseClient,
+  conversationId: string,
+  signal?: AbortSignal,
+) {
+  return createAuthenticatedApiClient(supabase).stream(
+    `/api/v1/conversations/${conversationId}/team-start`,
+    {},
+    signal,
+  );
+}
+
 export function getConversationSummary(supabase: SupabaseClient, conversationId: string) {
   return createAuthenticatedApiClient(supabase).get<SessionSummary>(
     `/api/v1/conversations/${conversationId}/summary`,

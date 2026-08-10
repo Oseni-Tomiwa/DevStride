@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
-import { createConversationSummary, getConversationSummary, retryConversationMessage, startInterview, streamConversation } from "../api";
+import { createConversationSummary, getConversationSummary, retryConversationMessage, startInterview, startTeam, streamConversation } from "../api";
 import { conversationDisplayTitle } from "../title";
 import type { Conversation, Message, SessionSummary } from "../types";
 import { AssistantMarkdown } from "./assistant-markdown";
@@ -92,6 +92,8 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
     conversation.mode === "interview" && initialMessages.length === 0,
   );
   const [interviewKickoffFailed, setInterviewKickoffFailed] = useState(false);
+  const [teamKickoffPending, setTeamKickoffPending] = useState(conversation.mode === "team" && initialMessages.length === 0);
+  const [teamKickoffFailed, setTeamKickoffFailed] = useState(false);
   const [summary, setSummary] = useState<SessionSummary | null>(initialSummary);
   const [summaryPending, setSummaryPending] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
   const generationIdRef = useRef(0);
   const persistedUserMessageIdRef = useRef<string | null>(null);
   const interviewKickoffRequestedRef = useRef(false);
+  const teamKickoffRequestedRef = useRef(false);
   const unmountCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const historyEndRef = useRef<HTMLDivElement | null>(null);
@@ -204,6 +207,12 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
           break;
         } else if (event.event === "interview_pending") {
           if (terminal !== "active") break;
+          onCompleted?.();
+          finish("completed");
+          break;
+        } else if (event.event === "team_pending") {
+          if (terminal !== "active") break;
+          onCompleted?.();
           finish("completed");
           break;
         }
@@ -305,7 +314,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
       if (cause instanceof ApiError && cause.status === 401) {
         router.push("/login");
       } else if (cause instanceof ApiError && cause.status === 409) {
-        setSummaryError("Summaries are only available for Mentor and Interview sessions.");
+        setSummaryError("Summaries are only available for Mentor, Interview, and Team Practice sessions.");
       } else {
         setSummaryError("The session summary could not be generated. Please try again.");
       }
@@ -336,6 +345,24 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
     void startInterviewKickoff();
   }
 
+  async function startTeamKickoff() {
+    setError(null);
+    setTeamKickoffFailed(false);
+    setTeamKickoffPending(true);
+    let completed = false;
+    try {
+      await runGeneration(
+        (signal) => startTeam(createClient(), conversation.id, signal),
+        () => { completed = true; },
+      );
+    } finally {
+      if (mountedRef.current) {
+        setTeamKickoffPending(false);
+        setTeamKickoffFailed(!completed);
+      }
+    }
+  }
+
   useEffect(() => {
     if (
       conversation.mode === "interview" &&
@@ -344,6 +371,14 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
     ) {
       interviewKickoffRequestedRef.current = true;
       void startInterviewKickoff();
+    }
+    if (
+      conversation.mode === "team" &&
+      initialMessages.length === 0 &&
+      !teamKickoffRequestedRef.current
+    ) {
+      teamKickoffRequestedRef.current = true;
+      void startTeamKickoff();
     }
     // The server-provided empty history is the idempotent kickoff condition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -358,6 +393,12 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
   async function endMentorSession() {
     setSessionEndRequested(true);
     await submitMessage("End the mentor session and provide my practice summary with topics covered, strengths observed, areas to improve, and recommended next steps. Keep observations grounded in this session.");
+    await refreshSummary();
+  }
+
+  async function endTeamSession() {
+    setSessionEndRequested(true);
+    await submitMessage("End the team practice session and provide my practice summary with topics covered, strengths observed, areas to improve, and recommended next steps. Keep observations grounded in this session.");
     await refreshSummary();
   }
 
@@ -377,6 +418,15 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
   ];
   const profileLabel = (value: string) => value.replaceAll("_", " ");
   const interviewTypeLabel = interviewContext?.interviewType === "behavioral" ? "Behavioral" : "Technical";
+  const teamScenarioLabels: Record<string, string> = {
+    code_review: "Code review",
+    architecture_discussion: "Architecture discussion",
+    sprint_planning: "Sprint planning",
+    debugging_incident: "Debugging an incident",
+    technical_decision: "Technical decision",
+  };
+  const teamScenario = typeof conversation.metadata.team_scenario === "string" ? conversation.metadata.team_scenario : "";
+  const teamDifficulty = typeof conversation.metadata.team_difficulty === "string" ? conversation.metadata.team_difficulty : "realistic";
 
   const displayTitle = conversationDisplayTitle(conversation, messages);
 
@@ -384,7 +434,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
     <section className="conversation-shell conversation-detail" aria-labelledby="conversation-title">
       <div className="conversation-detail-header">
         <Link href="/conversations" className="back-link">← All conversations</Link>
-        <p className="eyebrow">{conversation.mode === "mentor" ? "Mentor Mode" : conversation.mode === "interview" ? "Interview Mode" : conversation.mode}</p>
+        <p className="eyebrow">{conversation.mode === "mentor" ? "Mentor Mode" : conversation.mode === "interview" ? "Interview Mode" : conversation.mode === "team" ? "Team Practice" : conversation.mode}</p>
         <h1 id="conversation-title">{displayTitle}</h1>
         <p className="muted">Your messages and assistant responses are saved in this conversation.</p>
         {conversation.mode === "mentor" && mentorContext && (
@@ -398,6 +448,11 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
             {interviewContext.interviewFocus && ` · ${profileLabel(interviewContext.interviewFocus)}`}
           </p>
         )}
+        {conversation.mode === "team" && (
+          <p className="conversation-context">
+            {teamScenarioLabels[teamScenario] ?? "Team discussion"} · {profileLabel(teamDifficulty)} · simulated team cast
+          </p>
+        )}
       </div>
       <div className="message-history" aria-live="polite">
       {messages.length === 0 ? <div className="message-empty">
@@ -409,12 +464,20 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
           ) : (
             <><h2>Your interviewer is preparing the first question…</h2><p className="muted">Refresh to check the interview status.</p></>
           )
+        ) : conversation.mode === "team" ? (
+          teamKickoffPending ? (
+            <><h2>Your team is preparing the first discussion prompt…</h2><p className="muted">Team Practice will begin in a moment.</p></>
+          ) : teamKickoffFailed ? (
+            <><h2>Team Practice could not start</h2><p className="muted">{error ?? "We could not prepare the first prompt."}</p><button type="button" onClick={() => void startTeamKickoff()}>Retry starting practice</button></>
+          ) : (
+            <><h2>Your team is preparing the first discussion prompt…</h2><p className="muted">Refresh to check the practice status.</p></>
+          )
         ) : (
           <><h2>Start with a question</h2><p className="muted">Ask something to begin this conversation.</p></>
         )}
       </div> : messages.map((message) => (
           <article className={`message-bubble message-${message.role}`} key={message.id}>
-            <p className="message-label">{message.role === "user" ? "You" : "DevStride assistant"}</p>
+            <p className="message-label">{message.role === "user" ? "You" : conversation.mode === "team" ? "Team Practice" : "DevStride assistant"}</p>
           {message.role === "assistant" ? <AssistantMarkdown content={message.content} /> : <p className="message-content">{message.content}</p>}
           </article>
         ))}
@@ -446,6 +509,18 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
         <div className="session-end-actions">
           <button type="button" className="button-secondary" onClick={() => void endMentorSession()} disabled={isSending || summaryPending}>
             {sessionEndRequested ? "Updating summary…" : "End Mentor Session"}
+          </button>
+        </div>
+      )}
+      {conversation.mode === "team" && messages.some((message) => message.role === "assistant" && !message.id.startsWith("streaming-")) && !summary && (
+        <div className="session-end-actions">
+          <div className="mentor-actions" aria-label="Team discussion actions">
+            <button type="button" className="button-secondary" onClick={() => void submitMessage("Ask me one clarifying question about my position.")} disabled={isSending}>Ask for clarification</button>
+            <button type="button" className="button-secondary" onClick={() => void submitMessage("Summarize my current position and the tradeoffs I have stated.")} disabled={isSending}>Summarize my position</button>
+            <button type="button" className="button-secondary" onClick={() => void submitMessage("Challenge my proposal with one thoughtful engineering concern.")} disabled={isSending}>Challenge my proposal</button>
+          </div>
+          <button type="button" className="button-secondary" onClick={() => void endTeamSession()} disabled={isSending || summaryPending}>
+            {sessionEndRequested ? "Updating summary…" : "End Team Session"}
           </button>
         </div>
       )}

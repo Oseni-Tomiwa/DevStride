@@ -13,7 +13,11 @@ from app.ai.dependencies import get_ai_provider
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations.models import Conversation, Message
-from app.conversations.response_service import StreamAssistantComplete, StreamAssistantDelta
+from app.conversations.response_service import (
+    StreamAssistantComplete,
+    StreamAssistantDelta,
+    StreamTeamPending,
+)
 from app.conversations.service import ConversationNotFoundError, RetryNotAllowedError
 from app.database.session import get_db_session
 from app.main import app
@@ -191,6 +195,72 @@ def test_user_creates_owned_mentor_conversation(
     assert response.json()["mode"] == "mentor"
     assert create.await_args is not None
     assert create.await_args.args[2].mode == "mentor"
+
+
+def test_user_creates_team_conversation_with_configuration(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, current_user = authenticated_client
+    conversation = make_conversation(current_user.id)
+    conversation.mode = "team"
+    conversation.metadata_ = {
+        "team_scenario": "code_review",
+        "team_difficulty": "challenging",
+    }
+    create = AsyncMock(return_value=conversation)
+    monkeypatch.setattr("app.conversations.routes.create_conversation", create)
+
+    response = post_conversation(
+        {
+            "title": "Team Practice",
+            "mode": "team",
+            "team_scenario": "code_review",
+            "team_difficulty": "challenging",
+        }
+    )
+
+    assert response.status_code == 201
+    assert response.json()["mode"] == "team"
+    assert create.await_args is not None
+    assert create.await_args.args[2].team_scenario == "code_review"
+    assert create.await_args.args[2].team_difficulty == "challenging"
+
+
+def test_team_start_streams_opening_prompt_and_done(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = make_conversation()
+    conversation.mode = "team"
+    opening = make_message(conversation.id)
+    opening.role = "assistant"
+    opening.content = "Reviewer: Walk us through the trade-off."
+
+    async def fake_get_conversation(*args: object) -> Conversation:
+        del args
+        return conversation
+
+    async def fake_start(*args: object) -> AsyncIterator[object]:
+        del args
+        yield StreamAssistantDelta(delta=opening.content)
+        yield StreamTeamPending()
+        yield StreamAssistantComplete(opening)
+
+    monkeypatch.setattr("app.conversations.routes.get_conversation", fake_get_conversation)
+    monkeypatch.setattr("app.conversations.routes.start_team_response", fake_start)
+
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/conversations/{conversation.id}/team-start"
+        ),  # pyright: ignore[reportUnknownMemberType]
+    )
+
+    assert response.status_code == 200
+    assert "event: assistant_delta" in response.text
+    assert "event: assistant_complete" in response.text
+    assert response.text.endswith("event: done\ndata: {}\n\n")
 
 
 def test_interview_mode_requires_interview_type(

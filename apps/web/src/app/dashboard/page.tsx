@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AppHeader } from "../../components/app-header";
 import { InterviewEntry } from "../../features/conversations/components/interview-entry";
 import { MentorEntry } from "../../features/conversations/components/mentor-entry";
+import { TeamEntry } from "../../features/conversations/components/team-entry";
 import { Profile } from "../../features/profile/types";
 import { getAuthenticatedProfile } from "../../features/profile/api";
 import { getProgressSummary } from "../../features/progress/api";
@@ -116,8 +117,8 @@ export default async function DashboardPage() {
             </article>
             <article className="practice-card">
               <h3>Team Practice</h3>
-              <p className="muted">Structured practice is coming soon.</p>
-              <button type="button" disabled>Coming soon</button>
+              <p className="muted">Practice clear technical communication in a simulated engineering discussion.</p>
+              <TeamEntry />
             </article>
           </div>
         </section>

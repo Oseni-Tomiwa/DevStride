@@ -60,7 +60,7 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Python, PostgreSQL")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Learn with Mentor" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Mentor Mode" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Coming soon" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Start Team Practice" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Mock Interview" })).toBeInTheDocument();
   });
 

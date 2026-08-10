@@ -23,6 +23,7 @@ from app.conversations.response_service import (
     generate_response,
     retry_stream_response,
     start_interview_response,
+    start_team_response,
     stream_response,
     system_instruction,
 )
@@ -730,3 +731,75 @@ async def test_interview_kickoff_provider_failure_clears_marker(
         ]
 
     assert "interview_kickoff_started" not in conversation.metadata_
+
+
+@pytest.mark.asyncio
+async def test_team_kickoff_uses_configuration_and_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    conversation = Conversation(
+        id=uuid4(),
+        user_id=user_id,
+        title="Team Practice",
+        mode="team",
+        metadata_={"team_scenario": "code_review", "team_difficulty": "challenging"},
+    )
+    profile = Profile(
+        user_id=user_id,
+        display_name="Ada",
+        current_level="junior",
+        target_role="backend_engineer",
+        preferred_stack=["Python"],
+        communication_goal="technical_interviews",
+        feedback_preference="balanced",
+        onboarding_completed=True,
+    )
+    provider = FakeProvider(
+        GenerationResult(
+            text="Reviewer: Explain your testing trade-off.", provider="openai", model="model"
+        )
+    )
+    session = cast(AsyncSession, type("Session", (), {"commit": _commit})())
+    added: list[Message] = []
+
+    async def fake_locked(*args: Any) -> Conversation:
+        del args
+        return conversation
+
+    async def fake_messages(*args: Any) -> list[Message]:
+        del args
+        return added
+
+    async def fake_profile(*args: Any) -> Profile:
+        del args
+        return profile
+
+    async def fake_create(_session: AsyncSession, message: Message) -> Message:
+        added.append(message)
+        return message
+
+    monkeypatch.setattr(repository, "get_by_id_and_user_id_for_update", fake_locked)
+    monkeypatch.setattr(repository, "list_by_conversation_id", fake_messages)
+    monkeypatch.setattr(repository, "create_message", fake_create)
+    monkeypatch.setattr(
+        "app.conversations.response_service.profile_repository.get_profile_by_user_id", fake_profile
+    )
+
+    events = [
+        event async for event in start_team_response(session, user_id, conversation.id, provider)
+    ]
+
+    assert [type(event) for event in events] == [StreamAssistantDelta, StreamAssistantComplete]
+    assert len(added) == 1
+    assert added[0].role == "assistant"
+    assert "Code review discussion" in provider.system_instructions[0]
+    assert "Challenging" in provider.system_instructions[0]
+    assert "team_started" in conversation.metadata_
+
+    second_events = [
+        event async for event in start_team_response(session, user_id, conversation.id, provider)
+    ]
+    assert len(added) == 1
+    assert len(second_events) == 1
+    assert isinstance(second_events[0], StreamAssistantComplete)

@@ -6,12 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/api/client";
 import { ConversationDetail } from "./conversation-detail";
 
-const { createConversationSummary, getConversationSummary, push, retryConversationMessage, startInterview, streamConversation } = vi.hoisted(() => ({
+const { createConversationSummary, getConversationSummary, push, retryConversationMessage, startInterview, startTeam, streamConversation } = vi.hoisted(() => ({
   createConversationSummary: vi.fn(),
   getConversationSummary: vi.fn(),
   push: vi.fn(),
   retryConversationMessage: vi.fn(),
   startInterview: vi.fn(),
+  startTeam: vi.fn(),
   streamConversation: vi.fn(),
 }));
 
@@ -20,7 +21,7 @@ vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
 vi.mock("../../../lib/supabase/client", () => ({ createClient: () => ({}) }));
-vi.mock("../api", () => ({ createConversationSummary, getConversationSummary, retryConversationMessage, startInterview, streamConversation }));
+vi.mock("../api", () => ({ createConversationSummary, getConversationSummary, retryConversationMessage, startInterview, startTeam, streamConversation }));
 
 const conversation = {
   id: "conversation-id",
@@ -162,6 +163,24 @@ describe("ConversationDetail", () => {
 
     expect(screen.getByText("Persisted first question")).toBeInTheDocument();
     expect(startInterview).not.toHaveBeenCalled();
+  });
+
+  it("automatically starts Team Practice and shows the preparing state", async () => {
+    const opening = message("team-opening", "Reviewer: Walk us through the trade-off.", "2026-08-01T12:00:00Z", "assistant");
+    startTeam.mockResolvedValueOnce(sseResponse([
+      { event: "assistant_delta", data: { delta: opening.content } },
+      { event: "assistant_complete", data: opening },
+      { event: "done", data: {} },
+    ]));
+    render(<ConversationDetail
+      conversation={{ ...conversation, mode: "team", metadata: { team_scenario: "code_review", team_difficulty: "realistic" } }}
+      initialMessages={[]}
+    />);
+
+    expect(screen.getByText("Your team is preparing the first discussion prompt…")).toBeInTheDocument();
+    await waitFor(() => expect(startTeam).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(opening.content)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "End Team Session" })).toBeInTheDocument();
   });
 
   it("shows interview-specific retry state after kickoff failure", async () => {

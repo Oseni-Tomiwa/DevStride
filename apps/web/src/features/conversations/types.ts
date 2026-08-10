@@ -1,4 +1,4 @@
-export type ConversationMode = "general" | "mentor" | "interview";
+export type ConversationMode = "general" | "mentor" | "interview" | "team";
 export type InterviewType = "technical" | "behavioral";
 export type InterviewFocus =
   | "general_backend"
@@ -7,6 +7,8 @@ export type InterviewFocus =
   | "javascript_node"
   | "python"
   | "system_design";
+export type TeamScenario = "code_review" | "architecture_discussion" | "sprint_planning" | "debugging_incident" | "technical_decision";
+export type TeamDifficulty = "guided" | "realistic" | "challenging";
 
 export type Conversation = {
   id: string;
@@ -38,6 +40,8 @@ export type CreateConversationInput = {
   mode: ConversationMode;
   interview_type?: InterviewType;
   interview_focus?: InterviewFocus;
+  team_scenario?: TeamScenario;
+  team_difficulty?: TeamDifficulty;
 };
 
 export type RenameConversationInput = {
@@ -57,7 +61,7 @@ export type RespondResponse = {
 export type SessionSummary = {
   id: string;
   conversation_id: string;
-  session_mode: "mentor" | "interview";
+  session_mode: "mentor" | "interview" | "team";
   summary: string;
   topics_covered: string[];
   strengths: string[];

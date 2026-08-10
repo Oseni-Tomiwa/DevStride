@@ -90,6 +90,7 @@ def test_progress_is_scoped_to_authenticated_user() -> None:
             "mentor_sessions": 0,
             "interview_sessions": 0,
             "general_sessions": 0,
+            "team_sessions": 0,
             "recent_sessions": [],
         }
 

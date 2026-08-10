@@ -24,11 +24,13 @@ from app.session_summaries.service import (
     SessionSummaryGenerationError,
     generate_summary,
 )
+from app.team.prompts import build_team_instruction
 
 logger = logging.getLogger(__name__)
 RECENT_MESSAGE_CONTEXT_LIMIT = 20
 FINAL_ASSESSMENT_REQUEST_PREFIX = "End the interview and provide my final practice assessment"
 MENTOR_SESSION_END_REQUEST_PREFIX = "End the mentor session and provide my practice summary"
+TEAM_SESSION_END_REQUEST_PREFIX = "End the team practice session and provide my practice summary"
 
 
 class AssistantGenerationDisabledError(Exception):
@@ -48,6 +50,14 @@ class InterviewProfileRequiredError(Exception):
 
 
 class InterviewStartNotAllowedError(Exception):
+    pass
+
+
+class TeamStartNotAllowedError(Exception):
+    pass
+
+
+class TeamProfileRequiredError(Exception):
     pass
 
 
@@ -71,8 +81,17 @@ class StreamInterviewPending:
     """Signals that another request owns the in-progress interview kickoff."""
 
 
+@dataclass(frozen=True)
+class StreamTeamPending:
+    """Signals that another request owns the in-progress Team Practice kickoff."""
+
+
 StreamEvent = (
-    StreamUserMessage | StreamAssistantDelta | StreamAssistantComplete | StreamInterviewPending
+    StreamUserMessage
+    | StreamAssistantDelta
+    | StreamAssistantComplete
+    | StreamInterviewPending
+    | StreamTeamPending
 )
 
 
@@ -82,6 +101,10 @@ def _is_final_assessment_request(content: str) -> bool:
 
 def _is_mentor_session_end_request(content: str) -> bool:
     return content.strip().startswith(MENTOR_SESSION_END_REQUEST_PREFIX)
+
+
+def _is_team_session_end_request(content: str) -> bool:
+    return content.strip().startswith(TEAM_SESSION_END_REQUEST_PREFIX)
 
 
 def _mark_interview_completed(conversation: Conversation, assistant_message: Message) -> None:
@@ -101,6 +124,9 @@ async def _maybe_generate_session_summary(
     should_summarize = (
         conversation.mode == "interview" and _is_final_assessment_request(trigger_content)
     ) or (conversation.mode == "mentor" and _is_mentor_session_end_request(trigger_content))
+    should_summarize = should_summarize or (
+        conversation.mode == "team" and _is_team_session_end_request(trigger_content)
+    )
     if not should_summarize:
         return
     try:
@@ -111,9 +137,9 @@ async def _maybe_generate_session_summary(
             extra={"mode": conversation.mode},
         )
         return
-    if conversation.mode == "mentor":
+    if conversation.mode in {"mentor", "team"}:
         metadata = dict(conversation.metadata_ or {})
-        metadata["mentor_completed"] = True
+        metadata["mentor_completed" if conversation.mode == "mentor" else "team_completed"] = True
         conversation.metadata_ = metadata
         await session.commit()
 
@@ -221,16 +247,105 @@ async def start_interview_response(
     yield StreamAssistantComplete(assistant_message)
 
 
+async def start_team_response(
+    session: AsyncSession,
+    user_id: UUID,
+    conversation_id: UUID,
+    provider: AIProvider | None,
+) -> AsyncIterator[StreamEvent]:
+    """Generate the first Team Practice turn without creating a fake user turn."""
+    conversation = await repository.get_by_id_and_user_id_for_update(
+        session, conversation_id, user_id
+    )
+    if conversation is None or conversation.mode != "team":
+        raise TeamStartNotAllowedError
+
+    messages = await repository.list_by_conversation_id(session, conversation_id)
+    existing_assistant = next(
+        (message for message in messages if message.role == "assistant"), None
+    )
+    if existing_assistant is not None:
+        yield StreamAssistantComplete(existing_assistant)
+        return
+
+    metadata = dict(conversation.metadata_ or {})
+    if metadata.get("team_kickoff_started"):
+        yield StreamTeamPending()
+        return
+    if provider is None:
+        raise AssistantGenerationDisabledError
+
+    instruction = await system_instruction(session, user_id, conversation)
+    metadata["team_kickoff_started"] = True
+    conversation.metadata_ = metadata
+    await session.commit()
+
+    chunks: list[str] = []
+    final_result: GenerationResult | None = None
+    try:
+        async for chunk in provider.stream([], system_instruction=instruction):
+            if chunk.delta:
+                chunks.append(chunk.delta)
+                yield StreamAssistantDelta(chunk.delta)
+            if chunk.result is not None:
+                final_result = chunk.result
+    except Exception as exc:
+        metadata.pop("team_kickoff_started", None)
+        conversation.metadata_ = metadata
+        await session.commit()
+        logger.warning(
+            "AI Team Practice kickoff failed",
+            extra={"provider": provider.__class__.__name__, "error_type": type(exc).__name__},
+        )
+        raise AssistantGenerationError from exc
+
+    if final_result is None:
+        metadata.pop("team_kickoff_started", None)
+        conversation.metadata_ = metadata
+        await session.commit()
+        raise AssistantGenerationError
+    text = "".join(chunks).strip() or final_result.text.strip()
+    if not text:
+        metadata.pop("team_kickoff_started", None)
+        conversation.metadata_ = metadata
+        await session.commit()
+        raise AssistantGenerationError
+
+    message_metadata = {}
+    if final_result.provider_response_id:
+        message_metadata["provider_response_id"] = final_result.provider_response_id
+    assistant_message = Message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content=text,
+        provider=final_result.provider,
+        model=final_result.model,
+        input_tokens=final_result.input_tokens,
+        output_tokens=final_result.output_tokens,
+        latency_ms=final_result.latency_ms,
+        metadata_=message_metadata,
+    )
+    await repository.create_message(session, assistant_message)
+    repository.touch_conversation_activity(conversation)
+    metadata.pop("team_kickoff_started", None)
+    metadata["team_started"] = True
+    conversation.metadata_ = metadata
+    await session.commit()
+    yield StreamAssistantComplete(assistant_message)
+
+
 async def system_instruction(
     session: AsyncSession, user_id: UUID, conversation: Conversation
 ) -> str:
     mode = conversation.mode
-    if mode not in {"mentor", "interview"}:
+    if mode not in {"mentor", "interview", "team"}:
         return SYSTEM_INSTRUCTION
     profile = await profile_repository.get_profile_by_user_id(session, user_id)
     if profile is None:
         if mode == "interview":
             raise InterviewProfileRequiredError
+        if mode == "team":
+            raise TeamProfileRequiredError
         raise MentorProfileRequiredError
     if mode == "interview":
         try:
@@ -238,6 +353,14 @@ async def system_instruction(
         except Exception:
             memories = []
         return build_interview_instruction(
+            profile, conversation.metadata_ or {}, memory_context(memories)
+        )
+    if mode == "team":
+        try:
+            memories = await retrieve_for_prompt(session, user_id)
+        except Exception:
+            memories = []
+        return build_team_instruction(
             profile, conversation.metadata_ or {}, memory_context(memories)
         )
     try:

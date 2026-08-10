@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SummaryMode = Literal["mentor", "interview"]
+SummaryMode = Literal["mentor", "interview", "team"]
 
 
 def _clean_items(value: list[str]) -> list[str]:

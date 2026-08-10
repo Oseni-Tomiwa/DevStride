@@ -10,6 +10,7 @@ const summary = {
   mentor_sessions: 1,
   interview_sessions: 1,
   general_sessions: 1,
+  team_sessions: 0,
   recent_sessions: [
     {
       id: "interview-id",
@@ -17,6 +18,7 @@ const summary = {
       mode: "interview" as const,
       interview_type: "technical",
       interview_focus: "databases",
+      team_scenario: null,
       updated_at: "2026-08-10T10:00:00Z",
       message_count: 4,
       has_messages: true,

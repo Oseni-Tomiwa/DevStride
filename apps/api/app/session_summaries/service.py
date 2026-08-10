@@ -40,7 +40,7 @@ async def get_summary(
     conversation = await conversation_repository.get_by_id_and_user_id(
         session, conversation_id, user_id
     )
-    if conversation is None or conversation.mode not in {"mentor", "interview"}:
+    if conversation is None or conversation.mode not in {"mentor", "interview", "team"}:
         raise SessionSummaryNotFoundError
     summary = await repository.get_by_conversation_id_and_user_id(session, conversation_id, user_id)
     if summary is None:
@@ -57,7 +57,7 @@ async def generate_summary(
     conversation = await conversation_repository.get_by_id_and_user_id_for_update(
         session, conversation_id, user_id
     )
-    if conversation is None or conversation.mode not in {"mentor", "interview"}:
+    if conversation is None or conversation.mode not in {"mentor", "interview", "team"}:
         raise SessionSummaryNotAllowedError
 
     existing = await repository.get_by_conversation_id_and_user_id(

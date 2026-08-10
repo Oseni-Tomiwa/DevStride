@@ -29,6 +29,17 @@ Interview configuration for labeling only:
 - Type: {interview_type}
 - Focus: {interview_focus}
 """
+    if conversation.mode == "team":
+        metadata = conversation.metadata_ or {}
+        return f"""{SUMMARY_SYSTEM_INSTRUCTION}
+Prompt version: {SUMMARY_PROMPT_VERSION}
+Create a Team Practice summary. Capture topics discussed, communication strengths,
+technical reasoning strengths, unclear explanations or gaps, useful communication
+habits, and practical next steps. These are practice observations only; do not
+create hiring, readiness, or workplace performance judgments.
+Team scenario: {metadata.get("team_scenario", "not specified")}
+Team difficulty: {metadata.get("team_difficulty", "not specified")}
+"""
     return f"""{SUMMARY_SYSTEM_INSTRUCTION}
 Prompt version: {SUMMARY_PROMPT_VERSION}
 Create a Mentor Mode summary. Focus on topics discussed, misconceptions

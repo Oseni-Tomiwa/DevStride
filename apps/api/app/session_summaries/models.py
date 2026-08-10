@@ -13,7 +13,7 @@ class SessionSummary(TimestampMixin, Base):
     __tablename__ = "session_summaries"
     __table_args__ = (
         CheckConstraint(
-            "session_mode IN ('mentor', 'interview')",
+            "session_mode IN ('mentor', 'interview', 'team')",
             name="ck_session_summaries_supported_mode",
         ),
         CheckConstraint(
