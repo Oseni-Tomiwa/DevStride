@@ -147,6 +147,67 @@ describe("ConversationDetail", () => {
     expect(screen.getByText("A saved question")).toBeInTheDocument();
     expect(screen.getByText("A helpful answer")).toBeInTheDocument();
     expect(screen.getByLabelText("Your message")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Stop generating" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+    expect(screen.getByLabelText("Your message")).toBeEnabled();
+  });
+
+  it("finishes on assistant_complete even when trailing done is absent", async () => {
+    streamConversation.mockResolvedValue(sseResponse([
+      { event: "user_message", data: message("new-user", "Question", "2026-08-01T12:00:00Z") },
+      { event: "assistant_complete", data: message("new-assistant", "Final answer", "2026-08-01T12:00:01Z", "assistant") },
+    ]));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(screen.getByText("Final answer")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Stop generating" })).not.toBeInTheDocument();
+  });
+
+  it("ignores duplicate terminal events after successful completion", async () => {
+    streamConversation.mockResolvedValue(sseResponse([
+      { event: "assistant_complete", data: message("new-assistant", "Final answer", "2026-08-01T12:00:01Z", "assistant") },
+      { event: "assistant_complete", data: message("duplicate", "Duplicate answer", "2026-08-01T12:00:02Z", "assistant") },
+      { event: "done", data: {} },
+      { event: "done", data: {} },
+    ]));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(screen.getByText("Final answer")).toBeInTheDocument());
+    expect(screen.queryByText("Duplicate answer")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+  });
+
+  it("clears generation safely for a malformed stream", async () => {
+    streamConversation.mockResolvedValue(sseResponse([
+      { event: "user_message", data: message("new-user", "Question", "2026-08-01T12:00:00Z") },
+      { event: "assistant_delta", data: { invalid: true } },
+    ]));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Malformed assistant delta"));
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Stop generating" })).not.toBeInTheDocument();
+  });
+
+  it("treats done without an assistant completion as an interrupted error", async () => {
+    streamConversation.mockResolvedValue(sseResponse([{ event: "done", data: {} }]));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("ended before completion"));
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
   });
 
   it("disables duplicate submissions while generation is running", async () => {

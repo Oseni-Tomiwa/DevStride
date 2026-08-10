@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
 
@@ -77,17 +77,14 @@ describe("DashboardPage", () => {
       created_at: "",
       updated_at: "",
     });
-    createConversation.mockResolvedValueOnce({ id: "mentor-conversation" });
+    createConversation.mockReturnValueOnce(new Promise(() => {}));
 
     render(await DashboardPage());
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Start Mentor Mode" }));
-      await waitFor(() => expect(createConversation).toHaveBeenCalledWith(
-        {},
-        { title: "Mentor session", mode: "mentor" },
-      ));
-    });
-
+    fireEvent.click(screen.getByRole("button", { name: "Start Mentor Mode" }));
+    await waitFor(() => expect(createConversation).toHaveBeenCalledWith(
+      {},
+      { title: "Mentor session", mode: "mentor" },
+    ));
   });
 
   it("redirects authenticated users without a profile to onboarding", async () => {

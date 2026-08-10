@@ -19,6 +19,7 @@ type ConversationDetailProps = {
 };
 type SseEvent = { event: string; data: unknown };
 type SseRecord = Record<string, unknown>;
+type StreamTerminalState = "active" | "completed" | "failed" | "cancelled";
 
 function chronologicalMessages(messages: Message[]): Message[] {
   return [...messages].sort((left, right) => Date.parse(left.created_at) - Date.parse(right.created_at));
@@ -67,6 +68,11 @@ async function* readSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<
     }
     if (buffer.trim()) yield parseSseFrame(buffer);
   } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // The request may already have been aborted or closed by the browser.
+    }
     reader.releaseLock();
   }
 }
@@ -79,7 +85,7 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
   const [error, setError] = useState<string | null>(null);
   const [retryMessageId, setRetryMessageId] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const cancellationRequestedRef = useRef(false);
+  const generationIdRef = useRef(0);
   const persistedUserMessageIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const historyEndRef = useRef<HTMLDivElement | null>(null);
@@ -94,17 +100,32 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
   }, []);
 
   async function runGeneration(request: (signal: AbortSignal) => Promise<Response>) {
+    const generationId = generationIdRef.current + 1;
+    generationIdRef.current = generationId;
     setIsSending(true);
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    cancellationRequestedRef.current = false;
     const temporaryAssistantId = `streaming-${Date.now()}`;
-    let sawComplete = false;
-    let sawDone = false;
-    let streamError = false;
+    let terminal: StreamTerminalState = "active";
+    const terminalState = () => terminal;
+
+    const isCurrentGeneration = () => generationIdRef.current === generationId;
+    const clearGeneration = () => {
+      if (!mountedRef.current || !isCurrentGeneration()) return;
+      abortControllerRef.current = null;
+      setIsSending(false);
+    };
 
     const removeTemporaryAssistant = () => {
       if (mountedRef.current) setMessages((current) => current.filter((message) => message.id !== temporaryAssistantId));
+    };
+
+    const finish = (state: Exclude<StreamTerminalState, "active">) => {
+      if (terminal !== "active") return false;
+      terminal = state;
+      if (state !== "completed") removeTemporaryAssistant();
+      clearGeneration();
+      return true;
     };
 
     try {
@@ -112,6 +133,7 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
       if (!response.body) throw new Error("The response did not include a stream.");
 
       for await (const event of readSseEvents(response.body)) {
+        if (!mountedRef.current || !isCurrentGeneration()) break;
         if (event.event === "user_message") {
           const message = asMessage(event.data);
           persistedUserMessageIdRef.current = message.id;
@@ -130,29 +152,36 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
           });
         } else if (event.event === "assistant_complete") {
           const message = asMessage(event.data);
-          sawComplete = true;
+          if (terminal !== "active") break;
           setRetryMessageId(null);
           setMessages((current) => chronologicalMessages([...current.filter((item) => item.id !== temporaryAssistantId && item.id !== message.id), message]));
+          finish("completed");
+          // assistant_complete is authoritative. Do not wait forever for done.
+          clearGeneration();
+          break;
         } else if (event.event === "error") {
+          if (terminal !== "active") break;
           const payload = asRecord(event.data);
-          streamError = true;
           setError(typeof payload.message === "string" ? payload.message : "Assistant generation failed. Please try again.");
-          removeTemporaryAssistant();
+          finish("failed");
+          break;
         } else if (event.event === "done") {
-          sawDone = true;
+          if (terminal !== "active") break;
+          setError("The assistant connection ended before completion. Please try again.");
+          finish("failed");
+          break;
         }
       }
 
-      if (!sawComplete && !streamError && !sawDone) throw new Error("The assistant stream ended unexpectedly.");
-      if (!sawComplete && !streamError) {
-        removeTemporaryAssistant();
+      if (terminal === "active" && isCurrentGeneration()) {
         setError("The assistant connection was interrupted. Please try again.");
+        finish("failed");
       }
     } catch (cause) {
-      removeTemporaryAssistant();
-      if (cancellationRequestedRef.current) {
-        // The Stop generating action already set the user-facing state.
-      } else if (cause instanceof DOMException && cause.name === "AbortError") {
+      if (!isCurrentGeneration()) return;
+      if (terminalState() === "completed") return;
+      if (terminalState() === "cancelled") return;
+      if (cause instanceof DOMException && cause.name === "AbortError") {
         if (mountedRef.current) setError("The assistant connection was interrupted. Please try again.");
       } else if (cause instanceof ApiError && cause.status === 401) {
         router.push("/login");
@@ -167,18 +196,23 @@ export function ConversationDetail({ conversation, initialMessages, mentorContex
       } else if (mountedRef.current) {
         setError(cause instanceof Error ? cause.message : "The assistant could not respond. Please try again.");
       }
+      finish("failed");
     } finally {
-      abortControllerRef.current = null;
-      cancellationRequestedRef.current = false;
-      if (mountedRef.current) setIsSending(false);
+      if (terminal === "active" && isCurrentGeneration()) {
+        setError("The assistant connection was interrupted. Please try again.");
+        finish("failed");
+      }
+      clearGeneration();
     }
   }
 
   function stopGenerating() {
+    if (!abortControllerRef.current) return;
     const userMessageId = persistedUserMessageIdRef.current;
     if (userMessageId) setRetryMessageId(userMessageId);
-    cancellationRequestedRef.current = true;
+    generationIdRef.current += 1;
     abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     setMessages((current) => current.filter((message) => !message.id.startsWith("streaming-")));
     setError(userMessageId ? "Generation stopped. You can retry this response." : "Generation stopped.");
     setIsSending(false);
