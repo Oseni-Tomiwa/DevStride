@@ -20,6 +20,7 @@ from app.conversations.response_service import (
     StreamAssistantDelta,
     StreamUserMessage,
     generate_response,
+    retry_stream_response,
     stream_response,
 )
 from app.conversations.schemas import RespondRequest
@@ -247,3 +248,52 @@ async def test_streaming_provider_failure_keeps_user_without_assistant(
         ]
 
     assert [message.role for message in added] == ["user"]
+
+
+@pytest.mark.asyncio
+async def test_retry_stream_reuses_user_message_and_persists_one_assistant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation_id = uuid4()
+    user_message = make_message(conversation_id, "user", "Retry this")
+    provider = FakeProvider(
+        GenerationResult(
+            text="Recovered response",
+            provider="openai",
+            model="configured-model",
+            latency_ms=21,
+        )
+    )
+    added: list[Message] = []
+
+    async def fake_retry_message(*args: Any, **kwargs: Any) -> Message:
+        del args, kwargs
+        return user_message
+
+    async def fake_create_message(_session: AsyncSession, message: Message) -> Message:
+        added.append(message)
+        return message
+
+    async def fake_recent(*args: Any, **kwargs: Any) -> list[Message]:
+        del args, kwargs
+        return [user_message]
+
+    monkeypatch.setattr("app.conversations.response_service.get_retry_message", fake_retry_message)
+    monkeypatch.setattr(repository, "create_message", fake_create_message)
+    monkeypatch.setattr(repository, "get_recent_by_conversation_id", fake_recent)
+
+    events = [
+        event
+        async for event in retry_stream_response(
+            cast(AsyncSession, type("Session", (), {"commit": _commit})()),
+            uuid4(),
+            conversation_id,
+            uuid4(),
+            provider,
+        )
+    ]
+
+    assert isinstance(events[0], StreamUserMessage)
+    complete = next(event for event in events if isinstance(event, StreamAssistantComplete))
+    assert complete.message.role == "assistant"
+    assert [message.role for message in added] == ["assistant"]

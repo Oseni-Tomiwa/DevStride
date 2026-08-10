@@ -14,7 +14,7 @@ from app.ai.provider import (
 from app.conversations import repository
 from app.conversations.models import Message
 from app.conversations.schemas import RespondRequest
-from app.conversations.service import get_conversation
+from app.conversations.service import get_conversation, get_retry_message
 
 logger = logging.getLogger(__name__)
 RECENT_MESSAGE_CONTEXT_LIMIT = 20
@@ -151,6 +151,72 @@ async def stream_response(
     except Exception as exc:
         logger.warning(
             "AI streaming failed",
+            extra={"provider": provider.__class__.__name__, "error_type": type(exc).__name__},
+        )
+        raise AssistantGenerationError from exc
+
+    if final_result is None:
+        raise AssistantGenerationError
+
+    text = "".join(chunks).strip() or final_result.text.strip()
+    if not text:
+        raise AssistantGenerationError
+
+    metadata = {}
+    if final_result.provider_response_id:
+        metadata["provider_response_id"] = final_result.provider_response_id
+    assistant_message = Message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content=text,
+        provider=final_result.provider,
+        model=final_result.model,
+        input_tokens=final_result.input_tokens,
+        output_tokens=final_result.output_tokens,
+        latency_ms=final_result.latency_ms,
+        metadata_=metadata,
+    )
+    await repository.create_message(session, assistant_message)
+    await session.commit()
+    yield StreamAssistantComplete(assistant_message)
+
+
+async def retry_stream_response(
+    session: AsyncSession,
+    user_id: UUID,
+    conversation_id: UUID,
+    message_id: UUID,
+    provider: AIProvider | None,
+) -> AsyncIterator[StreamEvent]:
+    """Regenerate for an existing user message without inserting another user row."""
+    user_message = await get_retry_message(session, user_id, conversation_id, message_id)
+    yield StreamUserMessage(user_message)
+
+    if provider is None:
+        raise AssistantGenerationDisabledError
+
+    recent_messages = await repository.get_recent_by_conversation_id(
+        session, conversation_id, limit=RECENT_MESSAGE_CONTEXT_LIMIT
+    )
+    context = _provider_messages(list(reversed(recent_messages)))
+    chunks: list[str] = []
+    final_result: GenerationResult | None = None
+    try:
+        async for chunk in provider.stream(context):
+            if chunk.delta:
+                chunks.append(chunk.delta)
+                yield StreamAssistantDelta(chunk.delta)
+            if chunk.result is not None:
+                final_result = chunk.result
+    except AIProviderError as exc:
+        logger.warning(
+            "AI streaming retry failed",
+            extra={"provider": provider.__class__.__name__, "error_type": type(exc).__name__},
+        )
+        raise AssistantGenerationError from exc
+    except Exception as exc:
+        logger.warning(
+            "AI streaming retry failed",
             extra={"provider": provider.__class__.__name__, "error_type": type(exc).__name__},
         )
         raise AssistantGenerationError from exc

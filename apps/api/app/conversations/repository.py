@@ -36,6 +36,18 @@ async def list_by_user_id(session: AsyncSession, user_id: UUID) -> list[Conversa
     return list(result.scalars().all())
 
 
+async def first_user_message_by_conversation_id(
+    session: AsyncSession, conversation_id: UUID
+) -> Message | None:
+    result = await session.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id, Message.role == "user")
+        .order_by(Message.created_at.asc(), Message.id.asc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def update_title(
     session: AsyncSession, conversation: Conversation, title: str
 ) -> Conversation:
@@ -65,6 +77,34 @@ async def create_message(session: AsyncSession, message: Message) -> Message:
     await session.flush()
     await session.refresh(message)
     return message
+
+
+async def get_message_by_id_and_conversation_id(
+    session: AsyncSession, message_id: UUID, conversation_id: UUID
+) -> Message | None:
+    result = await session.execute(
+        select(Message).where(
+            Message.id == message_id,
+            Message.conversation_id == conversation_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def has_assistant_after_message(session: AsyncSession, message: Message) -> bool:
+    result = await session.execute(
+        select(Message.id)
+        .where(
+            Message.conversation_id == message.conversation_id,
+            Message.role == "assistant",
+            (
+                (Message.created_at > message.created_at)
+                | ((Message.created_at == message.created_at) & (Message.id > message.id))
+            ),
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def list_by_conversation_id(session: AsyncSession, conversation_id: UUID) -> list[Message]:

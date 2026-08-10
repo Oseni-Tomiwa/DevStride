@@ -9,9 +9,18 @@ from app.conversations.schemas import (
     ConversationPatchRequest,
     MessageCreateRequest,
 )
+from app.conversations.title import DEFAULT_CONVERSATION_TITLE, derive_conversation_title
 
 
 class ConversationNotFoundError(Exception):
+    pass
+
+
+class RetryMessageNotFoundError(Exception):
+    pass
+
+
+class RetryNotAllowedError(Exception):
     pass
 
 
@@ -35,6 +44,13 @@ async def get_conversation(
 
 async def list_conversations(session: AsyncSession, user_id: UUID) -> list[Conversation]:
     return await repository.list_by_user_id(session, user_id)
+
+
+async def conversation_display_title(session: AsyncSession, conversation: Conversation) -> str:
+    if conversation.title != DEFAULT_CONVERSATION_TITLE:
+        return conversation.title
+    message = await repository.first_user_message_by_conversation_id(session, conversation.id)
+    return derive_conversation_title(message.content) if message else conversation.title
 
 
 async def rename_conversation(
@@ -71,6 +87,23 @@ async def add_user_message(
     )
     await repository.create_message(session, message)
     await session.commit()
+    return message
+
+
+async def get_retry_message(
+    session: AsyncSession,
+    user_id: UUID,
+    conversation_id: UUID,
+    message_id: UUID,
+) -> Message:
+    await get_conversation(session, user_id, conversation_id)
+    message = await repository.get_message_by_id_and_conversation_id(
+        session, message_id, conversation_id
+    )
+    if message is None:
+        raise RetryMessageNotFoundError
+    if message.role != "user" or await repository.has_assistant_after_message(session, message):
+        raise RetryNotAllowedError
     return message
 
 

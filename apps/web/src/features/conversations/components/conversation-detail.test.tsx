@@ -6,8 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/api/client";
 import { ConversationDetail } from "./conversation-detail";
 
-const { push, streamConversation } = vi.hoisted(() => ({
+const { push, retryConversationMessage, streamConversation } = vi.hoisted(() => ({
   push: vi.fn(),
+  retryConversationMessage: vi.fn(),
   streamConversation: vi.fn(),
 }));
 
@@ -16,7 +17,7 @@ vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
 vi.mock("../../../lib/supabase/client", () => ({ createClient: () => ({}) }));
-vi.mock("../api", () => ({ streamConversation }));
+vi.mock("../api", () => ({ retryConversationMessage, streamConversation }));
 
 const conversation = {
   id: "conversation-id",
@@ -72,7 +73,15 @@ describe("ConversationDetail", () => {
     const text = screen.getByRole("region").textContent ?? "";
     expect(text.indexOf("First")).toBeLessThan(text.indexOf("Second"));
     expect(screen.getByText("You")).toBeInTheDocument();
-    expect(screen.getByText("Assistant")).toBeInTheDocument();
+    expect(screen.getByText("DevStride assistant")).toBeInTheDocument();
+  });
+
+  it("derives a concise title from the first user message", () => {
+    render(<ConversationDetail conversation={{ ...conversation, title: "New conversation" }} initialMessages={[
+      message("first", "Explain what a REST API is in two sentences.", "2026-08-01T10:00:00Z"),
+    ]} />);
+
+    expect(screen.getByRole("heading", { name: "Explain what a REST API is in two sentences" })).toBeInTheDocument();
   });
 
   it("prevents blank submissions", () => {
@@ -119,16 +128,41 @@ describe("ConversationDetail", () => {
 
     fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-    fireEvent.click(screen.getByRole("button", { name: "Generating…" }));
+    expect(screen.getByRole("button", { name: "Stop generating" })).toBeInTheDocument();
 
     expect(streamConversation).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Generating…" })).toBeDisabled();
+    expect(screen.getByLabelText("Your message")).toBeDisabled();
     resolveStream(sseResponse([
       { event: "user_message", data: message("new-user", "Question", "2026-08-01T12:00:00Z") },
       { event: "assistant_complete", data: message("new-assistant", "Answer", "2026-08-01T12:00:01Z", "assistant") },
       { event: "done", data: {} },
     ]));
     await waitFor(() => expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled());
+  });
+
+  it("stops generation, removes partial assistant text, and keeps the user message", async () => {
+    let enqueue!: (chunk: string) => void;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        enqueue = (chunk) => controller.enqueue(new TextEncoder().encode(chunk));
+      },
+    });
+    streamConversation.mockResolvedValue(new Response(body, { status: 200 }));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    enqueue(`event: user_message\ndata: ${JSON.stringify(message("new-user", "Question", "2026-08-01T12:00:00Z"))}\n\n`);
+    enqueue("event: assistant_delta\ndata: {\"delta\":\"Partial answer\"}\n\n");
+
+    await waitFor(() => expect(screen.getByText("Partial answer")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Stop generating" }));
+
+    expect(screen.queryByText("Partial answer")).not.toBeInTheDocument();
+    expect(screen.getByText("Question")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Generation stopped");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeInTheDocument();
   });
 
   it("shows a provider failure without creating fake assistant data", async () => {
@@ -144,6 +178,50 @@ describe("ConversationDetail", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Assistant generation failed.");
     expect(screen.queryByText("Answer")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("retries the persisted user message without sending duplicate content", async () => {
+    const userMessage = message("new-user", "Question", "2026-08-01T12:00:00Z");
+    streamConversation.mockResolvedValue(sseResponse([
+      { event: "user_message", data: userMessage },
+      { event: "error", data: { message: "Assistant generation failed." } },
+      { event: "done", data: {} },
+    ]));
+    retryConversationMessage.mockResolvedValue(sseResponse([
+      { event: "user_message", data: userMessage },
+      { event: "assistant_delta", data: { delta: "Recovered answer" } },
+      { event: "assistant_complete", data: message("new-assistant", "Recovered answer", "2026-08-01T12:00:01Z", "assistant") },
+      { event: "done", data: {} },
+    ]));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("button", { name: "Retry" });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(retryConversationMessage).toHaveBeenCalledWith(
+      {},
+      "conversation-id",
+      "new-user",
+      expect.any(AbortSignal),
+    ));
+    expect(screen.getByText("Recovered answer")).toBeInTheDocument();
+    expect(screen.getAllByText("Question")).toHaveLength(1);
+    expect(streamConversation.mock.calls[0][2]).toEqual({ content: "Question" });
+  });
+
+  it("uses Enter to submit and Shift+Enter for a newline", async () => {
+    streamConversation.mockResolvedValue(sseResponse([{ event: "done", data: {} }]));
+    render(<ConversationDetail conversation={conversation} initialMessages={[]} />);
+    const composer = screen.getByLabelText("Your message");
+
+    fireEvent.change(composer, { target: { value: "Enter message" } });
+    fireEvent.keyDown(composer, { key: "Enter", shiftKey: true });
+    expect(streamConversation).not.toHaveBeenCalled();
+    fireEvent.keyDown(composer, { key: "Enter", shiftKey: false });
+    await waitFor(() => expect(streamConversation).toHaveBeenCalledTimes(1));
   });
 
   it("redirects to login when the authenticated stream fails", async () => {

@@ -17,6 +17,7 @@ from app.conversations.response_service import (
     StreamAssistantDelta,
     StreamUserMessage,
     generate_response,
+    retry_stream_response,
     stream_response,
 )
 from app.conversations.schemas import (
@@ -30,10 +31,14 @@ from app.conversations.schemas import (
 )
 from app.conversations.service import (
     ConversationNotFoundError,
+    RetryMessageNotFoundError,
+    RetryNotAllowedError,
     add_user_message,
+    conversation_display_title,
     create_conversation,
     delete_conversation,
     get_conversation,
+    get_retry_message,
     list_conversation_messages,
     list_conversations,
     rename_conversation,
@@ -63,7 +68,12 @@ async def create(
 @router.get("", response_model=list[ConversationResponse])
 async def list_all(session: Session, current_user: AuthenticatedUser) -> list[ConversationResponse]:
     conversations = await list_conversations(session, current_user.id)
-    return [ConversationResponse.model_validate(item) for item in conversations]
+    responses: list[ConversationResponse] = []
+    for conversation in conversations:
+        response = ConversationResponse.model_validate(conversation)
+        response.title = await conversation_display_title(session, conversation)
+        responses.append(response)
+    return responses
 
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)
@@ -78,7 +88,9 @@ async def get_one(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
         ) from None
-    return ConversationResponse.model_validate(conversation)
+    response = ConversationResponse.model_validate(conversation)
+    response.title = await conversation_display_title(session, conversation)
+    return response
 
 
 @router.patch("/{conversation_id}", response_model=ConversationResponse)
@@ -208,6 +220,74 @@ async def stream(
         try:
             async for event in stream_response(
                 session, current_user.id, conversation_id, data, provider
+            ):
+                if isinstance(event, StreamUserMessage):
+                    payload: dict[str, Any] = MessageResponse.model_validate(
+                        event.message
+                    ).model_dump(mode="json")
+                    yield _sse_event("user_message", payload)
+                elif isinstance(event, StreamAssistantDelta):
+                    yield _sse_event("assistant_delta", {"delta": event.delta})
+                else:
+                    payload = MessageResponse.model_validate(event.message).model_dump(mode="json")
+                    yield _sse_event("assistant_complete", payload)
+        except AssistantGenerationDisabledError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "generation_disabled",
+                    "message": "Assistant generation is currently disabled",
+                },
+            )
+        except AssistantGenerationError:
+            yield _sse_event(
+                "error",
+                {
+                    "code": "generation_failed",
+                    "message": "Assistant generation failed. Please try again.",
+                },
+            )
+        finally:
+            yield _sse_event("done", {})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post(
+    "/{conversation_id}/messages/{message_id}/retry",
+    response_class=StreamingResponse,
+)
+async def retry_stream(
+    conversation_id: UUID,
+    message_id: UUID,
+    session: Session,
+    current_user: AuthenticatedUser,
+    provider: Provider,
+) -> StreamingResponse:
+    try:
+        await get_retry_message(session, current_user.id, conversation_id, message_id)
+    except (ConversationNotFoundError, RetryMessageNotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
+        ) from None
+    except RetryNotAllowedError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This message cannot be retried",
+        ) from None
+
+    async def event_stream() -> AsyncIterator[str]:
+        try:
+            async for event in retry_stream_response(
+                session, current_user.id, conversation_id, message_id, provider
             ):
                 if isinstance(event, StreamUserMessage):
                     payload: dict[str, Any] = MessageResponse.model_validate(

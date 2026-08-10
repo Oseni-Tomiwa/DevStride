@@ -13,7 +13,7 @@ from app.ai.dependencies import get_ai_provider
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations.models import Conversation, Message
-from app.conversations.service import ConversationNotFoundError
+from app.conversations.service import ConversationNotFoundError, RetryNotAllowedError
 from app.database.session import get_db_session
 from app.main import app
 
@@ -138,6 +138,15 @@ def post_stream(conversation_id: UUID, payload: Mapping[str, object]) -> Respons
             f"/api/v1/conversations/{conversation_id}/stream",
             json=payload,
         ),  # pyright: ignore[reportUnknownMemberType]
+    )
+
+
+def post_retry(conversation_id: UUID, message_id: UUID) -> Response:
+    return cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/conversations/{conversation_id}/messages/{message_id}/retry"
+        ),
     )
 
 
@@ -462,3 +471,52 @@ def test_stream_emits_ordered_sse_events_and_final_metadata(
     assert body.index('data: {"delta":"Hello "}') < body.index('data: {"delta":"there"}')
     assert body.index("event: assistant_complete") < body.index("event: done")
     assert '"role":"assistant"' in body
+
+
+def test_retry_requires_ownership_and_reuses_existing_message(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation_id = uuid4()
+    message_id = uuid4()
+    user_message = make_message(conversation_id)
+    user_message.id = message_id
+    assistant_message = make_message(conversation_id)
+    assistant_message.role = "assistant"
+
+    async def fake_retry(*args: object):
+        del args
+        from app.conversations.response_service import (
+            StreamAssistantComplete,
+            StreamUserMessage,
+        )
+
+        yield StreamUserMessage(user_message)
+        yield StreamAssistantComplete(assistant_message)
+
+    monkeypatch.setattr(
+        "app.conversations.routes.get_retry_message", AsyncMock(return_value=user_message)
+    )
+    monkeypatch.setattr("app.conversations.routes.retry_stream_response", fake_retry)
+    app.dependency_overrides[get_ai_provider] = lambda: object()
+
+    response = post_retry(conversation_id, message_id)
+
+    assert response.status_code == 200
+    assert response.text.count('"role":"assistant"') == 1
+    assert "event: user_message" in response.text
+    assert "event: assistant_complete" in response.text
+
+
+def test_retry_rejects_wrong_message_role(
+    authenticated_client: tuple[TestClient, CurrentUser],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.conversations.routes.get_retry_message",
+        AsyncMock(side_effect=RetryNotAllowedError),
+    )
+
+    response = post_retry(uuid4(), uuid4())
+
+    assert response.status_code == 409

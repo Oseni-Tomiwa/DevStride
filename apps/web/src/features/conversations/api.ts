@@ -89,3 +89,16 @@ export function streamConversation(
     signal,
   );
 }
+
+export function retryConversationMessage(
+  supabase: SupabaseClient,
+  conversationId: string,
+  messageId: string,
+  signal?: AbortSignal,
+) {
+  return createAuthenticatedApiClient(supabase).stream(
+    `/api/v1/conversations/${conversationId}/messages/${messageId}/retry`,
+    {},
+    signal,
+  );
+}
