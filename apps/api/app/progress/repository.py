@@ -13,15 +13,21 @@ async def get_progress_rows(
     message_count = func.count(Message.id).label("message_count")
     first_user_content = (
         select(Message.content)
+        .select_from(Message)
         .where(Message.conversation_id == Conversation.id, Message.role == "user")
         .order_by(Message.created_at.asc(), Message.id.asc())
         .limit(1)
+        .correlate(Conversation)
         .scalar_subquery()
         .label("first_user_content")
     )
-    summary_available = exists(
-        select(SessionSummary.id).where(SessionSummary.conversation_id == Conversation.id)
-    ).label("summary_available")
+    summary_exists = (
+        select(SessionSummary.id)
+        .select_from(SessionSummary)
+        .where(SessionSummary.conversation_id == Conversation.id)
+        .correlate(Conversation)
+    )
+    summary_available = exists(summary_exists).label("summary_available")
     result = await session.execute(
         select(Conversation, message_count, first_user_content, summary_available)
         .outerjoin(Message, Message.conversation_id == Conversation.id)

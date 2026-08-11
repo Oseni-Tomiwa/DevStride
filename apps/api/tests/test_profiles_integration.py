@@ -29,6 +29,8 @@ from app.main import app
 from app.memory.models import MemoryRecord
 from app.memory.service import retrieve_for_prompt
 from app.profiles.models import Profile
+from app.progress import repository as progress_repository
+from app.progress.service import get_progress_summary
 from app.session_summaries.models import SessionSummary
 
 TEST_DATABASE_URL = os.getenv(
@@ -165,6 +167,169 @@ async def persisted_profile(factory: async_sessionmaker[Any], user_id: UUID) -> 
 
 def auth_headers(signing_key: SigningKey, user_id: UUID) -> dict[str, str]:
     return {"Authorization": f"Bearer {bearer_token(signing_key, user_id)}"}
+
+
+@pytest.mark.asyncio
+async def test_progress_returns_zero_conversations(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, _ = integration_client
+    user_id = uuid4()
+
+    response = cast(
+        Response,
+        client.get(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/progress", headers=auth_headers(signing_key, user_id)
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_sessions": 0,
+        "mentor_sessions": 0,
+        "interview_sessions": 0,
+        "general_sessions": 0,
+        "team_sessions": 0,
+        "recent_sessions": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_progress_handles_messages_summaries_and_supported_modes(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, factory = integration_client
+    user_id = uuid4()
+    other_user_id = uuid4()
+    now = datetime.now(UTC)
+    general = Conversation(
+        user_id=user_id,
+        title="New conversation",
+        mode="general",
+        metadata_={},
+        created_at=now - timedelta(minutes=8),
+        updated_at=now - timedelta(minutes=4),
+    )
+    mentor = Conversation(
+        user_id=user_id,
+        title="Mentor session",
+        mode="mentor",
+        metadata_={},
+        created_at=now - timedelta(minutes=7),
+        updated_at=now - timedelta(minutes=3),
+    )
+    interview = Conversation(
+        user_id=user_id,
+        title="Technical interview",
+        mode="interview",
+        metadata_={"interview_type": "technical", "interview_focus": "databases"},
+        created_at=now - timedelta(minutes=6),
+        updated_at=now - timedelta(minutes=2),
+    )
+    team = Conversation(
+        user_id=user_id,
+        title="Team Practice",
+        mode="team",
+        metadata_={"team_scenario": "architecture_discussion"},
+        created_at=now - timedelta(minutes=5),
+        updated_at=now - timedelta(minutes=1),
+    )
+    unowned = Conversation(
+        user_id=other_user_id,
+        title="Other user's session",
+        mode="mentor",
+        metadata_={},
+        created_at=now,
+        updated_at=now,
+    )
+
+    async with factory() as session:
+        session.add_all([general, mentor, interview, team, unowned])
+        await session.flush()
+        session.add_all(
+            [
+                Message(
+                    conversation_id=general.id,
+                    role="assistant",
+                    content="How can I help?",
+                    created_at=now - timedelta(minutes=7, seconds=30),
+                ),
+                Message(
+                    conversation_id=general.id,
+                    role="user",
+                    content="Help me with API pagination.",
+                    created_at=now - timedelta(minutes=7),
+                ),
+                Message(
+                    conversation_id=general.id,
+                    role="user",
+                    content="Show me an example.",
+                    created_at=now - timedelta(minutes=6),
+                ),
+                Message(
+                    conversation_id=mentor.id,
+                    role="user",
+                    content="Explain dependency injection.",
+                    created_at=now - timedelta(minutes=5),
+                ),
+                Message(
+                    conversation_id=interview.id,
+                    role="assistant",
+                    content="Tell me about database indexes.",
+                    created_at=now - timedelta(minutes=4),
+                ),
+                Message(
+                    conversation_id=team.id,
+                    role="assistant",
+                    content="Let's discuss the service boundary.",
+                    created_at=now - timedelta(minutes=3),
+                ),
+                SessionSummary(
+                    conversation_id=interview.id,
+                    user_id=user_id,
+                    session_mode="interview",
+                    summary="Practiced database interview questions.",
+                    topics_covered=["database indexes"],
+                    strengths=["clear reasoning"],
+                    weaknesses=[],
+                    recommended_next_steps=["practice query plans"],
+                ),
+            ]
+        )
+        await session.commit()
+
+    async with factory() as session:
+        rows = await progress_repository.get_progress_rows(session, user_id)
+        summary = await get_progress_summary(session, user_id)
+
+    rows_by_id = {conversation.id: row for conversation, *row in rows}
+    assert len(rows) == 4
+    assert rows_by_id[general.id] == [3, "Help me with API pagination.", False]
+    assert rows_by_id[mentor.id] == [1, "Explain dependency injection.", False]
+    assert rows_by_id[interview.id] == [1, None, True]
+    assert rows_by_id[team.id] == [1, None, False]
+    assert [item.mode for item in summary.recent_sessions] == [
+        "team",
+        "interview",
+        "mentor",
+        "general",
+    ]
+    assert summary.total_sessions == 4
+    assert summary.general_sessions == 1
+    assert summary.mentor_sessions == 1
+    assert summary.interview_sessions == 1
+    assert summary.team_sessions == 1
+    assert summary.recent_sessions[-1].title == "API pagination"
+
+    response = cast(
+        Response,
+        client.get(  # pyright: ignore[reportUnknownMemberType]
+            "/api/v1/progress", headers=auth_headers(signing_key, user_id)
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total_sessions"] == 4
 
 
 @pytest.mark.asyncio
