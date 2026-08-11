@@ -43,6 +43,13 @@ describe("OnboardingForm", () => {
     vi.clearAllMocks();
   });
 
+  it("renders the onboarding heading without an escaped HTML entity", () => {
+    render(<OnboardingForm />);
+
+    expect(screen.getByRole("heading", { name: "Let’s tailor DevStride to you." })).toBeInTheDocument();
+    expect(screen.queryByText(/&apos;/)).not.toBeInTheDocument();
+  });
+
   it("validates required fields before calling the API", async () => {
     render(<OnboardingForm />);
 

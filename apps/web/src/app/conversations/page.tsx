@@ -19,7 +19,7 @@ export default async function ConversationsPage() {
     return (
       <main className="page-shell app-page">
         <AppHeader current="conversations" />
-        <section className="page-content">
+        <section className="page-content" id="main-content" tabIndex={-1}>
           <ConversationList initialConversations={conversations} />
         </section>
       </main>
@@ -29,7 +29,7 @@ export default async function ConversationsPage() {
     return (
       <main className="page-shell app-page">
         <AppHeader current="conversations" />
-        <section className="page-content conversation-shell conversation-empty" role="alert">
+        <section className="page-content conversation-shell conversation-empty" id="main-content" tabIndex={-1} role="alert">
           <h1>Conversations are unavailable</h1>
           <p className="muted">We could not load your conversations. Please try again.</p>
         </section>

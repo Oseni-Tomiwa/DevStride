@@ -17,7 +17,7 @@ export default async function OnboardingPage() {
   return (
     <main className="page-shell app-page">
       <AppHeader current="onboarding" />
-      <section className="page-content">
+      <section className="page-content" id="main-content" tabIndex={-1}>
         <OnboardingForm />
       </section>
     </main>

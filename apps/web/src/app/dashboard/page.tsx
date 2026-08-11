@@ -65,7 +65,7 @@ export default async function DashboardPage() {
   return (
     <main className="page-shell app-page">
       <AppHeader current="dashboard" />
-      <section className="dashboard-shell">
+      <section className="dashboard-shell" id="main-content" tabIndex={-1}>
         <header className="dashboard-header">
           <div>
             <p className="eyebrow">Dashboard</p>

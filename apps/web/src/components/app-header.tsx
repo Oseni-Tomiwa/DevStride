@@ -20,6 +20,7 @@ const links: Array<{ href: string; label: string; section: AppSection }> = [
 export function AppHeader({ current }: AppHeaderProps) {
   return (
     <header className="app-header">
+      <a className="skip-link" href="#main-content">Skip to content</a>
       <Link href="/dashboard" className="app-brand" aria-label="DevStride dashboard">
         <span className="brand-mark" aria-hidden="true">D</span>
         <span>DevStride</span>

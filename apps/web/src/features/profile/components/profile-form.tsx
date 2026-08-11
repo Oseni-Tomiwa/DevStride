@@ -97,7 +97,7 @@ export function ProfileForm({ mode, initialValues = initialOnboardingValues }: P
     <section className="auth-card onboarding-card" aria-labelledby="profile-form-title">
       <div className="profile-form-intro">
         <p className="eyebrow">{isEditing ? "Profile settings" : "Your starting point"}</p>
-        <h1 id="profile-form-title">{isEditing ? "Shape your practice space." : "Let&apos;s tailor DevStride to you."}</h1>
+        <h1 id="profile-form-title">{isEditing ? "Shape your practice space." : "Let’s tailor DevStride to you."}</h1>
         <p className="muted">{isEditing ? "Keep your coaching preferences up to date." : "A few details help us make your engineering practice more relevant."}</p>
       </div>
       <form onSubmit={handleSubmit} noValidate>
@@ -126,7 +126,12 @@ export function ProfileForm({ mode, initialValues = initialOnboardingValues }: P
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}
         {success && <p className="form-success" role="status">{success}</p>}
-        <div className="form-actions"><button type="submit" disabled={isLoading}>{isLoading ? "Saving…" : isEditing ? "Save changes" : "Complete onboarding"}</button></div>
+        <div className="form-actions profile-form-actions">
+          <p className="form-actions-note">
+            {isEditing ? "Changes apply to future practice sessions." : "You can update these preferences later."}
+          </p>
+          <button type="submit" disabled={isLoading}>{isLoading ? "Saving…" : isEditing ? "Save changes" : "Complete onboarding"}</button>
+        </div>
       </form>
     </section>
   );

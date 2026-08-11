@@ -18,7 +18,7 @@ export default async function ProgressPage() {
     return (
       <main className="page-shell app-page">
         <AppHeader current="progress" />
-        <section className="page-content">
+        <section className="page-content" id="main-content" tabIndex={-1}>
           <header className="conversation-header">
             <div>
               <p className="eyebrow">Practice record</p>
@@ -35,7 +35,7 @@ export default async function ProgressPage() {
     return (
       <main className="page-shell app-page">
         <AppHeader current="progress" />
-        <section className="page-content conversation-shell conversation-empty" role="alert">
+        <section className="page-content conversation-shell conversation-empty" id="main-content" tabIndex={-1} role="alert">
           <h1>Progress is unavailable</h1>
           <p className="muted">We could not load your practice history. Please try again.</p>
         </section>

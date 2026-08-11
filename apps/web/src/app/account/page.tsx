@@ -21,18 +21,18 @@ export default async function AccountPage() {
     return (
       <main className="page-shell app-page">
         <AppHeader current="account" />
-        <section className="page-content">
-        <ProfileForm
-          mode="edit"
-          initialValues={{
-            display_name: profile.display_name,
-            current_level: profile.current_level,
-            target_role: profile.target_role,
-            preferred_stack: profile.preferred_stack.join(", "),
-            communication_goal: profile.communication_goal,
-            feedback_preference: profile.feedback_preference,
-          }}
-        />
+        <section className="page-content" id="main-content" tabIndex={-1}>
+          <ProfileForm
+            mode="edit"
+            initialValues={{
+              display_name: profile.display_name,
+              current_level: profile.current_level,
+              target_role: profile.target_role,
+              preferred_stack: profile.preferred_stack.join(", "),
+              communication_goal: profile.communication_goal,
+              feedback_preference: profile.feedback_preference,
+            }}
+          />
         </section>
       </main>
     );
