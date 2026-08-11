@@ -10,6 +10,7 @@ from alembic import context
 from app.conversations import models as conversation_models  # noqa: F401
 from app.core.config import settings
 from app.database.base import Base
+from app.goals import models as goal_models  # noqa: F401
 from app.memory import models as memory_models  # noqa: F401
 from app.profiles import models  # noqa: F401
 from app.session_summaries import models as session_summary_models  # noqa: F401

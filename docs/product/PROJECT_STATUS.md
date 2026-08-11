@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-11  
 Current release: v0.1.0  
-Repository migration head: `0005`
+Repository migration head: `0006`
 
 This is the canonical source of truth for the current product state and the
 order of future work. The [PRD](PRD.md) describes product intent; architecture
@@ -79,8 +79,19 @@ configuration and deployment checks.
 
 ## Next
 
-1. Goals / Development Plan with explicit user control.
-2. Skills and recurring weakness tracking with transparent evidence.
+1. Complete the Goals / Development Plan user experience on top of the backend
+   persistence foundation now in progress.
+2. Integrate explicit goals with practice launch, Progress, and Dashboard.
+3. Skills and recurring weakness tracking with transparent evidence.
+
+## Backend foundation in progress
+
+- Goals & Development Plans v1 persistence/API: one active goal per user,
+  explicit complete/reopen/archive transitions, 1–6 ordered validated focus
+  areas, and an optional conversation association are implemented at migration
+  head `0006`.
+- Plan preview, practice launch, goal-aware Progress recommendations, Dashboard
+  integration, and the `/goals` frontend remain intentionally unimplemented.
 
 ## Planned
 

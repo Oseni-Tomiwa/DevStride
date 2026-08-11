@@ -56,6 +56,29 @@ Message creation, complete response, and stream generation accept only:
 Clients do not send role, ownership, system prompts, provider, model, token, or
 latency metadata.
 
+## Goals and development plans
+
+The backend Goals foundation is available; the user-facing Goals experience and
+goal-aware recommendations are not implemented yet.
+
+| Method | Path | Success | Behavior |
+| --- | --- | --- | --- |
+| GET | `/api/v1/goals` | 200 | Lists owned goals with active first; optional `status` filter. |
+| POST | `/api/v1/goals` | 201 | Atomically creates one active goal and 1–6 validated focus areas; 409 if another active goal exists. |
+| GET | `/api/v1/goals/{goal_id}` | 200 | Returns one owned goal and its ordered focus areas. |
+| PATCH | `/api/v1/goals/{goal_id}` | 200 | Edits allowed fields or explicitly completes/reopens a goal. |
+| DELETE | `/api/v1/goals/{goal_id}` | 204 | Archives an owned goal without deleting history. |
+| POST | `/api/v1/goals/{goal_id}/focus-areas` | 201 | Appends a validated focus area, up to six non-archived areas. |
+| PATCH | `/api/v1/goals/{goal_id}/focus-areas/{focus_area_id}` | 200 | Edits or explicitly completes/reopens an owned focus area. |
+| DELETE | `/api/v1/goals/{goal_id}/focus-areas/{focus_area_id}` | 204 | Archives an owned focus area. |
+| PUT | `/api/v1/goals/{goal_id}/focus-areas/order` | 200 | Transactionally reorders the complete non-archived focus-area list. |
+
+Clients never submit `user_id`, positions, prompts, provider/model choices, or
+system roles. Mentor config is empty. Interview config uses the current
+`interview_type` and optional compatible `interview_focus`; Team config requires
+an approved `team_scenario` and `team_difficulty`. Unsupported keys are rejected.
+Cross-user access uses ownership-safe 404 responses.
+
 ## Session summaries
 
 | Method | Path | Success | Behavior |

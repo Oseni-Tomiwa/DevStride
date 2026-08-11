@@ -1,3 +1,5 @@
+# pyright: reportUnknownMemberType=false
+
 import asyncio
 import json
 import os
@@ -15,7 +17,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 from httpx import Response
 from jwt.algorithms import ECAlgorithm
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -25,6 +28,8 @@ from app.conversations.models import Conversation, Message
 from app.conversations.response_service import system_instruction
 from app.core.config import settings
 from app.database.session import get_db_session
+from app.goals.models import Goal, GoalFocusArea
+from app.goals.repository import get_current_focus_owned
 from app.main import app
 from app.memory.models import MemoryRecord
 from app.memory.service import retrieve_for_prompt
@@ -98,12 +103,14 @@ async def clean_profiles(
     _, factory = test_database
     async with factory() as session:
         await session.execute(delete(Conversation))
+        await session.execute(delete(Goal))
         await session.execute(delete(MemoryRecord))
         await session.execute(delete(Profile))
         await session.commit()
     yield factory
     async with factory() as session:
         await session.execute(delete(Conversation))
+        await session.execute(delete(Goal))
         await session.execute(delete(MemoryRecord))
         await session.execute(delete(Profile))
         await session.commit()
@@ -167,6 +174,347 @@ async def persisted_profile(factory: async_sessionmaker[Any], user_id: UUID) -> 
 
 def auth_headers(signing_key: SigningKey, user_id: UUID) -> dict[str, str]:
     return {"Authorization": f"Bearer {bearer_token(signing_key, user_id)}"}
+
+
+def goal_payload() -> dict[str, object]:
+    return {
+        "title": "Grow as a backend engineer",
+        "description": "Practice APIs and technical communication.",
+        "goal_type": "technical_growth",
+        "focus_areas": [
+            {
+                "title": "Explain API tradeoffs",
+                "practice_mode": "mentor",
+                "practice_config": {},
+            },
+            {
+                "title": "Backend interviews",
+                "practice_mode": "interview",
+                "practice_config": {
+                    "interview_type": "technical",
+                    "interview_focus": "apis",
+                },
+            },
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_goal_lifecycle_focus_ordering_and_database_constraints(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, factory = integration_client
+    user_id = uuid4()
+    headers = auth_headers(signing_key, user_id)
+
+    empty = cast(Response, client.get("/api/v1/goals", headers=headers))
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    created = cast(Response, client.post("/api/v1/goals", headers=headers, json=goal_payload()))
+    assert created.status_code == 201
+    body = created.json()
+    goal_id = UUID(body["id"])
+    first_id = UUID(body["focus_areas"][0]["id"])
+    second_id = UUID(body["focus_areas"][1]["id"])
+    assert [item["position"] for item in body["focus_areas"]] == [0, 1]
+    assert "user_id" not in body
+
+    duplicate = cast(Response, client.post("/api/v1/goals", headers=headers, json=goal_payload()))
+    assert duplicate.status_code == 409
+
+    renamed = cast(
+        Response,
+        client.patch(
+            f"/api/v1/goals/{goal_id}", headers=headers, json={"title": "Backend mastery"}
+        ),
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["title"] == "Backend mastery"
+
+    reordered = cast(
+        Response,
+        client.put(
+            f"/api/v1/goals/{goal_id}/focus-areas/order",
+            headers=headers,
+            json={"focus_area_ids": [str(second_id), str(first_id)]},
+        ),
+    )
+    assert reordered.status_code == 200
+    assert [UUID(item["id"]) for item in reordered.json()] == [second_id, first_id]
+    assert [item["position"] for item in reordered.json()] == [0, 1]
+
+    completed_focus = cast(
+        Response,
+        client.patch(
+            f"/api/v1/goals/{goal_id}/focus-areas/{first_id}",
+            headers=headers,
+            json={"title": "Explain API tradeoffs clearly", "status": "completed"},
+        ),
+    )
+    assert completed_focus.status_code == 200
+    assert completed_focus.json()["title"] == "Explain API tradeoffs clearly"
+    assert completed_focus.json()["completed_at"] is not None
+
+    reopened_focus = cast(
+        Response,
+        client.patch(
+            f"/api/v1/goals/{goal_id}/focus-areas/{first_id}",
+            headers=headers,
+            json={"status": "active"},
+        ),
+    )
+    assert reopened_focus.status_code == 200
+    assert reopened_focus.json()["completed_at"] is None
+
+    completed = cast(
+        Response,
+        client.patch(f"/api/v1/goals/{goal_id}", headers=headers, json={"status": "completed"}),
+    )
+    assert completed.status_code == 200
+    assert completed.json()["completed_at"] is not None
+
+    replacement = cast(Response, client.post("/api/v1/goals", headers=headers, json=goal_payload()))
+    assert replacement.status_code == 201
+
+    conflict = cast(
+        Response,
+        client.patch(f"/api/v1/goals/{goal_id}", headers=headers, json={"status": "active"}),
+    )
+    assert conflict.status_code == 409
+
+    replacement_id = UUID(replacement.json()["id"])
+    archived = cast(Response, client.delete(f"/api/v1/goals/{replacement_id}", headers=headers))
+    assert archived.status_code == 204
+    archived_reopen = cast(
+        Response,
+        client.patch(f"/api/v1/goals/{replacement_id}", headers=headers, json={"status": "active"}),
+    )
+    assert archived_reopen.status_code == 409
+
+    reopened = cast(
+        Response,
+        client.patch(f"/api/v1/goals/{goal_id}", headers=headers, json={"status": "active"}),
+    )
+    assert reopened.status_code == 200
+    assert reopened.json()["completed_at"] is None
+
+    listed = cast(Response, client.get("/api/v1/goals", headers=headers))
+    assert [item["status"] for item in listed.json()] == ["active", "archived"]
+    archived_only = cast(Response, client.get("/api/v1/goals?status=archived", headers=headers))
+    assert [item["id"] for item in archived_only.json()] == [str(replacement_id)]
+
+    async with factory() as session:
+        persisted = await session.get(Goal, goal_id)
+        assert persisted is not None
+        assert persisted.status == "active"
+        focus_result = await session.execute(
+            select(GoalFocusArea)
+            .where(GoalFocusArea.goal_id == goal_id)
+            .order_by(GoalFocusArea.position)
+        )
+        assert [item.id for item in focus_result.scalars()] == [second_id, first_id]
+        current_focus = await get_current_focus_owned(session, user_id, goal_id)
+        assert current_focus is not None
+        assert current_focus.id == second_id
+
+
+@pytest.mark.asyncio
+async def test_goal_focus_limits_validation_and_cross_user_isolation(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, _ = integration_client
+    owner_id = uuid4()
+    other_id = uuid4()
+    owner_headers = auth_headers(signing_key, owner_id)
+    other_headers = auth_headers(signing_key, other_id)
+    created = cast(
+        Response, client.post("/api/v1/goals", headers=owner_headers, json=goal_payload())
+    )
+    goal_id = UUID(created.json()["id"])
+    focus_id = UUID(created.json()["focus_areas"][0]["id"])
+
+    assert client.get(f"/api/v1/goals/{goal_id}", headers=other_headers).status_code == 404
+    assert (
+        client.patch(
+            f"/api/v1/goals/{goal_id}/focus-areas/{focus_id}",
+            headers=other_headers,
+            json={"title": "Not owned"},
+        ).status_code
+        == 404
+    )
+
+    invalid = cast(
+        Response,
+        client.post(
+            f"/api/v1/goals/{goal_id}/focus-areas",
+            headers=owner_headers,
+            json={
+                "title": "Unsafe",
+                "practice_mode": "mentor",
+                "practice_config": {"provider": "override"},
+            },
+        ),
+    )
+    assert invalid.status_code == 422
+
+    for number in range(4):
+        added = cast(
+            Response,
+            client.post(
+                f"/api/v1/goals/{goal_id}/focus-areas",
+                headers=owner_headers,
+                json={
+                    "title": f"Focus {number}",
+                    "practice_mode": "team",
+                    "practice_config": {
+                        "team_scenario": "code_review",
+                        "team_difficulty": "guided",
+                    },
+                },
+            ),
+        )
+        assert added.status_code == 201
+
+    seventh = cast(
+        Response,
+        client.post(
+            f"/api/v1/goals/{goal_id}/focus-areas",
+            headers=owner_headers,
+            json={"title": "Too many", "practice_mode": "mentor", "practice_config": {}},
+        ),
+    )
+    assert seventh.status_code == 409
+
+    archived_focus = cast(
+        Response,
+        client.delete(f"/api/v1/goals/{goal_id}/focus-areas/{focus_id}", headers=owner_headers),
+    )
+    assert archived_focus.status_code == 204
+    replacement = cast(
+        Response,
+        client.post(
+            f"/api/v1/goals/{goal_id}/focus-areas",
+            headers=owner_headers,
+            json={"title": "Replacement", "practice_mode": "mentor", "practice_config": {}},
+        ),
+    )
+    assert replacement.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_conversation_focus_fk_is_nullable_and_sets_null_on_focus_delete(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    _, _, factory = integration_client
+    user_id = uuid4()
+    goal = Goal(user_id=user_id, title="FK goal", goal_type="custom", status="active")
+    focus = GoalFocusArea(
+        title="FK focus",
+        practice_mode="mentor",
+        practice_config={},
+        position=0,
+        status="active",
+    )
+    goal.focus_areas = [focus]
+    async with factory() as session:
+        session.add(goal)
+        await session.flush()
+        unattached = Conversation(user_id=user_id, title="Existing", mode="general")
+        attached = Conversation(
+            user_id=user_id, title="Attached", mode="mentor", focus_area_id=focus.id
+        )
+        session.add_all([unattached, attached])
+        await session.commit()
+        attached_id = attached.id
+        unattached_id = unattached.id
+
+    async with factory() as session:
+        persisted_unattached = await session.get(Conversation, unattached_id)
+        assert persisted_unattached is not None
+        assert persisted_unattached.focus_area_id is None
+        stored_focus = await session.get(GoalFocusArea, focus.id)
+        assert stored_focus is not None
+        await session.delete(stored_focus)
+        await session.commit()
+
+    async with factory() as session:
+        persisted_attached = await session.get(Conversation, attached_id)
+        assert persisted_attached is not None
+        assert persisted_attached.focus_area_id is None
+
+
+@pytest.mark.asyncio
+async def test_goal_partial_unique_and_completion_constraints_are_database_enforced(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    _, _, factory = integration_client
+    user_id = uuid4()
+    async with factory() as session:
+        session.add_all(
+            [
+                Goal(user_id=user_id, title="First", goal_type="custom", status="active"),
+                Goal(user_id=user_id, title="Second", goal_type="custom", status="active"),
+            ]
+        )
+        with pytest.raises(IntegrityError):
+            await session.commit()
+        await session.rollback()
+
+        session.add(
+            Goal(
+                user_id=uuid4(),
+                title="Invalid completion",
+                goal_type="custom",
+                status="completed",
+                completed_at=None,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.commit()
+        await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_migration_0006_preserves_existing_conversations_and_is_reversible(
+    test_database: tuple[AsyncEngine, async_sessionmaker[Any]],
+) -> None:
+    engine, factory = test_database
+    api_root = Path(__file__).parents[1]
+    conversation_id = uuid4()
+    user_id = uuid4()
+    await engine.dispose()
+    await asyncio.to_thread(run_migration, api_root, "0005")
+    try:
+        async with factory() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO conversations (id, user_id, title, mode, status) "
+                    "VALUES (:id, :user_id, :title, :mode, :status)"
+                ),
+                {
+                    "id": conversation_id,
+                    "user_id": user_id,
+                    "title": "Pre-goals conversation",
+                    "mode": "general",
+                    "status": "active",
+                },
+            )
+            await session.commit()
+
+        await asyncio.to_thread(run_migration, api_root, "head")
+        async with factory() as session:
+            focus_area_id = await session.scalar(
+                text("SELECT focus_area_id FROM conversations WHERE id = :id"),
+                {"id": conversation_id},
+            )
+            assert focus_area_id is None
+            await session.execute(
+                text("DELETE FROM conversations WHERE id = :id"), {"id": conversation_id}
+            )
+            await session.commit()
+    finally:
+        await asyncio.to_thread(run_migration, api_root, "head")
 
 
 @pytest.mark.asyncio

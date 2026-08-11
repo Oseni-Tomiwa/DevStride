@@ -26,6 +26,12 @@ class Conversation(TimestampMixin, Base):
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, nullable=False, default=dict, server_default="'{}'::json"
     )
+    focus_area_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("goal_focus_areas.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     messages: Mapped[list[Message]] = relationship(
         back_populates="conversation",
