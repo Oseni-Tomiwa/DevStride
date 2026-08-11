@@ -1,4 +1,9 @@
-# First Codex Task - Verify and Complete Milestone 0
+# Historical Bootstrap Task — Initial Foundation Verification
+
+> **Historical document:** This prompt was used to establish the initial
+> repository foundation. It is not an active task or a current source of truth.
+> Read [`docs/product/PROJECT_STATUS.md`](docs/product/PROJECT_STATUS.md) for the
+> current product state and work order.
 
 Read `AGENTS.md`, `START_HERE.md`, `docs/product/PRD.md`,
 `docs/architecture/SYSTEM.md`, and `docs/decisions/ADR-001-modular-monolith.md`

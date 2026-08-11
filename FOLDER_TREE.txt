@@ -1,3 +1,7 @@
+HISTORICAL SNAPSHOT — this file records the initial repository scaffold and is
+not the current folder tree. Use `rg --files` for the live tree and
+docs/product/PROJECT_STATUS.md for current product status.
+
 .env.example
 .gitignore
 AGENTS.md

@@ -1,59 +1,49 @@
 # Start Here
 
-## Working name
-DevStride
+## What DevStride is
 
-## What we are building
-A personalized AI software-engineering mentor and communication coach.
+DevStride is an AI software-engineering mentor and communication coach. The
+current application helps authenticated users create a coaching profile,
+practice in General, Mentor, Interview, and Team conversation modes, review
+session summaries and Progress, and control a bounded set of saved memories.
 
-The product will eventually help users:
-- learn technical concepts;
-- practise technical and behavioral interviews;
-- rehearse stand-ups, group discussions, code reviews, and manager conversations;
-- build software projects with guided support;
-- track recurring weaknesses and progress;
-- receive personalized coaching based on user-approved memories.
+## Current source of truth
 
-## Current goal
-Verify and stabilize the implemented MVP foundations before production
-deployment. The current application includes authentication, onboarding,
-persistent streaming conversations, Mentor Mode, Interview Mode, Team Practice,
-progress/history, summaries, and bounded Long-Term Memory v1.
+Read these documents in order:
 
-Milestone 0 is complete when:
-- the Next.js app starts;
-- the FastAPI app starts;
-- PostgreSQL starts through Docker Compose;
-- `GET /health` returns HTTP 200;
-- linting, type checking, tests, and builds pass;
-- CI is configured;
-- setup instructions work from a clean clone.
+1. [`AGENTS.md`](AGENTS.md) for repository working rules.
+2. [`docs/product/PROJECT_STATUS.md`](docs/product/PROJECT_STATUS.md) for what is
+   completed, needs cleanup, is next, planned, or later.
+3. [`docs/product/PRD.md`](docs/product/PRD.md) for product intent.
+4. [`docs/architecture/SYSTEM.md`](docs/architecture/SYSTEM.md) and the relevant
+   focused architecture documents.
+5. [`docs/decisions/`](docs/decisions/) for accepted architecture decisions.
 
-## Implemented build order
-1. Foundation
-2. Authentication and onboarding
-3. Persistent streamed chat
-4. Mentor Mode
-5. Interview Mode
-6. User-controlled memory
-7. Team simulations
-8. Progress dashboard
-9. Production hardening
+`FIRST_CODEX_PROMPT.md`, `FOLDER_TREE.txt`, and `PROJECT_GUIDE.pdf` are retained
+as historical bootstrap artifacts. They do not describe the current repository
+or current work order.
 
-The API applies bounded, authenticated per-user limits to expensive AI
-operations. The limiter is intentionally in-process for local development;
-distributed rate limiting is required before horizontal scale.
+## Current release
 
-## Deferred
+v0.1.0 is deployed with a Next.js 16 frontend on Vercel, a single FastAPI
+backend instance on Render, Supabase Auth/PostgreSQL, and backend-only OpenAI
+access. Repository migration head is `0005`.
 
-- RAG, embeddings, pgvector, vector search, and document retrieval;
-- voice;
-- GitHub ingestion;
-- code execution;
-- multiple LLM providers;
-- autonomous agents;
-- microservices;
-- billing and gamification.
+The next product direction is richer Dashboard and Progress intelligence,
+recommended practice, explicit Goals / Development Plans, and transparent skill
+and recurring-weakness tracking. See the canonical project status before
+starting work.
 
-## First Codex task
-Open `FIRST_CODEX_PROMPT.md` and give that task to Codex.
+## Local development
+
+Follow [`README.md`](README.md) for setup, database migrations, quality checks,
+and local commands. Environment variables are documented in
+[`docs/operations/ENVIRONMENT.md`](docs/operations/ENVIRONMENT.md).
+
+## Deliberately later
+
+- Live Conversation/realtime voice (architecture not yet designed)
+- RAG, embeddings, vector search, and document learning
+- GitHub ingestion
+- distributed infrastructure until scaling requires it
+- billing and gamification unless product direction requires them

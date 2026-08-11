@@ -7,6 +7,11 @@ The current application includes authentication, onboarding, persistent
 conversations, streamed OpenAI responses, Mentor Mode, Interview Mode, Team
 Practice, session summaries, progress history, and bounded Long-Term Memory v1.
 
+For the canonical product state and work order, read
+[`docs/product/PROJECT_STATUS.md`](docs/product/PROJECT_STATUS.md). The root
+`FIRST_CODEX_PROMPT.md`, `FOLDER_TREE.txt`, and `PROJECT_GUIDE.pdf` are retained
+only as historical bootstrap references.
+
 ## Repository structure
 
 ```text
@@ -14,7 +19,7 @@ apps/web        Next.js frontend
 apps/api        FastAPI backend
 packages        Shared contracts and prompts
 docs            Product, architecture, and ADRs
-evals           Future AI evaluation datasets
+evals           Evaluation strategy and future stable datasets
 infrastructure  Deployment and operational files
 ```
 
@@ -164,9 +169,11 @@ Frontend authentication uses these public browser-safe variables:
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: the Supabase publishable key.
 
 The Next.js app manages sessions with Supabase SSR cookies. It provides
-`/login`, `/sign-up`, `/auth/callback`, `/dashboard`, `/onboarding`, `/account`,
-`/conversations`, `/progress`, and `/memories`; authenticated application routes
-require a Supabase session.
+`/login`, `/sign-up`, `/auth/callback`, `/dashboard`, `/onboarding`, `/profile`,
+`/account`, `/conversations`, `/progress`, and `/memories`; authenticated
+application routes require a verified Supabase user. Profile contains coaching
+preferences, while Account shows authentication-level information. Authenticated
+pages share the responsive AppShell, navigation, skip link, and footer.
 
 
 
@@ -226,3 +233,18 @@ following without committing values:
 Use explicit HTTPS origins in production. Never expose service-role keys,
 private signing keys, bearer tokens, or `OPENAI_API_KEY` through `NEXT_PUBLIC_*`
 variables.
+
+## Documentation map
+
+- [Project status](docs/product/PROJECT_STATUS.md)
+- [Product requirements](docs/product/PRD.md)
+- [System architecture](docs/architecture/SYSTEM.md)
+- [API reference](docs/api/README.md)
+- [Data model](docs/architecture/DATA_MODEL.md)
+- [Authentication](docs/architecture/AUTHENTICATION.md)
+- [AI provider](docs/architecture/AI_PROVIDER.md)
+- [Conversation streaming](docs/architecture/CONVERSATION_STREAMING.md)
+- [Testing strategy](docs/testing/STRATEGY.md)
+- [Environment reference](docs/operations/ENVIRONMENT.md)
+- [Troubleshooting](docs/operations/TROUBLESHOOTING.md)
+- [Deployment runbook](infrastructure/DEPLOYMENT.md)
