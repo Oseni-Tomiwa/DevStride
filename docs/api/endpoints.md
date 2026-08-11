@@ -72,10 +72,29 @@ details, and optional 1–5 practice ratings.
 
 | Method | Path | Success | Behavior |
 | --- | --- | --- | --- |
-| GET | `/api/v1/progress` | 200 | Returns owned session counts by mode and up to 20 recent session rows. |
+| GET | `/api/v1/progress` | 200 | Returns owned practice activity, recent sessions, bounded summary evidence, current focus, rating history, and one deterministic next-practice recommendation. |
 
-Progress currently reports activity and summary/final-assessment availability.
-It is not a goal system or a comprehensive analytics API.
+The existing top-level conversation counts and `recent_sessions` remain for
+compatibility. Additive Progress Intelligence fields distinguish a created
+conversation from practiced activity: a session is practiced only after an
+owned user message exists. Structured Mentor, Interview, and Team sessions are
+completed only when they have a user turn plus their mode-specific completion
+metadata or a persisted session summary. General conversations are never
+classified as incomplete structured practice.
+
+Strengths and weaknesses are derived only from the latest 20 owned summaries
+that belong to practiced conversations. Repetition uses conservative normalized
+exact matching; a phrase seen once is recent evidence and a phrase seen in two
+or more summaries is recurring evidence. Interview ratings are historical
+practice observations, not claims of mastery, readiness, or improvement.
+
+`continue_practice` prefers a recently active incomplete structured session and
+uses a recent General conversation only as a lower-priority fallback.
+`current_focus` prefers an active saved goal, then an active saved weakness,
+then the editable profile communication goal. The recommendation is
+deterministic and includes a user-facing reason, bounded evidence, and a typed
+action. It does not invoke an AI provider, expose prompts or private metadata,
+or compare the user with other users.
 
 ## Memory
 

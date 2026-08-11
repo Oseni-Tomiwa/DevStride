@@ -184,14 +184,21 @@ async def test_progress_returns_zero_conversations(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "total_sessions": 0,
-        "mentor_sessions": 0,
-        "interview_sessions": 0,
-        "general_sessions": 0,
-        "team_sessions": 0,
-        "recent_sessions": [],
+    body = response.json()
+    assert body["total_sessions"] == 0
+    assert body["mentor_sessions"] == 0
+    assert body["interview_sessions"] == 0
+    assert body["general_sessions"] == 0
+    assert body["team_sessions"] == 0
+    assert body["recent_sessions"] == []
+    assert body["activity"] == {
+        "practiced_sessions": 0,
+        "completed_sessions": 0,
+        "user_turns": 0,
+        "practiced_sessions_last_30_days": 0,
+        "mode_breakdown": {"general": 0, "mentor": 0, "interview": 0, "team": 0},
     }
+    assert body["recommendation"]["activity"] == "mentor"
 
 
 @pytest.mark.asyncio
@@ -279,6 +286,12 @@ async def test_progress_handles_messages_summaries_and_supported_modes(
                     created_at=now - timedelta(minutes=4),
                 ),
                 Message(
+                    conversation_id=interview.id,
+                    role="user",
+                    content="An index speeds reads by maintaining an ordered lookup structure.",
+                    created_at=now - timedelta(minutes=3, seconds=30),
+                ),
+                Message(
                     conversation_id=team.id,
                     role="assistant",
                     content="Let's discuss the service boundary.",
@@ -294,6 +307,38 @@ async def test_progress_handles_messages_summaries_and_supported_modes(
                     weaknesses=[],
                     recommended_next_steps=["practice query plans"],
                 ),
+                Message(
+                    conversation_id=unowned.id,
+                    role="user",
+                    content="This activity must not affect the owner.",
+                    created_at=now,
+                ),
+                SessionSummary(
+                    conversation_id=unowned.id,
+                    user_id=other_user_id,
+                    session_mode="mentor",
+                    summary="Other user summary.",
+                    topics_covered=["private topic"],
+                    strengths=["private strength"],
+                    weaknesses=["private weakness"],
+                    recommended_next_steps=["private next step"],
+                ),
+                MemoryRecord(
+                    user_id=user_id,
+                    category="goal",
+                    content="Practice backend interview explanations",
+                    importance=5,
+                    confidence=1.0,
+                    source_type="manual",
+                ),
+                MemoryRecord(
+                    user_id=other_user_id,
+                    category="goal",
+                    content="Other user's private goal",
+                    importance=5,
+                    confidence=1.0,
+                    source_type="manual",
+                ),
             ]
         )
         await session.commit()
@@ -302,12 +347,19 @@ async def test_progress_handles_messages_summaries_and_supported_modes(
         rows = await progress_repository.get_progress_rows(session, user_id)
         summary = await get_progress_summary(session, user_id)
 
-    rows_by_id = {conversation.id: row for conversation, *row in rows}
+    rows_by_id = {row.conversation.id: row for row in rows}
     assert len(rows) == 4
-    assert rows_by_id[general.id] == [3, "Help me with API pagination.", False]
-    assert rows_by_id[mentor.id] == [1, "Explain dependency injection.", False]
-    assert rows_by_id[interview.id] == [1, None, True]
-    assert rows_by_id[team.id] == [1, None, False]
+    assert rows_by_id[general.id].message_count == 3
+    assert rows_by_id[general.id].user_turns == 2
+    assert rows_by_id[general.id].first_user_content == "Help me with API pagination."
+    assert rows_by_id[mentor.id].message_count == 1
+    assert rows_by_id[mentor.id].user_turns == 1
+    assert rows_by_id[interview.id].message_count == 2
+    assert rows_by_id[interview.id].user_turns == 1
+    assert rows_by_id[interview.id].summary_available is True
+    assert rows_by_id[team.id].message_count == 1
+    assert rows_by_id[team.id].user_turns == 0
+    assert rows_by_id[team.id].summary_available is False
     assert [item.mode for item in summary.recent_sessions] == [
         "team",
         "interview",
@@ -320,6 +372,22 @@ async def test_progress_handles_messages_summaries_and_supported_modes(
     assert summary.interview_sessions == 1
     assert summary.team_sessions == 1
     assert summary.recent_sessions[-1].title == "API pagination"
+    assert summary.activity.practiced_sessions == 3
+    assert summary.activity.completed_sessions == 1
+    assert summary.activity.user_turns == 4
+    assert summary.activity.mode_breakdown.model_dump() == {
+        "general": 1,
+        "mentor": 1,
+        "interview": 1,
+        "team": 0,
+    }
+    assert summary.continue_practice is not None
+    assert summary.continue_practice.conversation_id == mentor.id
+    assert summary.current_focus is not None
+    assert summary.current_focus.label == "Practice backend interview explanations"
+    assert summary.recent_strength is not None
+    assert summary.recent_strength.text == "clear reasoning"
+    assert "private" not in summary.model_dump_json()
 
     response = cast(
         Response,
@@ -330,6 +398,7 @@ async def test_progress_handles_messages_summaries_and_supported_modes(
 
     assert response.status_code == 200
     assert response.json()["total_sessions"] == 4
+    assert response.json()["activity"]["practiced_sessions"] == 3
 
 
 @pytest.mark.asyncio
