@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AppShell } from "../../components/app-shell";
 import { getProgressSummary } from "../../features/progress/api";
-import { ProgressEmptyState, ProgressOverview } from "../../features/progress/components/progress-overview";
+import { ProgressOverview } from "../../features/progress/components/progress-overview";
 import { ApiError } from "../../lib/api/client";
 import { createClient } from "../../lib/supabase/server";
 
@@ -24,7 +24,7 @@ export default async function ProgressPage() {
             <p className="muted">A clear record of the sessions you have actually practiced.</p>
           </div>
         </header>
-        {summary.total_sessions === 0 ? <ProgressEmptyState /> : <ProgressOverview summary={summary} />}
+        <ProgressOverview summary={summary} />
       </AppShell>
     );
   } catch (cause) {

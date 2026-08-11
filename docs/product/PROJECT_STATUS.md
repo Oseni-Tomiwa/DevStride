@@ -29,7 +29,8 @@ configuration and deployment checks.
   audience, expiry, subject, signature, and ownership enforcement
 - onboarding and the editable coaching Profile
 - Account view for authenticated sign-in information
-- personalized Dashboard
+- personalized Dashboard with evidence-based next-practice recommendations,
+  continue-practice context, truthful activity metrics, and current evidence
 - authenticated AppShell with responsive navigation, skip link, and footer
 - persistent conversations and messages, including list, detail, rename, and
   delete behavior
@@ -44,7 +45,9 @@ configuration and deployment checks.
 - Team Practice with five scenarios, three difficulty levels, and automatic
   kickoff
 - structured Mentor, Interview, and Team session summaries
-- Progress overview and session history
+- Progress Intelligence v1 with practiced/completed activity semantics, mode
+  breakdown, session history, bounded strength/weakness evidence, compatible
+  Interview rating history, and deterministic recommendations
 - bounded Long-Term Memory v1 with approved categories, conservative extraction,
   reinforcement, manual create/edit/archive behavior, secret-like-content
   rejection, and bounded prompt injection
@@ -76,12 +79,8 @@ configuration and deployment checks.
 
 ## Next
 
-1. Richer Dashboard and Progress intelligence based on existing owned session
-   summaries and activity.
-2. Recommended next practice grounded in demonstrated activity, without
-   inventing progress.
-3. Goals / Development Plan with explicit user control.
-4. Skills and recurring weakness tracking with transparent evidence.
+1. Goals / Development Plan with explicit user control.
+2. Skills and recurring weakness tracking with transparent evidence.
 
 ## Planned
 

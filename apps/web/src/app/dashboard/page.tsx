@@ -97,6 +97,8 @@ export default async function DashboardPage() {
         </dl>
       </section>
 
+      {progress && <ProgressOverview summary={progress} compact />}
+
       <section aria-labelledby="practice-title">
         <div className="summary-heading">
           <p className="eyebrow">Practice space</p>
@@ -113,14 +115,13 @@ export default async function DashboardPage() {
             <p className="muted">Practice technical and behavioral engineering interviews.</p>
             <InterviewEntry />
           </article>
-          <article className="practice-card">
+          <article className="practice-card" id="team-practice">
             <h3>Team Practice</h3>
             <p className="muted">Practice clear technical communication in a simulated engineering discussion.</p>
             <TeamEntry />
           </article>
         </div>
       </section>
-      {progress && <ProgressOverview summary={progress} compact />}
     </AppShell>
   );
 }
