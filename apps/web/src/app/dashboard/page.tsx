@@ -1,7 +1,7 @@
 import React from "react";
 import { redirect } from "next/navigation";
 
-import { AppHeader } from "../../components/app-header";
+import { AppShell } from "../../components/app-shell";
 import { InterviewEntry } from "../../features/conversations/components/interview-entry";
 import { MentorEntry } from "../../features/conversations/components/mentor-entry";
 import { TeamEntry } from "../../features/conversations/components/team-entry";
@@ -63,67 +63,64 @@ export default async function DashboardPage() {
   }
 
   return (
-    <main className="page-shell app-page">
-      <AppHeader current="dashboard" />
-      <section className="dashboard-shell" id="main-content" tabIndex={-1}>
-        <header className="dashboard-header">
+    <AppShell current="dashboard" contentClassName="dashboard-shell">
+      <header className="dashboard-header">
+        <div>
+          <p className="eyebrow">Dashboard</p>
+          <h1>Welcome back, {profile.display_name}</h1>
+          <p className="muted">Your personalized engineering practice space.</p>
+        </div>
+      </header>
+
+      <section className="profile-summary" aria-labelledby="profile-summary-title">
+        <div className="summary-heading">
+          <p className="eyebrow">Your profile</p>
+          <h2 id="profile-summary-title">Your current direction</h2>
+        </div>
+        <dl className="profile-grid">
           <div>
-            <p className="eyebrow">Dashboard</p>
-            <h1>Welcome back, {profile.display_name}</h1>
-            <p className="muted">Your personalized engineering practice space.</p>
+            <dt>Current level</dt>
+            <dd>{displayLabels[profile.current_level]}</dd>
           </div>
-        </header>
-
-        <section className="profile-summary" aria-labelledby="profile-summary-title">
-          <div className="summary-heading">
-            <p className="eyebrow">Your profile</p>
-            <h2 id="profile-summary-title">Your current direction</h2>
+          <div>
+            <dt>Target role</dt>
+            <dd>{displayLabels[profile.target_role]}</dd>
           </div>
-          <dl className="profile-grid">
-            <div>
-              <dt>Current level</dt>
-              <dd>{displayLabels[profile.current_level]}</dd>
-            </div>
-            <div>
-              <dt>Target role</dt>
-              <dd>{displayLabels[profile.target_role]}</dd>
-            </div>
-            <div>
-              <dt>Preferred stack</dt>
-              <dd>{profile.preferred_stack.join(", ")}</dd>
-            </div>
-            <div>
-              <dt>Communication goal</dt>
-              <dd>{displayLabels[profile.communication_goal]}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section aria-labelledby="practice-title">
-          <div className="summary-heading">
-            <p className="eyebrow">Practice space</p>
-            <h2 id="practice-title">Choose your next step</h2>
+          <div>
+            <dt>Preferred stack</dt>
+            <dd>{profile.preferred_stack.join(", ")}</dd>
           </div>
-          <div className="practice-grid">
-            <article className="practice-card" id="mentor-practice">
-              <h3>Learn with Mentor</h3>
-              <p className="muted">A profile-aware software-engineering learning space.</p>
-              <MentorEntry />
-            </article>
-            <article className="practice-card" id="interview-practice">
-              <h3>Mock Interview</h3>
-              <p className="muted">Practice technical and behavioral engineering interviews.</p>
-              <InterviewEntry />
-            </article>
-            <article className="practice-card">
-              <h3>Team Practice</h3>
-              <p className="muted">Practice clear technical communication in a simulated engineering discussion.</p>
-              <TeamEntry />
-            </article>
+          <div>
+            <dt>Communication goal</dt>
+            <dd>{displayLabels[profile.communication_goal]}</dd>
           </div>
-        </section>
-        {progress && <ProgressOverview summary={progress} compact />}
+        </dl>
       </section>
-    </main>
+
+      <section aria-labelledby="practice-title">
+        <div className="summary-heading">
+          <p className="eyebrow">Practice space</p>
+          <h2 id="practice-title">Choose your next step</h2>
+        </div>
+        <div className="practice-grid">
+          <article className="practice-card" id="mentor-practice">
+            <h3>Learn with Mentor</h3>
+            <p className="muted">A profile-aware software-engineering learning space.</p>
+            <MentorEntry />
+          </article>
+          <article className="practice-card" id="interview-practice">
+            <h3>Mock Interview</h3>
+            <p className="muted">Practice technical and behavioral engineering interviews.</p>
+            <InterviewEntry />
+          </article>
+          <article className="practice-card">
+            <h3>Team Practice</h3>
+            <p className="muted">Practice clear technical communication in a simulated engineering discussion.</p>
+            <TeamEntry />
+          </article>
+        </div>
+      </section>
+      {progress && <ProgressOverview summary={progress} compact />}
+    </AppShell>
   );
 }

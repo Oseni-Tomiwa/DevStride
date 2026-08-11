@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { AppHeader } from "../../components/app-header";
+import { AppShell } from "../../components/app-shell";
 import { OnboardingForm } from "../../features/onboarding/components/onboarding-form";
 import { createClient } from "../../lib/supabase/server";
 
@@ -15,11 +15,8 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <main className="page-shell app-page">
-      <AppHeader current="onboarding" />
-      <section className="page-content" id="main-content" tabIndex={-1}>
-        <OnboardingForm />
-      </section>
-    </main>
+    <AppShell current="onboarding">
+      <OnboardingForm />
+    </AppShell>
   );
 }

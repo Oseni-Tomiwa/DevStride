@@ -47,6 +47,8 @@ describe("ProfileForm", () => {
     patch.mockResolvedValueOnce({ id: "profile-id" });
     render(<ProfileForm mode="edit" initialValues={initialValues} />);
 
+    expect(screen.getByText("Who you are, where you’re heading, and how DevStride should tailor practice.")).toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText("Display name"), {
       target: { value: "Ada Lovelace" },
     });

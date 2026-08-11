@@ -96,9 +96,9 @@ export function ProfileForm({ mode, initialValues = initialOnboardingValues }: P
   return (
     <section className="auth-card onboarding-card" aria-labelledby="profile-form-title">
       <div className="profile-form-intro">
-        <p className="eyebrow">{isEditing ? "Profile settings" : "Your starting point"}</p>
-        <h1 id="profile-form-title">{isEditing ? "Shape your practice space." : "Let’s tailor DevStride to you."}</h1>
-        <p className="muted">{isEditing ? "Keep your coaching preferences up to date." : "A few details help us make your engineering practice more relevant."}</p>
+        <p className="eyebrow">{isEditing ? "Profile" : "Your starting point"}</p>
+        <h1 id="profile-form-title">{isEditing ? "Your coaching profile." : "Let’s tailor DevStride to you."}</h1>
+        <p className="muted">{isEditing ? "Who you are, where you’re heading, and how DevStride should tailor practice." : "A few details help us make your engineering practice more relevant."}</p>
       </div>
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-section">

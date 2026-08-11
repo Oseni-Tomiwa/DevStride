@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { AppHeader } from "../../components/app-header";
+import { AppShell } from "../../components/app-shell";
 import { ConversationList } from "../../features/conversations/components/conversation-list";
 import { listConversations } from "../../features/conversations/api";
 import { ApiError } from "../../lib/api/client";
@@ -17,23 +17,19 @@ export default async function ConversationsPage() {
   try {
     const conversations = await listConversations(supabase);
     return (
-      <main className="page-shell app-page">
-        <AppHeader current="conversations" />
-        <section className="page-content" id="main-content" tabIndex={-1}>
-          <ConversationList initialConversations={conversations} />
-        </section>
-      </main>
+      <AppShell current="conversations">
+        <ConversationList initialConversations={conversations} />
+      </AppShell>
     );
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 401) redirect("/login");
     return (
-      <main className="page-shell app-page">
-        <AppHeader current="conversations" />
-        <section className="page-content conversation-shell conversation-empty" id="main-content" tabIndex={-1} role="alert">
+      <AppShell current="conversations" contentClassName="page-content conversation-shell conversation-empty">
+        <div role="alert">
           <h1>Conversations are unavailable</h1>
           <p className="muted">We could not load your conversations. Please try again.</p>
-        </section>
-      </main>
+        </div>
+      </AppShell>
     );
   }
 }

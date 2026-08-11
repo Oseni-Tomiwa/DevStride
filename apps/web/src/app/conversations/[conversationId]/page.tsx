@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
-import { AppHeader } from "../../../components/app-header";
+import { AppShell } from "../../../components/app-shell";
 import { ConversationDetail } from "../../../features/conversations/components/conversation-detail";
 import { getConversation, getConversationSummary, listMessages } from "../../../features/conversations/api";
 import type { SessionSummary } from "../../../features/conversations/types";
@@ -44,38 +44,34 @@ export default async function ConversationPage({ params }: ConversationPageProps
       }
     }
     return (
-      <main className="page-shell app-page">
-        <AppHeader current="conversations" />
-        <section className="page-content conversation-page" id="main-content" tabIndex={-1}>
-          <ConversationDetail
-            conversation={conversation}
-            initialMessages={messages}
-            mentorContext={mentorProfile ? {
-              currentLevel: mentorProfile.current_level,
-              targetRole: mentorProfile.target_role,
-            } : undefined}
-            interviewContext={conversation.mode === "interview" && mentorProfile ? {
-              interviewType: typeof conversation.metadata.interview_type === "string" ? conversation.metadata.interview_type : "technical",
-              interviewFocus: typeof conversation.metadata.interview_focus === "string" ? conversation.metadata.interview_focus : null,
-              currentLevel: mentorProfile.current_level,
-              targetRole: mentorProfile.target_role,
-            } : undefined}
-            initialSummary={sessionSummary}
-          />
-        </section>
-      </main>
+      <AppShell current="conversations" contentClassName="page-content conversation-page">
+        <ConversationDetail
+          conversation={conversation}
+          initialMessages={messages}
+          mentorContext={mentorProfile ? {
+            currentLevel: mentorProfile.current_level,
+            targetRole: mentorProfile.target_role,
+          } : undefined}
+          interviewContext={conversation.mode === "interview" && mentorProfile ? {
+            interviewType: typeof conversation.metadata.interview_type === "string" ? conversation.metadata.interview_type : "technical",
+            interviewFocus: typeof conversation.metadata.interview_focus === "string" ? conversation.metadata.interview_focus : null,
+            currentLevel: mentorProfile.current_level,
+            targetRole: mentorProfile.target_role,
+          } : undefined}
+          initialSummary={sessionSummary}
+        />
+      </AppShell>
     );
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 401) redirect("/login");
     if (cause instanceof ApiError && cause.status === 404) notFound();
     return (
-      <main className="page-shell app-page">
-        <AppHeader current="conversations" />
-        <section className="page-content conversation-shell conversation-empty" id="main-content" tabIndex={-1} role="alert">
+      <AppShell current="conversations" contentClassName="page-content conversation-shell conversation-empty">
+        <div role="alert">
           <h1>Conversation unavailable</h1>
           <p className="muted">We could not load this conversation. Please try again.</p>
-        </section>
-      </main>
+        </div>
+      </AppShell>
     );
   }
 }

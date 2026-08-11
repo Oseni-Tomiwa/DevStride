@@ -90,6 +90,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .page-shell { padding: var(--space-6) clamp(1rem, 4vw, 4rem) 4rem; }
 .app-page { display: block; }
+.app-shell { position: relative; display: flex; min-height: 100vh; flex-direction: column; }
+.app-main { min-height: 0; flex: 1 0 auto; }
 .app-header {
   position: relative;
   width: min(var(--content), 100%);
@@ -120,6 +122,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .page-content, .dashboard-shell, .conversation-shell { width: min(100%, var(--content)); margin: 0 auto; }
 .page-content { max-width: var(--content-reading); }
 .conversation-page { max-width: 66rem; }
+.app-footer {
+  width: min(100%, var(--content));
+  margin: var(--space-12) auto 0;
+  padding: var(--space-6) 0 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: var(--space-6);
+  border-top: 1px solid var(--line);
+  color: var(--ink-500);
+  font-size: 0.82rem;
+}
+.app-footer p { margin: 0; }
+.app-footer-copy { display: grid; gap: 0.2rem; }
+.app-footer-brand { width: fit-content; color: var(--ink-900); text-decoration: none; font-size: 0.95rem; letter-spacing: -0.025em; }
+.app-footer-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-4); }
+.app-footer-nav a { color: var(--ink-600); text-decoration: none; }
+.app-footer-nav a:hover { color: var(--blue-700); }
+.app-footer-meta { text-align: right; white-space: nowrap; }
 .muted { color: var(--ink-600); }
 .eyebrow { margin-bottom: 0.6rem; color: var(--blue-700); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
 .loading { padding: var(--space-12); color: var(--ink-600); text-align: center; }
@@ -208,6 +229,8 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .interview-setup .form-actions, .team-setup .form-actions { justify-content: flex-start; padding-top: var(--space-2); }
 
 /* Profile / onboarding */
+.page-heading { max-width: 42rem; margin-bottom: var(--space-8); }
+.page-heading h1 { margin-bottom: 0.65rem; }
 .onboarding-card { width: min(100%, 50rem); margin-inline: auto; padding: clamp(1.4rem, 3.5vw, 2.25rem); }
 .profile-form-intro { max-width: 38rem; margin-bottom: var(--space-6); }
 .profile-form-intro h1 { margin-bottom: 0.65rem; }
@@ -225,6 +248,14 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .profile-form-actions { justify-content: space-between; padding-top: var(--space-5); border-top: 1px solid var(--line); }
 .form-actions-note { max-width: 24rem; margin: 0; color: var(--ink-500); font-size: 0.82rem; }
 .profile-form-actions button { min-width: 11.5rem; }
+
+/* Account */
+.account-card { width: min(100%, 44rem); padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 96%); box-shadow: var(--shadow-sm); }
+.account-card h2 { margin-bottom: 0.4rem; }
+.account-card > div:first-child .muted { margin-bottom: 0; }
+.account-details { margin: var(--space-6) 0 0; }
+.account-details div { padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-subtle); }
+.account-details dd { overflow-wrap: anywhere; }
 
 /* Conversations */
 .conversation-header, .conversation-detail-header { margin-bottom: var(--space-6); }
@@ -346,6 +377,9 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
   .rating-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .memory-add-form { grid-template-columns: 1fr; align-items: stretch; }
   .memory-add-form button { width: 100%; }
+  .app-footer { grid-template-columns: 1fr; align-items: start; gap: var(--space-4); }
+  .app-footer-nav { justify-content: flex-start; }
+  .app-footer-meta { text-align: left; }
 }
 @media (max-width: 430px) {
   .app-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }

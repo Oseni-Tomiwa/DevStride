@@ -7,10 +7,13 @@ describe("protected routes", () => {
     expect(isProtectedPath("/dashboard")).toBe(true);
     expect(isProtectedPath("/dashboard/settings")).toBe(true);
     expect(isProtectedPath("/onboarding")).toBe(true);
+    expect(isProtectedPath("/profile")).toBe(true);
+    expect(isProtectedPath("/profile/preferences")).toBe(true);
     expect(isProtectedPath("/account")).toBe(true);
     expect(isProtectedPath("/conversations")).toBe(true);
     expect(isProtectedPath("/conversations/123")).toBe(true);
     expect(isProtectedPath("/progress")).toBe(true);
+    expect(isProtectedPath("/memories")).toBe(true);
   });
 
   it("leaves public paths accessible", () => {
