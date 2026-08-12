@@ -390,6 +390,18 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .memory-edit textarea { min-height: 5rem; }
 .memory-empty { margin-top: var(--space-2); }
 
+/* Experimental Live Interview spike */
+.live-spike { display: grid; gap: var(--space-5); }
+.live-spike-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-5); }
+.live-spike-header h1 { margin-bottom: 0.4rem; font-size: clamp(2rem, 5vw, 3.2rem); }
+.live-spike-controls { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.live-spike-controls button { min-width: 10rem; }
+.live-spike-transcript { min-height: 14rem; padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 96%); box-shadow: var(--shadow-sm); }
+.live-spike-transcript h2 { margin-bottom: var(--space-5); }
+.live-spike-transcript p { margin: 0; padding: 0.65rem 0; border-top: 1px solid var(--line); }
+.live-spike-transcript p:first-of-type { border-top: 0; }
+.live-spike audio { width: 100%; }
+
 /* Goals */
 .goals-page { max-width: 68rem; }
 .goals-content, .goal-detail, .goal-creation { display: grid; gap: var(--space-6); }
