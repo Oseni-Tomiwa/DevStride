@@ -609,6 +609,89 @@ async def test_goal_practice_launch_enforces_owned_goal_and_matching_focus(
 
 
 @pytest.mark.asyncio
+async def test_goal_progress_is_linked_owned_and_non_mutating(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, factory = integration_client
+    owner_id = uuid4()
+    other_id = uuid4()
+    headers = auth_headers(signing_key, owner_id)
+    other_headers = auth_headers(signing_key, other_id)
+    created = cast(Response, client.post("/api/v1/goals", headers=headers, json=goal_payload()))
+    goal_id = UUID(created.json()["id"])
+    focus_id = UUID(created.json()["focus_areas"][0]["id"])
+    other_goal = cast(
+        Response, client.post("/api/v1/goals", headers=other_headers, json=goal_payload())
+    )
+
+    launched = cast(
+        Response,
+        client.post(
+            f"/api/v1/goals/{goal_id}/focus-areas/{focus_id}/practice",
+            headers=headers,
+        ),
+    )
+    conversation_id = UUID(launched.json()["id"])
+    user_message = cast(
+        Response,
+        client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers,
+            json={"content": "Explain the API trade-off."},
+        ),
+    )
+    assert user_message.status_code == 201
+
+    async with factory() as session:
+        conversation = await session.get(Conversation, conversation_id)
+        assert conversation is not None
+        conversation.metadata_ = {"mentor_completed": True}
+        session.add(
+            SessionSummary(
+                conversation_id=conversation_id,
+                user_id=owner_id,
+                session_mode="mentor",
+                summary="Observed linked practice",
+                topics_covered=["APIs"],
+                strengths=["Clear trade-offs"],
+                weaknesses=["Explain failure handling"],
+                recommended_next_steps=["Practice failure handling"],
+            )
+        )
+        await session.commit()
+
+    before = cast(Response, client.get(f"/api/v1/goals/{goal_id}/progress", headers=headers))
+    assert before.status_code == 200
+    body = before.json()
+    assert body["linked_practiced_sessions"] == 1
+    assert body["linked_completed_structured_sessions"] == 1
+    assert body["linked_user_turns"] == 1
+    assert body["focus_areas"][0]["linked_practiced_sessions"] == 1
+    assert body["recent_strength"]["text"] == "Clear trade-offs"
+    assert body["recent_weakness"]["text"] == "Explain failure handling"
+    assert body["next_action"]["focus_area_id"] == str(focus_id)
+
+    unowned = cast(
+        Response,
+        client.get(
+            f"/api/v1/goals/{goal_id}/progress",
+            headers=other_headers,
+        ),
+    )
+    assert unowned.status_code == 404
+
+    async with factory() as session:
+        persisted_goal = await session.get(Goal, goal_id)
+        assert persisted_goal is not None
+        assert persisted_goal.status == "active"
+        persisted_focus = await session.get(GoalFocusArea, focus_id)
+        assert persisted_focus is not None
+        assert persisted_focus.status == "active"
+        assert await session.scalar(select(func.count(Conversation.id))) == 1
+        assert other_goal.status_code == 201
+
+
+@pytest.mark.asyncio
 async def test_conversation_focus_fk_is_nullable_and_sets_null_on_focus_delete(
     integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
 ) -> None:

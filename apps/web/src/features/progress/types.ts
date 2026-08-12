@@ -42,8 +42,10 @@ export type ContinuePractice = {
 };
 
 export type CurrentFocus = {
-  basis: "saved_goal" | "saved_weakness" | "communication_goal";
+  basis: "goal_focus_area" | "saved_goal" | "saved_weakness" | "communication_goal";
   label: string;
+  goal_id?: string | null;
+  focus_area_id?: string | null;
 };
 
 export type ProgressEvidence = {
@@ -66,12 +68,15 @@ export type RatingHistoryItem = {
 };
 
 export type RecommendationAction = {
-  kind: "continue_conversation" | "start_practice";
+  kind: "continue_conversation" | "start_practice" | "review_goal";
   mode: ProgressMode;
   conversation_id: string | null;
+  goal_id?: string | null;
+  focus_area_id?: string | null;
   interview_type: string | null;
   interview_focus: string | null;
   team_scenario: string | null;
+  team_difficulty?: string | null;
 };
 
 export type ProgressRecommendation = {
@@ -98,4 +103,5 @@ export type ProgressSummary = {
   recurring_weaknesses: ProgressEvidence[];
   rating_history: RatingHistoryItem[];
   recommendation: ProgressRecommendation;
+  goal_progress?: import("../goals/types").GoalProgress | null;
 };

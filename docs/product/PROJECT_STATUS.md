@@ -95,9 +95,11 @@ configuration and deployment checks.
 - Goal-aware practice launch is backend-complete: active focus areas create new
   owned Mentor, Interview, or Team conversations from server-stored validated
   configuration and persist the optional focus-area association.
-- Preview acceptance/persistence, goal-aware Progress recommendations,
-  Dashboard integration, and the `/goals` frontend remain intentionally
-  unimplemented.
+- Goal-aware Progress backend integration is complete: explicitly linked
+  practice, focus-area completion, bounded linked evidence, and deterministic
+  Goal next actions are available without changing the Dashboard UI.
+- Preview acceptance/persistence, Dashboard integration, and the `/goals`
+  frontend remain intentionally unimplemented.
 
 ## Planned
 

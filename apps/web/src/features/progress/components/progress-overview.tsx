@@ -1,6 +1,7 @@
 import Link from "next/link";
 import React from "react";
 
+import type { GoalProgress } from "../../goals/types";
 import type {
   ContinuePractice,
   ProgressEvidence,
@@ -106,6 +107,7 @@ function recommendationHref(recommendation: ProgressRecommendation): string {
   if (recommendation.action.kind === "continue_conversation" && recommendation.action.conversation_id) {
     return `/conversations/${recommendation.action.conversation_id}`;
   }
+  if (recommendation.action.kind === "review_goal" || recommendation.action.goal_id) return "/goals";
   if (recommendation.action.mode === "interview") return "/dashboard#interview-practice";
   if (recommendation.action.mode === "team") return "/dashboard#team-practice";
   return "/dashboard#mentor-practice";
@@ -113,6 +115,7 @@ function recommendationHref(recommendation: ProgressRecommendation): string {
 
 function recommendationActionLabel(recommendation: ProgressRecommendation): string {
   if (recommendation.action.kind === "continue_conversation") return "Continue practice";
+  if (recommendation.action.kind === "review_goal") return "Open Goal";
   if (recommendation.action.mode === "interview") return "Start Mock Interview";
   if (recommendation.action.mode === "team") return "Start Team Practice";
   return "Start Mentor Mode";
@@ -345,6 +348,7 @@ export function ProgressOverview({ summary, compact = false }: ProgressOverviewP
   if (compact) {
     return (
       <div className="dashboard-intelligence">
+        {summary.goal_progress && <GoalProgressCard progress={summary.goal_progress} compact />}
         <RecommendationCard recommendation={summary.recommendation} />
         {summary.continue_practice && <ContinuePracticeCard practice={summary.continue_practice} />}
         <ProgressSnapshot summary={summary} showBreakdown={false} />
@@ -356,6 +360,7 @@ export function ProgressOverview({ summary, compact = false }: ProgressOverviewP
 
   return (
     <div className="progress-intelligence">
+      {summary.goal_progress && <GoalProgressCard progress={summary.goal_progress} />}
       <ProgressSnapshot summary={summary} showBreakdown />
       <RecommendationCard recommendation={summary.recommendation} />
       {summary.continue_practice && <ContinuePracticeCard practice={summary.continue_practice} />}
@@ -379,4 +384,8 @@ export function ProgressOverview({ summary, compact = false }: ProgressOverviewP
       </section>
     </div>
   );
+}
+
+function GoalProgressCard({ progress, compact = false }: { progress: GoalProgress; compact?: boolean }) {
+  return <section className="goal-progress-card" aria-labelledby="active-goal-title"><div><p className="eyebrow">Active Goal</p><h2 id="active-goal-title">{progress.title}</h2><p className="muted">{progress.completed_focus_areas} of {progress.total_focus_areas} focus areas marked complete</p>{progress.next_action && <p className="field-hint">Next: {progress.next_action.title}</p>}</div><Link href="/goals" className="landing-button landing-button-secondary">{compact ? "View Goal" : "Open Goals"}</Link></section>;
 }

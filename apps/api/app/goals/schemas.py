@@ -111,6 +111,17 @@ class PracticeLaunchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PlanPreviewGoalDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(max_length=160)
+    description: str | None = Field(default=None, max_length=1000)
+    goal_type: GoalType
+
+    _clean_title = field_validator("title")(_clean_required)
+    _clean_description = field_validator("description")(_clean_optional)
+
+
 class PreviewFocusAreaBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -118,6 +129,7 @@ class PreviewFocusAreaBase(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     suggested_position: int = Field(ge=0, le=5)
     source: PreviewSource
+    reason: str = Field(min_length=1, max_length=300)
 
 
 class MentorPreviewFocusArea(PreviewFocusAreaBase):
@@ -146,6 +158,7 @@ class PlanPreviewResponse(BaseModel):
 
     heading: Literal["Suggested focus areas"] = "Suggested focus areas"
     basis: Literal["Based on your Goal and Profile"] = "Based on your Goal and Profile"
+    goal_draft: PlanPreviewGoalDraft
     template_suggestions: list[PreviewFocusArea] = Field(min_length=1, max_length=6)
     memory_suggestions: list[PreviewFocusArea] = Field(max_length=3)
 

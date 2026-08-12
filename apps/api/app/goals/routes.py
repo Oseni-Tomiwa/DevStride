@@ -43,6 +43,8 @@ from app.goals.service import (
     update_focus_area,
     update_goal,
 )
+from app.progress.schemas import GoalProgressResponse
+from app.progress.service import GoalProgressNotFoundError, get_goal_progress
 
 router = APIRouter(prefix="/api/v1/goals", tags=["goals"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
@@ -92,6 +94,14 @@ async def get(goal_id: UUID, session: Session, current_user: User) -> GoalRespon
     try:
         return GoalResponse.model_validate(await get_goal(session, current_user.id, goal_id))
     except GoalNotFoundError:
+        raise HTTPException(404, "Goal not found") from None
+
+
+@router.get("/{goal_id}/progress", response_model=GoalProgressResponse)
+async def progress(goal_id: UUID, session: Session, current_user: User) -> GoalProgressResponse:
+    try:
+        return await get_goal_progress(session, current_user.id, goal_id)
+    except GoalProgressNotFoundError:
         raise HTTPException(404, "Goal not found") from None
 
 

@@ -19,6 +19,7 @@ from app.goals.plan_preview import build_plan_preview
 from app.goals.schemas import (
     FocusAreaCreateRequest,
     GoalCreateRequest,
+    PlanPreviewGoalDraft,
     PlanPreviewRequest,
     PlanPreviewResponse,
 )
@@ -487,10 +488,13 @@ async def test_preview_service_loads_only_owned_profile_and_active_memories(
 def test_each_goal_type_has_a_small_stable_template(goal_type: str, expected_mode: str) -> None:
     preview = build_plan_preview(preview_request(goal_type), make_profile(), [])
 
+    assert preview.goal_draft.goal_type == goal_type
+    assert preview.goal_draft.title == "Prepare for my next role"
     assert len(preview.template_suggestions) == 3
     assert preview.template_suggestions[0].practice_mode == expected_mode
     assert [item.suggested_position for item in preview.template_suggestions] == [0, 1, 2]
     assert all(item.source == "template" for item in preview.template_suggestions)
+    assert all(item.reason for item in preview.template_suggestions)
 
 
 def test_profile_role_and_known_stack_personalize_interview_preview() -> None:
@@ -561,6 +565,9 @@ def test_memory_suggestions_are_optional_separate_and_bounded() -> None:
     assert all(
         "Optional suggestion" in (item.description or "") for item in preview.memory_suggestions
     )
+    assert all(
+        item.reason.startswith("Optional saved context") for item in preview.memory_suggestions
+    )
     serialized = preview.model_dump()
     assert "Archived context" not in str(serialized)
     assert "Short sessions" not in str(serialized)
@@ -590,6 +597,22 @@ def test_plan_preview_is_deterministic_and_configs_reuse_acceptance_contracts() 
                 "practice_config": suggestion.practice_config.model_dump(),
             }
         )
+
+
+def test_preview_normalizes_duplicate_titles_and_reindexes_positions() -> None:
+    memories = [
+        make_memory("goal", "Same title"),
+        make_memory("goal", "Same title"),
+    ]
+
+    preview = build_plan_preview(preview_request(), make_profile(), memories)
+    suggestions = preview.template_suggestions + preview.memory_suggestions
+
+    assert len(suggestions) == 4
+    assert len({" ".join(item.title.split()).casefold() for item in suggestions}) == len(
+        suggestions
+    )
+    assert [item.suggested_position for item in suggestions] == list(range(len(suggestions)))
 
 
 def test_custom_goal_uses_explicit_title_without_inventing_specialization() -> None:
@@ -629,11 +652,13 @@ def test_plan_preview_response_contract_caps_suggestions() -> None:
     suggestion = build_plan_preview(preview_request(), make_profile(), []).template_suggestions[0]
     with pytest.raises(ValidationError):
         PlanPreviewResponse(
+            goal_draft=PlanPreviewGoalDraft.model_validate(preview_request()),
             template_suggestions=[suggestion] * 7,
             memory_suggestions=[],
         )
     with pytest.raises(ValidationError):
         PlanPreviewResponse(
+            goal_draft=PlanPreviewGoalDraft.model_validate(preview_request()),
             template_suggestions=[suggestion] * 4,
             memory_suggestions=[suggestion.model_copy(update={"source": "memory"})] * 3,
         )

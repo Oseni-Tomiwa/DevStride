@@ -175,6 +175,46 @@ describe("DashboardPage", () => {
     expect(screen.queryByText("Recent area to improve")).not.toBeInTheDocument();
   });
 
+  it("shows the active Goal summary when Goal progress is available", async () => {
+    get.mockResolvedValueOnce(profile).mockResolvedValueOnce({
+      ...progress,
+      goal_progress: {
+        goal_id: "goal-1",
+        title: "Backend depth",
+        status: "active",
+        total_focus_areas: 2,
+        active_focus_areas: 2,
+        completed_focus_areas: 1,
+        archived_focus_areas: 0,
+        linked_practiced_sessions: 1,
+        linked_completed_structured_sessions: 0,
+        linked_user_turns: 2,
+        linked_practice_last_30_days: 1,
+        current_focus: { basis: "goal_focus_area", label: "APIs", goal_id: "goal-1", focus_area_id: "focus-1" },
+        focus_areas: [],
+        latest_linked_practice: null,
+        recent_strength: null,
+        recent_weakness: null,
+        recurring_strengths: [],
+        recurring_weaknesses: [],
+        rating_history: [],
+        next_action: {
+          activity: "mentor",
+          title: "Practice APIs",
+          reason: "This is your current focus.",
+          focus_area_id: "focus-1",
+          evidence: [],
+          action: { kind: "start_practice", mode: "mentor", conversation_id: null, goal_id: "goal-1", focus_area_id: "focus-1", interview_type: null, interview_focus: null, team_scenario: null, team_difficulty: null },
+        },
+      },
+    });
+
+    render(await DashboardPage());
+
+    expect(screen.getByRole("heading", { name: "Backend depth" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View Goal" })).toHaveAttribute("href", "/goals");
+  });
+
   it("starts Mentor Mode from the dashboard", async () => {
     get.mockResolvedValueOnce({ ...profile, preferred_stack: ["Python"] }).mockResolvedValueOnce(progress);
     createConversation.mockReturnValueOnce(new Promise(() => {}));

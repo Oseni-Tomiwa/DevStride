@@ -74,6 +74,7 @@ goal-aware recommendations are not implemented yet.
 | DELETE | `/api/v1/goals/{goal_id}/focus-areas/{focus_area_id}` | 204 | Archives an owned focus area. |
 | PUT | `/api/v1/goals/{goal_id}/focus-areas/order` | 200 | Transactionally reorders the complete non-archived focus-area list. |
 | POST | `/api/v1/goals/{goal_id}/focus-areas/{focus_area_id}/practice` | 201 | Creates a new owned conversation from an active focus area's server-stored practice configuration and links it to that focus area. |
+| GET | `/api/v1/goals/{goal_id}/progress` | 200 | Returns deterministic, ownership-scoped Goal progress from explicitly linked conversations and summaries. |
 
 Clients never submit `user_id`, positions, prompts, provider/model choices, or
 system roles. Mentor config is empty. Interview config uses the current
@@ -81,13 +82,15 @@ system roles. Mentor config is empty. Interview config uses the current
 an approved `team_scenario` and `team_difficulty`. Unsupported keys are rejected.
 Cross-user access uses ownership-safe 404 responses.
 
-Plan preview accepts only `title`, optional `description`, and `goal_type`. It
-uses owned Profile fields and, when available, active owned `goal`, `skill`, and
-`weakness` memories. Template and memory suggestions are clearly separated,
-globally ordered, capped at six, and validated by the same Mentor, Interview,
-and Team configuration contracts used for accepted focus areas. Saved context
-is optional advisory copy: it does not become a goal or focus area, and no
-memory IDs, confidence, source metadata, provider settings, or prompt data are
+Plan preview accepts only `title`, optional `description`, and `goal_type`, and
+echoes that normalized draft in `goal_draft`. It uses owned Profile fields and,
+when available, active owned `goal`, `skill`, and `weakness` memories. Template
+and memory suggestions are clearly separated, globally ordered, capped at six,
+have deterministic user-facing reasons, contain no duplicate titles after
+normalization, and are validated by the same Mentor, Interview, and Team
+configuration contracts used for accepted focus areas. Saved context is
+optional advisory copy: it does not become a goal or focus area, and no memory
+IDs, confidence, source metadata, provider settings, or prompt data are
 returned. Preview makes no AI call and writes no records.
 
 Practice launch has an intentionally empty request contract: clients cannot
@@ -98,6 +101,16 @@ conversation; previous linked sessions are never silently reused. Interview
 and Team conversations retain their existing idempotent kickoff endpoints after
 the frontend navigates to the returned conversation ID. Historical and normally
 created conversations remain unlinked.
+
+Goal progress reports focus-area counts, user-confirmed focus-area completion,
+linked practiced sessions and user turns, recent linked activity, bounded
+summary evidence, compatible Interview rating history, and a deterministic
+next action. Only conversations linked through `focus_area_id` are included;
+historical conversations are not matched retroactively. Archived focus areas
+are excluded from the focus-area detail list and current focus, while the Goal
+itself is never completed automatically. Global `/api/v1/progress` retains its
+existing fields and additively returns `goal_progress` when the caller has an
+active Goal; its Goal focus outranks saved Memory and Profile fallback focus.
 
 ## Session summaries
 

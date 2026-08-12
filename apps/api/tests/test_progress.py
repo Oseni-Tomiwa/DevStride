@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import cast
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -12,13 +13,20 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations.models import Conversation
 from app.database.session import get_db_session
+from app.goals import repository as goals_repository
+from app.goals.models import Goal, GoalFocusArea
 from app.main import app
 from app.memory.models import MemoryRecord
 from app.profiles import repository as profile_repository
 from app.profiles.models import Profile
 from app.progress import repository
 from app.progress.repository import ProgressRow, SummaryEvidenceRow
-from app.progress.service import build_progress_summary, get_progress_summary, normalize_evidence
+from app.progress.service import (
+    build_goal_progress,
+    build_progress_summary,
+    get_progress_summary,
+    normalize_evidence,
+)
 from app.session_summaries.models import SessionSummary
 
 client = TestClient(app)
@@ -121,6 +129,36 @@ def make_profile(goal: str = "technical_interviews") -> Profile:
     profile.created_at = NOW
     profile.updated_at = NOW
     return profile
+
+
+def make_goal_with_focus(
+    *, status: str = "active", focus_statuses: list[str] | None = None
+) -> Goal:
+    goal = Goal(
+        id=uuid4(),
+        user_id=USER_ID,
+        title="Backend development plan",
+        goal_type="technical_growth",
+        status=status,
+    )
+    goal.created_at = NOW
+    goal.updated_at = NOW
+    statuses = focus_statuses or ["active"]
+    goal.focus_areas = []
+    for position, focus_status in enumerate(statuses):
+        focus = GoalFocusArea(
+            id=uuid4(),
+            goal_id=goal.id,
+            title=f"Focus {position}",
+            practice_mode="mentor",
+            practice_config={},
+            position=position,
+            status=focus_status,
+        )
+        focus.created_at = NOW + timedelta(seconds=position)
+        focus.updated_at = focus.created_at
+        goal.focus_areas.append(focus)
+    return goal
 
 
 def make_memory(category: str, content: str, *, status: str = "active") -> MemoryRecord:
@@ -416,8 +454,134 @@ def test_recommendation_tie_breaking_and_injected_clock_are_deterministic() -> N
     assert expired.recurring_weaknesses[0].text == "Weakness A"
 
 
+def test_goal_progress_with_no_linked_practice_is_observational_and_actionable() -> None:
+    goal = make_goal_with_focus(focus_statuses=["active", "completed", "archived"])
+
+    progress = build_goal_progress(goal=goal, rows=[], summary_rows=[], now=NOW)
+
+    assert progress.total_focus_areas == 3
+    assert progress.active_focus_areas == 1
+    assert progress.completed_focus_areas == 1
+    assert progress.archived_focus_areas == 1
+    assert progress.linked_practiced_sessions == 0
+    assert progress.linked_user_turns == 0
+    assert progress.current_focus is not None
+    assert progress.current_focus.focus_area_id == goal.focus_areas[0].id
+    assert progress.next_action.action.kind == "start_practice"
+    assert progress.next_action.focus_area_id == goal.focus_areas[0].id
+
+
+def test_goal_progress_counts_only_explicit_links_and_user_practice() -> None:
+    goal = make_goal_with_focus(focus_statuses=["active", "completed"])
+    linked = make_row("mentor", user_turns=2, metadata={"mentor_completed": True})
+    linked.conversation.focus_area_id = goal.focus_areas[0].id
+    kickoff = make_row("interview", message_count=1, metadata={"interview_started": True})
+    kickoff.conversation.focus_area_id = goal.focus_areas[1].id
+    unlinked = make_row("mentor", user_turns=4, metadata={"mentor_completed": True})
+
+    progress = build_goal_progress(
+        goal=goal,
+        rows=[linked, kickoff, unlinked],
+        summary_rows=[],
+        now=NOW,
+    )
+
+    assert progress.linked_practiced_sessions == 1
+    assert progress.linked_completed_structured_sessions == 1
+    assert progress.linked_user_turns == 2
+    assert progress.focus_areas[0].linked_practiced_sessions == 1
+    assert progress.focus_areas[1].linked_practiced_sessions == 0
+
+
+def test_goal_progress_current_focus_is_position_created_at_uuid_ordered() -> None:
+    goal = make_goal_with_focus(focus_statuses=["completed", "active", "active"])
+    goal.focus_areas[1].position = 0
+    goal.focus_areas[2].position = 0
+    goal.focus_areas[2].created_at = goal.focus_areas[1].created_at - timedelta(seconds=1)
+
+    progress = build_goal_progress(goal=goal, rows=[], summary_rows=[], now=NOW)
+
+    assert progress.current_focus is not None
+    assert progress.current_focus.focus_area_id == goal.focus_areas[2].id
+
+
+def test_goal_progress_evidence_and_recurring_weakness_are_linked_only() -> None:
+    goal = make_goal_with_focus()
+    newest = make_row("mentor", user_turns=1, days_ago=0, metadata={"mentor_completed": True})
+    newest.conversation.focus_area_id = goal.focus_areas[0].id
+    older = make_row("mentor", user_turns=1, days_ago=2, metadata={"mentor_completed": True})
+    older.conversation.focus_area_id = goal.focus_areas[0].id
+    unrelated = make_row("mentor", user_turns=1, days_ago=1)
+    summaries = [
+        make_summary_row(newest.conversation, weaknesses=["Explain trade-offs"]),
+        make_summary_row(older.conversation, days_ago=2, weaknesses=["explain trade-offs."]),
+        make_summary_row(unrelated.conversation, weaknesses=["Private unrelated weakness"]),
+    ]
+
+    progress = build_goal_progress(
+        goal=goal, rows=[newest, older, unrelated], summary_rows=summaries, now=NOW
+    )
+
+    assert progress.recurring_weaknesses[0].occurrences == 2
+    assert "Private unrelated weakness" not in str(progress.model_dump())
+    assert progress.next_action.reason.startswith("Explain trade-offs")
+
+
+def test_goal_progress_incomplete_practice_wins_next_action() -> None:
+    goal = make_goal_with_focus()
+    row = make_row("mentor", user_turns=1, days_ago=1)
+    row.conversation.focus_area_id = goal.focus_areas[0].id
+
+    progress = build_goal_progress(goal=goal, rows=[row], summary_rows=[], now=NOW)
+
+    assert progress.next_action.activity == "continue"
+    assert progress.next_action.action.kind == "continue_conversation"
+    assert progress.next_action.action.conversation_id == row.conversation.id
+
+
+def test_goal_progress_does_not_auto_complete_goal_without_active_focus() -> None:
+    goal = make_goal_with_focus(focus_statuses=["completed", "archived"])
+
+    progress = build_goal_progress(goal=goal, rows=[], summary_rows=[], now=NOW)
+
+    assert progress.current_focus is None
+    assert progress.next_action.action.kind == "review_goal"
+    assert goal.status == "active"
+
+
+def test_active_goal_focus_outranks_memory_and_profile_in_global_progress() -> None:
+    goal = make_goal_with_focus()
+    memory = make_memory("goal", "Old saved goal")
+    summary = build(rows=[], memories=[memory], profile=make_profile(), now=NOW)
+    with_goal = build_progress_summary(
+        rows=[],
+        summary_rows=[],
+        memories=[memory],
+        profile=make_profile(),
+        now=NOW,
+        active_goal=goal,
+    )
+
+    assert summary.current_focus is not None
+    assert summary.current_focus.basis == "saved_goal"
+    assert with_goal.current_focus is not None
+    assert with_goal.current_focus.basis == "goal_focus_area"
+    assert with_goal.goal_progress is not None
+    assert with_goal.recommendation.action.focus_area_id == goal.focus_areas[0].id
+
+
 def test_progress_requires_authentication() -> None:
     response = cast(Response, client.get("/api/v1/progress"))  # pyright: ignore[reportUnknownMemberType]
+    assert response.status_code == 401
+
+
+def test_goal_progress_requires_authentication() -> None:
+    response = cast(
+        Response,
+        client.get(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/goals/{uuid4()}/progress"
+        ),
+    )
     assert response.status_code == 401
 
 
@@ -457,6 +621,7 @@ def test_progress_api_scopes_every_query_and_retains_old_fields(
     monkeypatch.setattr(repository, "get_recent_summary_evidence", fake_summaries)
     monkeypatch.setattr(repository, "get_active_focus_memories", fake_memories)
     monkeypatch.setattr(profile_repository, "get_profile_by_user_id", fake_profile)
+    monkeypatch.setattr(goals_repository, "get_active_owned", AsyncMock(return_value=None))
     app.dependency_overrides[get_current_user] = lambda: current_user
     app.dependency_overrides[get_db_session] = override_db
     try:
@@ -498,6 +663,7 @@ async def test_get_progress_summary_uses_injected_clock(monkeypatch: pytest.Monk
     monkeypatch.setattr(repository, "get_recent_summary_evidence", fake_summaries)
     monkeypatch.setattr(repository, "get_active_focus_memories", fake_memories)
     monkeypatch.setattr(profile_repository, "get_profile_by_user_id", fake_profile)
+    monkeypatch.setattr(goals_repository, "get_active_owned", AsyncMock(return_value=None))
 
     current = await get_progress_summary(cast(AsyncSession, object()), USER_ID, now=NOW)
     later = await get_progress_summary(

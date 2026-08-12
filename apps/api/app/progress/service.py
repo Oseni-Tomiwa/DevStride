@@ -2,13 +2,15 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.conversations.models import Conversation
 from app.conversations.title import DEFAULT_CONVERSATION_TITLE, derive_conversation_title
+from app.goals import repository as goals_repository
+from app.goals.models import Goal, GoalFocusArea
 from app.memory.models import MemoryRecord
 from app.profiles import repository as profile_repository
 from app.profiles.models import Profile
@@ -17,6 +19,9 @@ from app.progress.repository import ProgressRow, SummaryEvidenceRow
 from app.progress.schemas import (
     ContinuePracticeResponse,
     CurrentFocusResponse,
+    GoalNextActionResponse,
+    GoalProgressFocusAreaResponse,
+    GoalProgressResponse,
     ModeBreakdownResponse,
     ProgressActivityResponse,
     ProgressEvidenceResponse,
@@ -37,6 +42,10 @@ STRUCTURED_MODES = {"mentor", "interview", "team"}
 MODE_ORDER = {"mentor": 0, "interview": 1, "team": 2, "general": 3}
 TRAILING_PUNCTUATION = re.compile(r"[\s.!?,;:]+$")
 REPEATED_WHITESPACE = re.compile(r"\s+")
+
+
+class GoalProgressNotFoundError(Exception):
+    pass
 
 
 @dataclass(frozen=True)
@@ -302,14 +311,23 @@ COMMUNICATION_GOAL_LABELS = {
 
 
 def _current_focus(
-    memories: list[MemoryRecord], profile: Profile | None
+    memories: list[MemoryRecord], profile: Profile | None, goal_context: Goal | None = None
 ) -> CurrentFocusResponse | None:
-    goal = next(
+    if goal_context is not None and goal_context.status == "active":
+        focus = _active_goal_focus(goal_context)
+        if focus is not None:
+            return CurrentFocusResponse(
+                basis="goal_focus_area",
+                label=focus.title,
+                goal_id=goal_context.id,
+                focus_area_id=focus.id,
+            )
+    saved_goal = next(
         (item for item in memories if item.status == "active" and item.category == "goal"),
         None,
     )
-    if goal is not None:
-        return CurrentFocusResponse(basis="saved_goal", label=goal.content)
+    if saved_goal is not None:
+        return CurrentFocusResponse(basis="saved_goal", label=saved_goal.content)
     weakness = next(
         (item for item in memories if item.status == "active" and item.category == "weakness"),
         None,
@@ -351,6 +369,232 @@ def _start_action(
         interview_type=interview_type or _metadata_value(metadata, "interview_type"),
         interview_focus=_metadata_value(metadata, "interview_focus"),
         team_scenario=_metadata_value(metadata, "team_scenario"),
+        team_difficulty=_metadata_value(metadata, "team_difficulty"),
+    )
+
+
+def _active_goal_focus(goal: Goal) -> GoalFocusArea | None:
+    active = [focus for focus in goal.focus_areas if focus.status == "active"]
+    return min(active, key=lambda item: (item.position, item.created_at, item.id), default=None)
+
+
+def _focus_start_action(goal: Goal, focus: GoalFocusArea) -> RecommendationActionResponse:
+    config = focus.practice_config
+    return RecommendationActionResponse(
+        kind="start_practice",
+        mode=cast(ProgressMode, focus.practice_mode),
+        goal_id=goal.id,
+        focus_area_id=focus.id,
+        interview_type=_metadata_value(config, "interview_type"),
+        interview_focus=_metadata_value(config, "interview_focus"),
+        team_scenario=_metadata_value(config, "team_scenario"),
+        team_difficulty=_metadata_value(config, "team_difficulty"),
+    )
+
+
+def _session_response(row: ProgressRow) -> ProgressSessionResponse:
+    conversation = row.conversation
+    metadata = conversation.metadata_ or {}
+    completed = is_structured_completed(row)
+    return ProgressSessionResponse(
+        id=conversation.id,
+        title=_session_title(conversation, row.first_user_content),
+        mode=cast(ProgressMode, conversation.mode),
+        interview_type=_metadata_value(metadata, "interview_type"),
+        interview_focus=_metadata_value(metadata, "interview_focus"),
+        team_scenario=_metadata_value(metadata, "team_scenario"),
+        updated_at=conversation.updated_at,
+        message_count=row.message_count,
+        has_messages=row.message_count > 0,
+        interview_started=metadata.get("interview_started") is True,
+        interview_completed=metadata.get("interview_completed") is True,
+        has_final_assessment=metadata.get("final_assessment_message_id") is not None,
+        summary_available=row.summary_available,
+        user_turns=row.user_turns,
+        practiced=row.user_turns > 0,
+        structured_completed=completed,
+    )
+
+
+def _goal_next_action(
+    goal: Goal,
+    focus: GoalFocusArea | None,
+    rows: list[ProgressRow],
+    summary_rows: list[SummaryEvidenceRow],
+    now: datetime,
+) -> GoalNextActionResponse:
+    if focus is not None:
+        focus_rows = [row for row in rows if row.conversation.focus_area_id == focus.id]
+        continue_candidate = _continue_candidate(focus_rows, now)
+        if continue_candidate is not None and continue_candidate.incomplete_structured:
+            return GoalNextActionResponse(
+                activity="continue",
+                title=f"Continue {continue_candidate.response.title}",
+                reason="You started this focus-area practice recently and have not completed it.",
+                focus_area_id=focus.id,
+                evidence=[
+                    f"Your latest user turn was within the last {CONTINUE_WINDOW_DAYS} days."
+                ],
+                action=RecommendationActionResponse(
+                    kind="continue_conversation",
+                    mode=continue_candidate.response.mode,
+                    conversation_id=continue_candidate.response.conversation_id,
+                    goal_id=goal.id,
+                    focus_area_id=focus.id,
+                ),
+            )
+
+        focus_summaries = [
+            row for row in summary_rows if row.conversation.focus_area_id == focus.id
+        ]
+        _, recurring_weaknesses = derive_summary_evidence(focus_summaries, "weaknesses")
+        if recurring_weaknesses:
+            weakness = recurring_weaknesses[0]
+            return GoalNextActionResponse(
+                activity=cast(RecommendationActivity, focus.practice_mode),
+                title=f"Work on {focus.title}",
+                reason=f"{weakness.text} appeared in {weakness.occurrences} linked summaries.",
+                focus_area_id=focus.id,
+                evidence=[
+                    f"Observed across {weakness.occurrences} summaries in linked "
+                    f"{focus.practice_mode} practice."
+                ],
+                action=_focus_start_action(goal, focus),
+            )
+
+        low_ratings = _repeated_low_ratings(focus_summaries)
+        if low_ratings:
+            signal = low_ratings[0]
+            return GoalNextActionResponse(
+                activity=cast(RecommendationActivity, focus.practice_mode),
+                title=f"Continue {focus.title}",
+                reason=(
+                    f"{signal.dimension.title()} was rated 2/5 or lower in "
+                    f"{signal.occurrences} comparable linked Interview summaries."
+                ),
+                focus_area_id=focus.id,
+                evidence=[
+                    "These are recorded practice ratings, not proof of mastery or readiness."
+                ],
+                action=_focus_start_action(goal, focus),
+            )
+
+        return GoalNextActionResponse(
+            activity=cast(RecommendationActivity, focus.practice_mode),
+            title=f"Start {focus.title}",
+            reason="This is the next active focus area in your development plan.",
+            focus_area_id=focus.id,
+            evidence=["The focus area remains active and is ready for practice."],
+            action=_focus_start_action(goal, focus),
+        )
+
+    return GoalNextActionResponse(
+        activity="mentor",
+        title="Review your development plan",
+        reason=(
+            "All focus areas are complete or archived; review the plan before choosing "
+            "what to do next."
+        ),
+        focus_area_id=None,
+        evidence=["The Goal remains user-controlled and was not completed automatically."],
+        action=RecommendationActionResponse(
+            kind="review_goal",
+            mode="mentor",
+            goal_id=goal.id,
+        ),
+    )
+
+
+def build_goal_progress(
+    *,
+    goal: Goal,
+    rows: list[ProgressRow],
+    summary_rows: list[SummaryEvidenceRow],
+    now: datetime,
+) -> GoalProgressResponse:
+    focus_ids = {focus.id for focus in goal.focus_areas}
+    linked_rows = [row for row in rows if row.conversation.focus_area_id in focus_ids]
+    linked_summaries = [row for row in summary_rows if row.conversation.focus_area_id in focus_ids]
+    practiced_rows = [row for row in linked_rows if row.user_turns > 0]
+    recent_cutoff = now - timedelta(days=RECENT_ACTIVITY_WINDOW_DAYS)
+    current_focus = _active_goal_focus(goal) if goal.status == "active" else None
+    recent_strength, recurring_strengths = derive_summary_evidence(linked_summaries, "strengths")
+    recent_weakness, recurring_weaknesses = derive_summary_evidence(linked_summaries, "weaknesses")
+    focus_responses: list[GoalProgressFocusAreaResponse] = []
+    for focus in sorted(
+        (item for item in goal.focus_areas if item.status != "archived"),
+        key=lambda item: (item.position, item.created_at, item.id),
+    ):
+        focus_rows = [row for row in practiced_rows if row.conversation.focus_area_id == focus.id]
+        focus_summaries = [
+            row for row in linked_summaries if row.conversation.focus_area_id == focus.id
+        ]
+        focus_strength, _ = derive_summary_evidence(focus_summaries, "strengths")
+        focus_weakness, _ = derive_summary_evidence(focus_summaries, "weaknesses")
+        latest_at = max(
+            (row.last_user_message_at for row in focus_rows if row.last_user_message_at),
+            default=None,
+        )
+        focus_responses.append(
+            GoalProgressFocusAreaResponse(
+                focus_area_id=focus.id,
+                title=focus.title,
+                practice_mode=cast(StructuredProgressMode, focus.practice_mode),
+                status=cast(Literal["active", "completed"], focus.status),
+                linked_practiced_sessions=len(focus_rows),
+                linked_user_turns=sum(row.user_turns for row in focus_rows),
+                latest_practice_at=latest_at,
+                latest_summary_available=any(row.summary_available for row in focus_rows),
+                recent_strength=focus_strength,
+                recent_weakness=focus_weakness,
+            )
+        )
+    latest_row = max(
+        practiced_rows,
+        key=lambda row: (
+            row.last_user_message_at or row.conversation.updated_at,
+            str(row.conversation.id),
+        ),
+        default=None,
+    )
+    active_count = sum(focus.status == "active" for focus in goal.focus_areas)
+    completed_count = sum(focus.status == "completed" for focus in goal.focus_areas)
+    archived_count = sum(focus.status == "archived" for focus in goal.focus_areas)
+    return GoalProgressResponse(
+        goal_id=goal.id,
+        title=goal.title,
+        status=cast(Literal["active", "completed", "archived"], goal.status),
+        total_focus_areas=len(goal.focus_areas),
+        active_focus_areas=active_count,
+        completed_focus_areas=completed_count,
+        archived_focus_areas=archived_count,
+        linked_practiced_sessions=len(practiced_rows),
+        linked_completed_structured_sessions=sum(
+            is_structured_completed(row) for row in practiced_rows
+        ),
+        linked_user_turns=sum(row.user_turns for row in linked_rows),
+        linked_practice_last_30_days=sum(
+            row.last_user_message_at is not None and row.last_user_message_at >= recent_cutoff
+            for row in practiced_rows
+        ),
+        current_focus=(
+            CurrentFocusResponse(
+                basis="goal_focus_area",
+                label=current_focus.title,
+                goal_id=goal.id,
+                focus_area_id=current_focus.id,
+            )
+            if current_focus is not None
+            else None
+        ),
+        focus_areas=focus_responses,
+        latest_linked_practice=_session_response(latest_row) if latest_row else None,
+        recent_strength=recent_strength,
+        recent_weakness=recent_weakness,
+        recurring_strengths=recurring_strengths,
+        recurring_weaknesses=recurring_weaknesses,
+        rating_history=_rating_history(linked_summaries),
+        next_action=_goal_next_action(goal, current_focus, linked_rows, linked_summaries, now),
     )
 
 
@@ -495,6 +739,7 @@ def build_progress_summary(
     memories: list[MemoryRecord],
     profile: Profile | None,
     now: datetime,
+    active_goal: Goal | None = None,
 ) -> ProgressSummaryResponse:
     sessions: list[ProgressSessionResponse] = []
     completed_by_id: dict[UUID, bool] = {}
@@ -545,9 +790,36 @@ def build_progress_summary(
 
     recent_strength, recurring_strengths = derive_summary_evidence(summary_rows, "strengths")
     recent_weakness, recurring_weaknesses = derive_summary_evidence(summary_rows, "weaknesses")
-    focus = _current_focus(memories, profile)
+    focus = _current_focus(memories, profile, active_goal)
     continue_candidate = _continue_candidate(rows, now)
     low_ratings = _repeated_low_ratings(summary_rows)
+    goal_progress = (
+        build_goal_progress(
+            goal=active_goal,
+            rows=rows,
+            summary_rows=summary_rows,
+            now=now,
+        )
+        if active_goal is not None
+        else None
+    )
+    recommendation = _recommendation(
+        continue_candidate=continue_candidate,
+        current_focus=focus,
+        recurring_weaknesses=recurring_weaknesses,
+        low_ratings=low_ratings,
+        summary_rows=summary_rows,
+        profile=profile,
+    )
+    if goal_progress is not None:
+        next_action = goal_progress.next_action
+        recommendation = ProgressRecommendationResponse(
+            activity=next_action.activity,
+            title=next_action.title,
+            reason=next_action.reason,
+            evidence=next_action.evidence,
+            action=next_action.action,
+        )
 
     return ProgressSummaryResponse(
         total_sessions=len(rows),
@@ -564,14 +836,8 @@ def build_progress_summary(
         recurring_strengths=recurring_strengths,
         recurring_weaknesses=recurring_weaknesses,
         rating_history=_rating_history(summary_rows),
-        recommendation=_recommendation(
-            continue_candidate=continue_candidate,
-            current_focus=focus,
-            recurring_weaknesses=recurring_weaknesses,
-            low_ratings=low_ratings,
-            summary_rows=summary_rows,
-            profile=profile,
-        ),
+        recommendation=recommendation,
+        goal_progress=goal_progress,
     )
 
 
@@ -584,10 +850,30 @@ async def get_progress_summary(
     )
     memories = await repository.get_active_focus_memories(session, user_id)
     profile = await profile_repository.get_profile_by_user_id(session, user_id)
+    active_goal = await goals_repository.get_active_owned(session, user_id)
     return build_progress_summary(
         rows=rows,
         summary_rows=summary_rows,
         memories=memories,
         profile=profile,
+        now=now or datetime.now(UTC),
+        active_goal=active_goal,
+    )
+
+
+async def get_goal_progress(
+    session: AsyncSession, user_id: UUID, goal_id: UUID, now: datetime | None = None
+) -> GoalProgressResponse:
+    goal = await goals_repository.get_owned(session, user_id, goal_id)
+    if goal is None:
+        raise GoalProgressNotFoundError
+    rows = await repository.get_progress_rows(session, user_id)
+    summary_rows = await repository.get_recent_summary_evidence(
+        session, user_id, limit=SUMMARY_EVIDENCE_LIMIT
+    )
+    return build_goal_progress(
+        goal=goal,
+        rows=rows,
+        summary_rows=summary_rows,
         now=now or datetime.now(UTC),
     )

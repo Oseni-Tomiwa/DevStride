@@ -56,8 +56,10 @@ class ContinuePracticeResponse(BaseModel):
 
 
 class CurrentFocusResponse(BaseModel):
-    basis: Literal["saved_goal", "saved_weakness", "communication_goal"]
+    basis: Literal["goal_focus_area", "saved_goal", "saved_weakness", "communication_goal"]
     label: str
+    goal_id: UUID | None = None
+    focus_area_id: UUID | None = None
 
 
 class ProgressEvidenceResponse(BaseModel):
@@ -80,12 +82,15 @@ class RatingHistoryResponse(BaseModel):
 
 
 class RecommendationActionResponse(BaseModel):
-    kind: Literal["continue_conversation", "start_practice"]
+    kind: Literal["continue_conversation", "start_practice", "review_goal"]
     mode: ProgressMode
     conversation_id: UUID | None = None
+    goal_id: UUID | None = None
+    focus_area_id: UUID | None = None
     interview_type: str | None = None
     interview_focus: str | None = None
     team_scenario: str | None = None
+    team_difficulty: str | None = None
 
 
 class ProgressRecommendationResponse(BaseModel):
@@ -94,6 +99,51 @@ class ProgressRecommendationResponse(BaseModel):
     reason: str
     evidence: list[str]
     action: RecommendationActionResponse
+
+
+class GoalProgressFocusAreaResponse(BaseModel):
+    focus_area_id: UUID
+    title: str
+    practice_mode: StructuredProgressMode
+    status: Literal["active", "completed"]
+    linked_practiced_sessions: int
+    linked_user_turns: int
+    latest_practice_at: datetime | None
+    latest_summary_available: bool
+    recent_strength: ProgressEvidenceResponse | None
+    recent_weakness: ProgressEvidenceResponse | None
+
+
+class GoalNextActionResponse(BaseModel):
+    activity: RecommendationActivity
+    title: str
+    reason: str
+    focus_area_id: UUID | None
+    evidence: list[str]
+    action: RecommendationActionResponse
+
+
+class GoalProgressResponse(BaseModel):
+    goal_id: UUID
+    title: str
+    status: Literal["active", "completed", "archived"]
+    total_focus_areas: int
+    active_focus_areas: int
+    completed_focus_areas: int
+    archived_focus_areas: int
+    linked_practiced_sessions: int
+    linked_completed_structured_sessions: int
+    linked_user_turns: int
+    linked_practice_last_30_days: int
+    current_focus: CurrentFocusResponse | None
+    focus_areas: list[GoalProgressFocusAreaResponse]
+    latest_linked_practice: ProgressSessionResponse | None
+    recent_strength: ProgressEvidenceResponse | None
+    recent_weakness: ProgressEvidenceResponse | None
+    recurring_strengths: list[ProgressEvidenceResponse]
+    recurring_weaknesses: list[ProgressEvidenceResponse]
+    rating_history: list[RatingHistoryResponse]
+    next_action: GoalNextActionResponse
 
 
 class ProgressSummaryResponse(BaseModel):
@@ -115,3 +165,4 @@ class ProgressSummaryResponse(BaseModel):
     recurring_weaknesses: list[ProgressEvidenceResponse]
     rating_history: list[RatingHistoryResponse]
     recommendation: ProgressRecommendationResponse
+    goal_progress: GoalProgressResponse | None = None
