@@ -5,6 +5,7 @@ import React from "react";
 import { useSearchParams } from "next/navigation";
 
 import { createClient } from "../../../lib/supabase/client";
+import { PASSWORD_MIN_LENGTH } from "../validation";
 
 type AuthMode = "login" | "sign-up";
 
@@ -91,7 +92,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           name="password"
           type="password"
           autoComplete={mode === "login" ? "current-password" : "new-password"}
-          minLength={6}
+          minLength={PASSWORD_MIN_LENGTH}
           required
           value={password}
           onChange={(event) => setPassword(event.target.value)}

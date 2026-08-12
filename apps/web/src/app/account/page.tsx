@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "../../components/app-shell";
+import { AccountSettings } from "../../features/account/components/account-settings";
 import { createClient } from "../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -17,21 +18,10 @@ export default async function AccountPage() {
     <AppShell current="account">
       <header className="page-heading">
         <p className="eyebrow">Account</p>
-        <h1>Your account.</h1>
-        <p className="muted">Review the sign-in information connected to DevStride.</p>
+        <h1>Account settings.</h1>
+        <p className="muted">Manage your sign-in and security settings.</p>
       </header>
-      <section className="account-card" aria-labelledby="account-details-title">
-        <div>
-          <h2 id="account-details-title">Sign-in details</h2>
-          <p className="muted">Your email comes from your authenticated Supabase account.</p>
-        </div>
-        <dl className="account-details">
-          <div>
-            <dt>Email</dt>
-            <dd>{user.email ?? "Not available"}</dd>
-          </div>
-        </dl>
-      </section>
+      <AccountSettings email={user.email ?? null} emailConfirmedAt={user.email_confirmed_at ?? null} createdAt={user.created_at ?? null} />
     </AppShell>
   );
 }

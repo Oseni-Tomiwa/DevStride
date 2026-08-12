@@ -12,7 +12,7 @@ export function LogoutButton() {
 
   async function handleLogout() {
     setError(null);
-    const { error: logoutError } = await createClient().auth.signOut();
+    const { error: logoutError } = await createClient().auth.signOut({ scope: "local" });
     if (logoutError) {
       setError("We could not log you out. Please try again.");
       return;

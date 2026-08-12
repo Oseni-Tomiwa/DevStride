@@ -293,10 +293,22 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 /* Account */
 .account-card { width: min(100%, 44rem); padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 96%); box-shadow: var(--shadow-sm); }
 .account-card h2 { margin-bottom: 0.4rem; }
-.account-card > div:first-child .muted { margin-bottom: 0; }
-.account-details { margin: var(--space-6) 0 0; }
+.account-settings { display: grid; gap: var(--space-5); }
+.account-section-heading .muted { margin-bottom: 0; }
+.account-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: var(--space-6) 0 0; }
 .account-details div { padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-subtle); }
 .account-details dd { overflow-wrap: anywhere; }
+.account-form { gap: var(--space-4); margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--line); }
+.account-form-actions { display: flex; justify-content: flex-end; }
+.account-form-actions button { min-width: 10rem; }
+.session-actions { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
+.session-actions > div { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-subtle); }
+.session-actions h3, .session-confirmation h3 { margin: 0 0 0.25rem; font-size: 0.95rem; }
+.session-actions p, .session-confirmation p { margin: 0; font-size: 0.84rem; }
+.session-actions button { flex: 0 0 auto; min-width: 11rem; }
+.session-confirmation { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); margin-top: var(--space-4); padding: var(--space-4); border: 1px solid #f4c5ce; border-radius: var(--radius-md); background: var(--red-100); }
+.session-confirmation-actions { display: flex; flex: 0 0 auto; gap: var(--space-2); }
+.account-card > .form-error, .account-card > .form-success { margin-top: var(--space-4); }
 
 /* Conversations */
 .conversation-header, .conversation-detail-header { margin-bottom: var(--space-6); }
@@ -411,6 +423,11 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
   .message-composer { bottom: 0.5rem; }
   .profile-form-actions { align-items: stretch; flex-direction: column; }
   .profile-form-actions button { width: 100%; }
+  .account-details { grid-template-columns: 1fr; }
+  .session-actions > div, .session-confirmation { align-items: stretch; flex-direction: column; }
+  .session-actions button { width: 100%; }
+  .session-confirmation-actions { width: 100%; }
+  .session-confirmation-actions button { flex: 1; }
   .progress-session-link { align-items: flex-start; flex-direction: column; }
   .progress-session-row { align-items: flex-start; flex-direction: column; gap: 0; }
   .progress-session-side { justify-items: start; text-align: left; }
@@ -439,6 +456,8 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
   .recommendation-card, .continue-card, .progress-snapshot, .progress-evidence, .rating-history, .progress-history { padding: var(--space-4); }
   .dashboard-progress-link { justify-self: stretch; text-align: center; }
   .message-composer { bottom: 0.35rem; padding: var(--space-4); }
+  .account-form-actions button, .session-confirmation-actions button { width: 100%; }
+  .session-confirmation-actions { flex-direction: column-reverse; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }

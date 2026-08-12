@@ -23,15 +23,26 @@ vi.mock("next/navigation", () => ({
 describe("AccountPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getUser.mockResolvedValue({ data: { user: { email: "ada@example.com" } } });
+    getUser.mockResolvedValue({
+      data: {
+        user: {
+          email: "ada@example.com",
+          email_confirmed_at: "2026-01-02T12:00:00Z",
+          created_at: "2025-03-04T10:00:00Z",
+        },
+      },
+    });
   });
 
   it("renders authenticated account information without coaching fields", async () => {
     render(await AccountPage());
 
-    expect(screen.getByRole("heading", { name: "Your account." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Account settings." })).toBeInTheDocument();
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Verified")).toBeInTheDocument();
+    expect(screen.getByText("Mar 4, 2025")).toBeInTheDocument();
     expect(screen.queryByLabelText("Display name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Target role")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();
     const navigation = screen.getByRole("navigation", { name: "Authenticated navigation" });
     expect(within(navigation).getByRole("link", { name: "Account" })).toHaveAttribute("aria-current", "page");
