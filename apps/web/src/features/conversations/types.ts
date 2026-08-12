@@ -58,6 +58,12 @@ export type RespondResponse = {
   assistant_message: Message;
 };
 
+export type LiveInterviewSpikeResponse = {
+  session_id: string;
+  sdp_answer: string;
+  status: "connected";
+};
+
 export type SessionSummary = {
   id: string;
   conversation_id: string;

@@ -29,6 +29,7 @@ from app.goals.service import (
     GoalNotFoundError,
     PracticeConfigurationError,
     PracticeLaunchStateError,
+    archive_goal,
     launch_focus_area_practice,
     preview_plan,
 )
@@ -391,6 +392,26 @@ async def test_each_explicit_practice_launch_creates_a_new_conversation(
 
     assert first.id != second.id
     assert create.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_archiving_goal_archives_focus_areas_and_removes_active_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    goal = make_goal()
+    flush = AsyncMock()
+    commit = AsyncMock()
+    monkeypatch.setattr("app.goals.service.repository.get_owned", AsyncMock(return_value=goal))
+    monkeypatch.setattr("app.goals.service.repository.flush", flush)
+    session = cast(AsyncSession, AsyncMock())
+    session.commit = commit
+
+    await archive_goal(session, USER_ID, goal.id)
+
+    assert goal.status == "archived"
+    assert [focus.status for focus in goal.focus_areas] == ["archived"]
+    flush.assert_awaited_once_with(session)
+    commit.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio

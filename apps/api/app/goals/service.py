@@ -179,6 +179,9 @@ async def archive_goal(session: AsyncSession, user_id: UUID, goal_id: UUID) -> N
         raise GoalNotFoundError
     if goal.status != "archived":
         goal.status = "archived"
+        for focus in goal.focus_areas:
+            if focus.status != "archived":
+                focus.status = "archived"
         await repository.flush(session)
         await session.commit()
 

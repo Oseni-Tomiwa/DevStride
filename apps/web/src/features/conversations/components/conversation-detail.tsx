@@ -20,6 +20,7 @@ type ConversationDetailProps = {
   initialSummary?: SessionSummary | null;
   mentorContext?: { currentLevel: string; targetRole: string };
   interviewContext?: { interviewType: string; interviewFocus: string | null; currentLevel: string; targetRole: string };
+  liveInterviewEnabled?: boolean;
 };
 type SseEvent = { event: string; data: unknown };
 type SseRecord = Record<string, unknown>;
@@ -81,7 +82,7 @@ async function* readSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<
   }
 }
 
-export function ConversationDetail({ conversation, initialMessages, initialSummary = null, mentorContext, interviewContext }: ConversationDetailProps) {
+export function ConversationDetail({ conversation, initialMessages, initialSummary = null, mentorContext, interviewContext, liveInterviewEnabled = false }: ConversationDetailProps) {
   const router = useRouter();
   const [messages, setMessages] = useState(() => chronologicalMessages(initialMessages));
   const [content, setContent] = useState("");
@@ -449,6 +450,9 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
             {interviewTypeLabel} · {profileLabel(interviewContext.targetRole)} · {profileLabel(interviewContext.currentLevel)}
             {interviewContext.interviewFocus && ` · ${profileLabel(interviewContext.interviewFocus)}`}
           </p>
+        )}
+        {conversation.mode === "interview" && liveInterviewEnabled && (
+          <p><Link href={`/conversations/${conversation.id}/live-spike`} className="landing-button landing-button-secondary">Try Live Interview spike</Link></p>
         )}
         {conversation.mode === "team" && (
           <p className="conversation-context">

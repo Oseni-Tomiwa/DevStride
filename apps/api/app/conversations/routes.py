@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.dependencies import get_ai_provider
 from app.ai.provider import AIProvider
 from app.ai.rate_limit import require_ai_rate_limit
+from app.ai.realtime import RealtimeInitializationError, create_realtime_session
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations.response_service import (
@@ -35,6 +36,8 @@ from app.conversations.schemas import (
     ConversationCreateRequest,
     ConversationPatchRequest,
     ConversationResponse,
+    LiveInterviewSpikeRequest,
+    LiveInterviewSpikeResponse,
     MessageCreateRequest,
     MessageResponse,
     RespondRequest,
@@ -54,7 +57,10 @@ from app.conversations.service import (
     list_conversations,
     rename_conversation,
 )
+from app.core.config import settings
 from app.database.session import get_db_session
+from app.interviews.prompts import build_interview_instruction
+from app.profiles.service import ProfileNotFoundError, get_profile
 
 router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
@@ -237,6 +243,81 @@ async def interview_start(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@router.post(
+    "/{conversation_id}/live-session/spike",
+    response_model=LiveInterviewSpikeResponse,
+)
+async def live_interview_spike(
+    conversation_id: UUID,
+    data: LiveInterviewSpikeRequest,
+    session: Session,
+    current_user: AuthenticatedUser,
+) -> LiveInterviewSpikeResponse:
+    if not settings.live_interview_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Live Interview is currently disabled",
+        )
+    try:
+        conversation = await get_conversation(session, current_user.id, conversation_id)
+    except ConversationNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        ) from None
+    if conversation.mode != "interview":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live Interview is only available for Interview Mode conversations",
+        )
+    try:
+        profile = await get_profile(session, current_user.id)
+    except ProfileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Complete onboarding before using Live Interview",
+        ) from None
+    if settings.openai_api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Live Interview is currently unavailable",
+        )
+
+    # Phase 1 intentionally does not inject Memory, Goals, or persist session data.
+    instructions = (
+        build_interview_instruction(
+            profile,
+            conversation.metadata_,
+            saved_memory="",
+        )
+        + """
+
+Voice-specific behavior:
+- Speak concisely and naturally.
+- Ask one question at a time and wait for the candidate's complete answer.
+- Tolerate thinking pauses and do not interrupt a thoughtful answer.
+- Stay in the interviewer role and do not reveal hidden evaluation.
+- Stop asking questions when the candidate explicitly ends the interview.
+"""
+    )
+    try:
+        session_id, sdp_answer = await create_realtime_session(
+            settings.openai_api_key,
+            settings.live_interview_model,
+            instructions,
+            data.sdp_offer,
+        )
+    except RealtimeInitializationError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Live Interview could not be connected",
+        ) from None
+    return LiveInterviewSpikeResponse(
+        session_id=session_id,
+        sdp_answer=sdp_answer,
+        status="connected",
     )
 
 

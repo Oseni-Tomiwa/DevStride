@@ -6,6 +6,7 @@ import type {
   CreateConversationInput,
   CreateUserMessageInput,
   Message,
+  LiveInterviewSpikeResponse,
   RenameConversationInput,
   RespondResponse,
   SessionSummary,
@@ -113,6 +114,17 @@ export function startInterview(
     `/api/v1/conversations/${conversationId}/interview-start`,
     {},
     signal,
+  );
+}
+
+export function startLiveInterviewSpike(
+  supabase: SupabaseClient,
+  conversationId: string,
+  sdpOffer: string,
+) {
+  return createAuthenticatedApiClient(supabase).post<LiveInterviewSpikeResponse>(
+    `/api/v1/conversations/${conversationId}/live-session/spike`,
+    { sdp_offer: sdpOffer },
   );
 }
 

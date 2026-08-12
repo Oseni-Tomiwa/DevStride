@@ -110,6 +110,26 @@ class RespondResponse(BaseModel):
     assistant_message: MessageResponse
 
 
+class LiveInterviewSpikeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sdp_offer: str = Field(min_length=20, max_length=200_000)
+
+    @field_validator("sdp_offer")
+    @classmethod
+    def validate_sdp_offer(cls, value: str) -> str:
+        value = value.strip()
+        if not value.startswith("v=0"):
+            raise ValueError("sdp_offer must be a valid SDP offer")
+        return value
+
+
+class LiveInterviewSpikeResponse(BaseModel):
+    session_id: UUID
+    sdp_answer: str
+    status: Literal["connected"]
+
+
 class ConversationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

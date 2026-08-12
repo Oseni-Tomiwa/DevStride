@@ -72,6 +72,7 @@ async def get_current_focus_owned(
         .where(
             GoalFocusArea.goal_id == goal_id,
             GoalFocusArea.status == "active",
+            Goal.status == "active",
             Goal.user_id == user_id,
         )
         .order_by(
