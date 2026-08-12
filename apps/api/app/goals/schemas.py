@@ -22,6 +22,7 @@ MutableGoalStatus = Literal["active", "completed"]
 FocusAreaStatus = Literal["active", "completed", "archived"]
 MutableFocusAreaStatus = Literal["active", "completed"]
 PracticeMode = Literal["mentor", "interview", "team"]
+PreviewSource = Literal["template", "memory"]
 
 
 def _clean_required(value: str) -> str:
@@ -91,6 +92,62 @@ FocusAreaCreateRequest = Annotated[
     MentorFocusAreaInput | InterviewFocusAreaInput | TeamFocusAreaInput,
     Field(discriminator="practice_mode"),
 ]
+
+
+class PlanPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(max_length=160)
+    description: str | None = Field(default=None, max_length=1000)
+    goal_type: GoalType
+
+    _clean_title = field_validator("title")(_clean_required)
+    _clean_description = field_validator("description")(_clean_optional)
+
+
+class PreviewFocusAreaBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    suggested_position: int = Field(ge=0, le=5)
+    source: PreviewSource
+
+
+class MentorPreviewFocusArea(PreviewFocusAreaBase):
+    practice_mode: Literal["mentor"]
+    practice_config: MentorPracticeConfig = Field(default_factory=MentorPracticeConfig)
+
+
+class InterviewPreviewFocusArea(PreviewFocusAreaBase):
+    practice_mode: Literal["interview"]
+    practice_config: InterviewPracticeConfig
+
+
+class TeamPreviewFocusArea(PreviewFocusAreaBase):
+    practice_mode: Literal["team"]
+    practice_config: TeamPracticeConfig
+
+
+PreviewFocusArea = Annotated[
+    MentorPreviewFocusArea | InterviewPreviewFocusArea | TeamPreviewFocusArea,
+    Field(discriminator="practice_mode"),
+]
+
+
+class PlanPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    heading: Literal["Suggested focus areas"] = "Suggested focus areas"
+    basis: Literal["Based on your Goal and Profile"] = "Based on your Goal and Profile"
+    template_suggestions: list[PreviewFocusArea] = Field(min_length=1, max_length=6)
+    memory_suggestions: list[PreviewFocusArea] = Field(max_length=3)
+
+    @model_validator(mode="after")
+    def total_suggestions_are_bounded(self) -> "PlanPreviewResponse":
+        if len(self.template_suggestions) + len(self.memory_suggestions) > 6:
+            raise ValueError("plan preview must contain at most six suggestions")
+        return self
 
 
 class GoalCreateRequest(BaseModel):

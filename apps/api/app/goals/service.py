@@ -7,7 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.goals import repository
 from app.goals.models import Goal, GoalFocusArea
-from app.goals.schemas import FocusAreaCreateRequest, GoalCreateRequest
+from app.goals.plan_preview import build_plan_preview
+from app.goals.schemas import (
+    FocusAreaCreateRequest,
+    GoalCreateRequest,
+    PlanPreviewRequest,
+    PlanPreviewResponse,
+)
+from app.memory import repository as memory_repository
+from app.profiles import repository as profile_repository
 
 
 class GoalNotFoundError(Exception):
@@ -47,6 +55,14 @@ def _focus_from_input(data: FocusAreaCreateRequest, position: int) -> GoalFocusA
         position=position,
         status="active",
     )
+
+
+async def preview_plan(
+    session: AsyncSession, user_id: UUID, data: PlanPreviewRequest
+) -> PlanPreviewResponse:
+    profile = await profile_repository.get_profile_by_user_id(session, user_id)
+    memories = await memory_repository.list_owned(session, user_id)
+    return build_plan_preview(data, profile, memories)
 
 
 async def list_goals(session: AsyncSession, user_id: UUID, status: str | None) -> list[Goal]:

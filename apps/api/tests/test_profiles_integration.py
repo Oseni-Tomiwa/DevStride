@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 from httpx import Response
 from jwt.algorithms import ECAlgorithm
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -400,6 +400,93 @@ async def test_goal_focus_limits_validation_and_cross_user_isolation(
         ),
     )
     assert replacement.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_plan_preview_uses_owned_profile_and_active_relevant_memories_without_persisting(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, factory = integration_client
+    user_id = uuid4()
+    other_user_id = uuid4()
+    async with factory() as session:
+        session.add(
+            Profile(
+                user_id=user_id,
+                display_name="Preview User",
+                current_level="mid_level",
+                target_role="backend_engineer",
+                preferred_stack=["TypeScript"],
+                communication_goal="workplace_communication",
+                feedback_preference="direct",
+                onboarding_completed=True,
+            )
+        )
+        session.add_all(
+            [
+                MemoryRecord(
+                    user_id=user_id,
+                    category="goal",
+                    content="Prepare for API design discussions",
+                    importance=5,
+                    confidence=1.0,
+                    source_type="manual",
+                ),
+                MemoryRecord(
+                    user_id=user_id,
+                    category="weakness",
+                    content="Archived explanation note",
+                    importance=5,
+                    confidence=1.0,
+                    source_type="manual",
+                    status="archived",
+                ),
+                MemoryRecord(
+                    user_id=other_user_id,
+                    category="skill",
+                    content="Another user's private context",
+                    importance=5,
+                    confidence=1.0,
+                    source_type="manual",
+                ),
+            ]
+        )
+        await session.commit()
+
+    payload = {
+        "title": "Prepare for backend interviews",
+        "goal_type": "interview_preparation",
+    }
+    first = cast(
+        Response,
+        client.post(
+            "/api/v1/goals/plan-preview",
+            headers=auth_headers(signing_key, user_id),
+            json=payload,
+        ),
+    )
+    second = cast(
+        Response,
+        client.post(
+            "/api/v1/goals/plan-preview",
+            headers=auth_headers(signing_key, user_id),
+            json=payload,
+        ),
+    )
+
+    assert first.status_code == 200
+    assert first.json() == second.json()
+    body = first.json()
+    assert body["template_suggestions"][0]["practice_config"] == {
+        "interview_type": "technical",
+        "interview_focus": "javascript_node",
+    }
+    assert len(body["memory_suggestions"]) == 1
+    assert "Prepare for API design discussions" in body["memory_suggestions"][0]["title"]
+    assert "Archived explanation note" not in str(body)
+    assert "Another user's private context" not in str(body)
+    async with factory() as session:
+        assert await session.scalar(select(func.count(Goal.id))) == 0
 
 
 @pytest.mark.asyncio

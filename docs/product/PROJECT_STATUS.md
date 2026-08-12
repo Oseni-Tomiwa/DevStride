@@ -90,8 +90,11 @@ configuration and deployment checks.
   explicit complete/reopen/archive transitions, 1–6 ordered validated focus
   areas, and an optional conversation association are implemented at migration
   head `0006`.
-- Plan preview, practice launch, goal-aware Progress recommendations, Dashboard
-  integration, and the `/goals` frontend remain intentionally unimplemented.
+- Deterministic plan preview is backend-complete with Profile personalization,
+  bounded optional saved-context suggestions, no persistence, and no AI calls.
+- Preview acceptance/persistence, practice launch, goal-aware Progress
+  recommendations, Dashboard integration, and the `/goals` frontend remain
+  intentionally unimplemented.
 
 ## Planned
 

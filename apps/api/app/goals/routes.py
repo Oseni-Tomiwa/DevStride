@@ -16,6 +16,8 @@ from app.goals.schemas import (
     GoalPatchRequest,
     GoalResponse,
     GoalStatus,
+    PlanPreviewRequest,
+    PlanPreviewResponse,
 )
 from app.goals.service import (
     ActiveGoalConflictError,
@@ -31,6 +33,7 @@ from app.goals.service import (
     create_goal,
     get_goal,
     list_goals,
+    preview_plan,
     reorder_focus_areas,
     update_focus_area,
     update_goal,
@@ -70,6 +73,13 @@ async def create(data: GoalCreateRequest, session: Session, current_user: User) 
     except ActiveGoalConflictError as exc:
         raise _conflict(exc) from None
     return GoalResponse.model_validate(goal)
+
+
+@router.post("/plan-preview", response_model=PlanPreviewResponse)
+async def plan_preview(
+    data: PlanPreviewRequest, session: Session, current_user: User
+) -> PlanPreviewResponse:
+    return await preview_plan(session, current_user.id, data)
 
 
 @router.get("/{goal_id}", response_model=GoalResponse)

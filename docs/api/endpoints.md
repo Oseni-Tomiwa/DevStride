@@ -63,6 +63,7 @@ goal-aware recommendations are not implemented yet.
 
 | Method | Path | Success | Behavior |
 | --- | --- | --- | --- |
+| POST | `/api/v1/goals/plan-preview` | 200 | Returns a non-persisted deterministic draft with separate template and optional saved-context suggestions. |
 | GET | `/api/v1/goals` | 200 | Lists owned goals with active first; optional `status` filter. |
 | POST | `/api/v1/goals` | 201 | Atomically creates one active goal and 1–6 validated focus areas; 409 if another active goal exists. |
 | GET | `/api/v1/goals/{goal_id}` | 200 | Returns one owned goal and its ordered focus areas. |
@@ -78,6 +79,15 @@ system roles. Mentor config is empty. Interview config uses the current
 `interview_type` and optional compatible `interview_focus`; Team config requires
 an approved `team_scenario` and `team_difficulty`. Unsupported keys are rejected.
 Cross-user access uses ownership-safe 404 responses.
+
+Plan preview accepts only `title`, optional `description`, and `goal_type`. It
+uses owned Profile fields and, when available, active owned `goal`, `skill`, and
+`weakness` memories. Template and memory suggestions are clearly separated,
+globally ordered, capped at six, and validated by the same Mentor, Interview,
+and Team configuration contracts used for accepted focus areas. Saved context
+is optional advisory copy: it does not become a goal or focus area, and no
+memory IDs, confidence, source metadata, provider settings, or prompt data are
+returned. Preview makes no AI call and writes no records.
 
 ## Session summaries
 
