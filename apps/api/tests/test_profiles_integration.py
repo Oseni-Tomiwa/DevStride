@@ -490,6 +490,125 @@ async def test_plan_preview_uses_owned_profile_and_active_relevant_memories_with
 
 
 @pytest.mark.asyncio
+async def test_goal_practice_launch_persists_owned_mode_config_and_focus_link(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, factory = integration_client
+    user_id = uuid4()
+    headers = auth_headers(signing_key, user_id)
+    payload = goal_payload()
+    focus_areas = cast(list[dict[str, object]], payload["focus_areas"])
+    focus_areas.append(
+        {
+            "title": "Code review communication",
+            "practice_mode": "team",
+            "practice_config": {
+                "team_scenario": "code_review",
+                "team_difficulty": "challenging",
+            },
+        }
+    )
+    created_goal = cast(Response, client.post("/api/v1/goals", headers=headers, json=payload))
+    assert created_goal.status_code == 201
+    goal_id = UUID(created_goal.json()["id"])
+    focuses = created_goal.json()["focus_areas"]
+
+    launched: list[tuple[UUID, UUID]] = []
+    for focus in focuses:
+        response = cast(
+            Response,
+            client.post(
+                f"/api/v1/goals/{goal_id}/focus-areas/{focus['id']}/practice",
+                headers=headers,
+            ),
+        )
+        assert response.status_code == 201
+        assert response.json()["mode"] == focus["practice_mode"]
+        assert "focus_area_id" not in response.json()
+        launched.append((UUID(response.json()["id"]), UUID(focus["id"])))
+
+    duplicate = cast(
+        Response,
+        client.post(
+            f"/api/v1/goals/{goal_id}/focus-areas/{focuses[0]['id']}/practice",
+            headers=headers,
+        ),
+    )
+    assert duplicate.status_code == 201
+    assert UUID(duplicate.json()["id"]) != launched[0][0]
+
+    normal = cast(
+        Response,
+        client.post(
+            "/api/v1/conversations",
+            headers=headers,
+            json={"title": "Unlinked conversation", "mode": "general"},
+        ),
+    )
+    assert normal.status_code == 201
+
+    async with factory() as session:
+        for conversation_id, focus_id in launched:
+            conversation = await session.get(Conversation, conversation_id)
+            assert conversation is not None
+            assert conversation.user_id == user_id
+            assert conversation.focus_area_id == focus_id
+        mentor = await session.get(Conversation, launched[0][0])
+        interview = await session.get(Conversation, launched[1][0])
+        team = await session.get(Conversation, launched[2][0])
+        assert mentor is not None and mentor.metadata_ == {}
+        assert interview is not None and interview.metadata_ == {
+            "interview_type": "technical",
+            "interview_focus": "apis",
+        }
+        assert team is not None and team.metadata_ == {
+            "team_scenario": "code_review",
+            "team_difficulty": "challenging",
+        }
+        unlinked = await session.get(Conversation, UUID(normal.json()["id"]))
+        assert unlinked is not None
+        assert unlinked.focus_area_id is None
+
+
+@pytest.mark.asyncio
+async def test_goal_practice_launch_enforces_owned_goal_and_matching_focus(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, _ = integration_client
+    owner_id = uuid4()
+    other_id = uuid4()
+    owner_headers = auth_headers(signing_key, owner_id)
+    other_headers = auth_headers(signing_key, other_id)
+    owner_goal = cast(
+        Response, client.post("/api/v1/goals", headers=owner_headers, json=goal_payload())
+    )
+    other_goal = cast(
+        Response, client.post("/api/v1/goals", headers=other_headers, json=goal_payload())
+    )
+    owner_goal_id = owner_goal.json()["id"]
+    owner_focus_id = owner_goal.json()["focus_areas"][0]["id"]
+    other_focus_id = other_goal.json()["focus_areas"][0]["id"]
+
+    unowned_goal = cast(
+        Response,
+        client.post(
+            f"/api/v1/goals/{owner_goal_id}/focus-areas/{owner_focus_id}/practice",
+            headers=other_headers,
+        ),
+    )
+    mismatched_focus = cast(
+        Response,
+        client.post(
+            f"/api/v1/goals/{owner_goal_id}/focus-areas/{other_focus_id}/practice",
+            headers=owner_headers,
+        ),
+    )
+
+    assert unowned_goal.status_code == 404
+    assert mismatched_focus.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_conversation_focus_fk_is_nullable_and_sets_null_on_focus_delete(
     integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
 ) -> None:

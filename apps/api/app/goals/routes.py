@@ -1,11 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
+from app.conversations.schemas import ConversationResponse
 from app.database.session import get_db_session
 from app.goals.schemas import (
     FocusAreaCreateRequest,
@@ -18,6 +19,7 @@ from app.goals.schemas import (
     GoalStatus,
     PlanPreviewRequest,
     PlanPreviewResponse,
+    PracticeLaunchRequest,
 )
 from app.goals.service import (
     ActiveGoalConflictError,
@@ -27,11 +29,14 @@ from app.goals.service import (
     FocusAreaOrderError,
     GoalNotFoundError,
     GoalStateError,
+    PracticeConfigurationError,
+    PracticeLaunchStateError,
     add_focus_area,
     archive_focus_area,
     archive_goal,
     create_goal,
     get_goal,
+    launch_focus_area_practice,
     list_goals,
     preview_plan,
     reorder_focus_areas,
@@ -127,6 +132,33 @@ async def create_focus(
     except (FocusAreaLimitError, GoalStateError) as exc:
         raise _conflict(exc) from None
     return FocusAreaResponse.model_validate(focus)
+
+
+@router.post(
+    "/{goal_id}/focus-areas/{focus_area_id}/practice",
+    response_model=ConversationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def launch_practice(
+    goal_id: UUID,
+    focus_area_id: UUID,
+    session: Session,
+    current_user: User,
+    _data: Annotated[PracticeLaunchRequest | None, Body()] = None,
+) -> ConversationResponse:
+    try:
+        conversation = await launch_focus_area_practice(
+            session, current_user.id, goal_id, focus_area_id
+        )
+    except (GoalNotFoundError, FocusAreaNotFoundError):
+        raise HTTPException(404, "Focus area not found") from None
+    except PracticeLaunchStateError:
+        raise HTTPException(
+            409, "Practice can only be launched from an active focus area"
+        ) from None
+    except PracticeConfigurationError:
+        raise HTTPException(409, "The saved practice configuration is invalid") from None
+    return ConversationResponse.model_validate(conversation)
 
 
 @router.patch("/{goal_id}/focus-areas/{focus_area_id}", response_model=FocusAreaResponse)

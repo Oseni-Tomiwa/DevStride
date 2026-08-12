@@ -73,6 +73,7 @@ goal-aware recommendations are not implemented yet.
 | PATCH | `/api/v1/goals/{goal_id}/focus-areas/{focus_area_id}` | 200 | Edits or explicitly completes/reopens an owned focus area. |
 | DELETE | `/api/v1/goals/{goal_id}/focus-areas/{focus_area_id}` | 204 | Archives an owned focus area. |
 | PUT | `/api/v1/goals/{goal_id}/focus-areas/order` | 200 | Transactionally reorders the complete non-archived focus-area list. |
+| POST | `/api/v1/goals/{goal_id}/focus-areas/{focus_area_id}/practice` | 201 | Creates a new owned conversation from an active focus area's server-stored practice configuration and links it to that focus area. |
 
 Clients never submit `user_id`, positions, prompts, provider/model choices, or
 system roles. Mentor config is empty. Interview config uses the current
@@ -88,6 +89,15 @@ and Team configuration contracts used for accepted focus areas. Saved context
 is optional advisory copy: it does not become a goal or focus area, and no
 memory IDs, confidence, source metadata, provider settings, or prompt data are
 returned. Preview makes no AI call and writes no records.
+
+Practice launch has an intentionally empty request contract: clients cannot
+choose ownership, mode, practice configuration, prompts, providers, or models.
+Both the Goal and focus area must be active and owned by the caller, and the
+focus area must belong to the path Goal. Every explicit launch creates a new
+conversation; previous linked sessions are never silently reused. Interview
+and Team conversations retain their existing idempotent kickoff endpoints after
+the frontend navigates to the returned conversation ID. Historical and normally
+created conversations remain unlinked.
 
 ## Session summaries
 

@@ -40,3 +40,28 @@ async def test_interview_configuration_is_persisted_in_conversation_metadata(
 
     assert len(created) == 1
     assert created[0].metadata_ == {"interview_type": "technical", "interview_focus": "apis"}
+    assert created[0].focus_area_id is None
+
+
+@pytest.mark.asyncio
+async def test_internal_conversation_creation_can_link_a_focus_area(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[Conversation] = []
+
+    async def fake_create(_session: AsyncSession, conversation: Conversation) -> Conversation:
+        created.append(conversation)
+        return conversation
+
+    monkeypatch.setattr(repository, "create_conversation", fake_create)
+    session = cast(AsyncSession, type("Session", (), {"commit": _commit})())
+    focus_area_id = uuid4()
+
+    await create_conversation(
+        session,
+        uuid4(),
+        ConversationCreateRequest(title="Linked mentor practice", mode="mentor"),
+        focus_area_id=focus_area_id,
+    )
+
+    assert created[0].focus_area_id == focus_area_id

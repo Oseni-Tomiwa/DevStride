@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
+from app.conversations.models import Conversation
 from app.database.session import get_db_session
 from app.goals.models import Goal, GoalFocusArea
 from app.goals.plan_preview import build_plan_preview
@@ -21,7 +22,15 @@ from app.goals.schemas import (
     PlanPreviewRequest,
     PlanPreviewResponse,
 )
-from app.goals.service import ActiveGoalConflictError, GoalNotFoundError, preview_plan
+from app.goals.service import (
+    ActiveGoalConflictError,
+    FocusAreaNotFoundError,
+    GoalNotFoundError,
+    PracticeConfigurationError,
+    PracticeLaunchStateError,
+    launch_focus_area_practice,
+    preview_plan,
+)
 from app.main import app
 from app.memory.models import MemoryRecord
 from app.profiles.models import Profile
@@ -72,6 +81,21 @@ def make_goal(user_id: UUID = USER_ID) -> Goal:
     focus.updated_at = now
     goal.focus_areas = [focus]
     return goal
+
+
+def make_conversation(user_id: UUID = USER_ID, mode: str = "mentor") -> Conversation:
+    now = datetime.now(UTC)
+    conversation = Conversation(
+        id=uuid4(),
+        user_id=user_id,
+        title="Goal practice",
+        mode=mode,
+        status="active",
+        metadata_={},
+    )
+    conversation.created_at = now
+    conversation.updated_at = now
+    return conversation
 
 
 def make_profile(
@@ -156,6 +180,257 @@ def test_unauthenticated_plan_preview_returns_401() -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_unauthenticated_practice_launch_returns_401() -> None:
+    goal = make_goal()
+
+    response = cast(
+        Response,
+        client.post(f"/api/v1/goals/{goal.id}/focus-areas/{goal.focus_areas[0].id}/practice"),
+    )
+
+    assert response.status_code == 401
+
+
+def test_practice_launch_uses_verified_identity_and_returns_navigation_data(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    goal = make_goal(authenticated_client.id)
+    conversation = make_conversation(authenticated_client.id, "interview")
+    launch = AsyncMock(return_value=conversation)
+    monkeypatch.setattr("app.goals.routes.launch_focus_area_practice", launch)
+
+    response = cast(
+        Response,
+        client.post(f"/api/v1/goals/{goal.id}/focus-areas/{goal.focus_areas[0].id}/practice"),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["id"] == str(conversation.id)
+    assert response.json()["mode"] == "interview"
+    assert launch.await_args is not None
+    assert launch.await_args.args[1:] == (
+        authenticated_client.id,
+        goal.id,
+        goal.focus_areas[0].id,
+    )
+
+
+@pytest.mark.parametrize("field", ["user_id", "provider", "model", "prompt", "system_role"])
+def test_practice_launch_rejects_client_configuration(
+    field: str,
+    authenticated_client: CurrentUser,
+) -> None:
+    goal = make_goal(authenticated_client.id)
+
+    response = cast(
+        Response,
+        client.post(
+            f"/api/v1/goals/{goal.id}/focus-areas/{goal.focus_areas[0].id}/practice",
+            json={field: "override"},
+        ),
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "error,expected_status",
+    [
+        (GoalNotFoundError(), 404),
+        (FocusAreaNotFoundError(), 404),
+        (PracticeLaunchStateError(), 409),
+        (PracticeConfigurationError(), 409),
+    ],
+)
+def test_practice_launch_maps_safe_errors(
+    error: Exception,
+    expected_status: int,
+    authenticated_client: CurrentUser,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    goal = make_goal(authenticated_client.id)
+    monkeypatch.setattr("app.goals.routes.launch_focus_area_practice", AsyncMock(side_effect=error))
+
+    response = cast(
+        Response,
+        client.post(f"/api/v1/goals/{goal.id}/focus-areas/{goal.focus_areas[0].id}/practice"),
+    )
+
+    assert response.status_code == expected_status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mode,config,expected_metadata",
+    [
+        ("mentor", {}, {}),
+        (
+            "interview",
+            {"interview_type": "technical", "interview_focus": "apis"},
+            {"interview_type": "technical", "interview_focus": "apis"},
+        ),
+        (
+            "team",
+            {"team_scenario": "code_review", "team_difficulty": "challenging"},
+            {"team_scenario": "code_review", "team_difficulty": "challenging"},
+        ),
+    ],
+)
+async def test_launch_uses_stored_mode_config_and_links_new_conversation(
+    mode: str,
+    config: dict[str, object],
+    expected_metadata: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    goal = make_goal()
+    focus = goal.focus_areas[0]
+    focus.practice_mode = mode
+    focus.practice_config = config
+    created = make_conversation(mode=mode)
+    created.metadata_ = expected_metadata
+    created.focus_area_id = focus.id
+    get_goal = AsyncMock(return_value=goal)
+    get_focus = AsyncMock(return_value=focus)
+    create = AsyncMock(return_value=created)
+    monkeypatch.setattr("app.goals.service.repository.get_owned", get_goal)
+    monkeypatch.setattr("app.goals.service.repository.get_focus_owned", get_focus)
+    monkeypatch.setattr("app.goals.service.create_conversation", create)
+    session = cast(AsyncSession, object())
+
+    result = await launch_focus_area_practice(session, USER_ID, goal.id, focus.id)
+
+    assert result is created
+    get_goal.assert_awaited_once_with(session, USER_ID, goal.id, for_update=True)
+    get_focus.assert_awaited_once_with(session, USER_ID, goal.id, focus.id)
+    assert create.await_args is not None
+    request = create.await_args.args[2]
+    assert request.mode == mode
+    assert create.await_args.kwargs == {"focus_area_id": focus.id}
+    if mode == "interview":
+        assert request.interview_type == "technical"
+        assert request.interview_focus == "apis"
+    if mode == "team":
+        assert request.team_scenario == "code_review"
+        assert request.team_difficulty == "challenging"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "goal_status,focus_status",
+    [
+        ("completed", "active"),
+        ("archived", "active"),
+        ("active", "completed"),
+        ("active", "archived"),
+    ],
+)
+async def test_practice_launch_rejects_non_active_goal_or_focus(
+    goal_status: str,
+    focus_status: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    goal = make_goal()
+    focus = goal.focus_areas[0]
+    goal.status = goal_status
+    focus.status = focus_status
+    monkeypatch.setattr("app.goals.service.repository.get_owned", AsyncMock(return_value=goal))
+    monkeypatch.setattr(
+        "app.goals.service.repository.get_focus_owned", AsyncMock(return_value=focus)
+    )
+    create = AsyncMock()
+    monkeypatch.setattr("app.goals.service.create_conversation", create)
+
+    with pytest.raises(PracticeLaunchStateError):
+        await launch_focus_area_practice(cast(AsyncSession, object()), USER_ID, goal.id, focus.id)
+
+    create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_practice_launch_uses_ownership_safe_goal_and_focus_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = cast(AsyncSession, object())
+    goal = make_goal()
+    focus = goal.focus_areas[0]
+    get_goal = AsyncMock(return_value=None)
+    get_focus = AsyncMock()
+    monkeypatch.setattr("app.goals.service.repository.get_owned", get_goal)
+    monkeypatch.setattr("app.goals.service.repository.get_focus_owned", get_focus)
+
+    with pytest.raises(GoalNotFoundError):
+        await launch_focus_area_practice(session, USER_ID, goal.id, focus.id)
+    get_focus.assert_not_awaited()
+
+    get_goal.return_value = goal
+    get_focus.return_value = None
+    with pytest.raises(FocusAreaNotFoundError):
+        await launch_focus_area_practice(session, USER_ID, goal.id, uuid4())
+
+
+@pytest.mark.asyncio
+async def test_each_explicit_practice_launch_creates_a_new_conversation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    goal = make_goal()
+    focus = goal.focus_areas[0]
+    conversations = [make_conversation(mode="interview"), make_conversation(mode="interview")]
+    create = AsyncMock(side_effect=conversations)
+    monkeypatch.setattr("app.goals.service.repository.get_owned", AsyncMock(return_value=goal))
+    monkeypatch.setattr(
+        "app.goals.service.repository.get_focus_owned", AsyncMock(return_value=focus)
+    )
+    monkeypatch.setattr("app.goals.service.create_conversation", create)
+    session = cast(AsyncSession, object())
+
+    first = await launch_focus_area_practice(session, USER_ID, goal.id, focus.id)
+    second = await launch_focus_area_practice(session, USER_ID, goal.id, focus.id)
+
+    assert first.id != second.id
+    assert create.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_invalid_stored_practice_configuration_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    goal = make_goal()
+    focus = goal.focus_areas[0]
+    focus.practice_config = {"interview_type": "technical", "provider": "override"}
+    monkeypatch.setattr("app.goals.service.repository.get_owned", AsyncMock(return_value=goal))
+    monkeypatch.setattr(
+        "app.goals.service.repository.get_focus_owned", AsyncMock(return_value=focus)
+    )
+    create = AsyncMock()
+    monkeypatch.setattr("app.goals.service.create_conversation", create)
+
+    with pytest.raises(PracticeConfigurationError):
+        await launch_focus_area_practice(cast(AsyncSession, object()), USER_ID, goal.id, focus.id)
+
+    create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_corrupted_general_focus_mode_cannot_launch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    goal = make_goal()
+    focus = goal.focus_areas[0]
+    focus.practice_mode = "general"
+    focus.practice_config = {}
+    monkeypatch.setattr("app.goals.service.repository.get_owned", AsyncMock(return_value=goal))
+    monkeypatch.setattr(
+        "app.goals.service.repository.get_focus_owned", AsyncMock(return_value=focus)
+    )
+    create = AsyncMock()
+    monkeypatch.setattr("app.goals.service.create_conversation", create)
+
+    with pytest.raises(PracticeConfigurationError):
+        await launch_focus_area_practice(cast(AsyncSession, object()), USER_ID, goal.id, focus.id)
+
+    create.assert_not_awaited()
 
 
 def test_plan_preview_uses_verified_identity_without_ai_dependency(

@@ -2,9 +2,13 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.conversations.models import Conversation
+from app.conversations.schemas import ConversationCreateRequest
+from app.conversations.service import create_conversation
 from app.goals import repository
 from app.goals.models import Goal, GoalFocusArea
 from app.goals.plan_preview import build_plan_preview
@@ -46,6 +50,14 @@ class FocusAreaOrderError(Exception):
     pass
 
 
+class PracticeLaunchStateError(Exception):
+    pass
+
+
+class PracticeConfigurationError(Exception):
+    pass
+
+
 def _focus_from_input(data: FocusAreaCreateRequest, position: int) -> GoalFocusArea:
     return GoalFocusArea(
         title=data.title,
@@ -63,6 +75,37 @@ async def preview_plan(
     profile = await profile_repository.get_profile_by_user_id(session, user_id)
     memories = await memory_repository.list_owned(session, user_id)
     return build_plan_preview(data, profile, memories)
+
+
+async def launch_focus_area_practice(
+    session: AsyncSession,
+    user_id: UUID,
+    goal_id: UUID,
+    focus_area_id: UUID,
+) -> Conversation:
+    goal = await repository.get_owned(session, user_id, goal_id, for_update=True)
+    if goal is None:
+        raise GoalNotFoundError
+    focus = await repository.get_focus_owned(session, user_id, goal_id, focus_area_id)
+    if focus is None:
+        raise FocusAreaNotFoundError
+    if goal.status != "active" or focus.status != "active":
+        raise PracticeLaunchStateError
+    if focus.practice_mode not in {"mentor", "interview", "team"}:
+        raise PracticeConfigurationError
+
+    payload: dict[str, object] = dict(focus.practice_config)
+    payload.update({"title": focus.title, "mode": focus.practice_mode})
+    try:
+        request = ConversationCreateRequest.model_validate(payload)
+    except ValidationError:
+        raise PracticeConfigurationError from None
+    return await create_conversation(
+        session,
+        user_id,
+        request,
+        focus_area_id=focus.id,
+    )
 
 
 async def list_goals(session: AsyncSession, user_id: UUID, status: str | None) -> list[Goal]:

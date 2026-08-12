@@ -92,9 +92,12 @@ configuration and deployment checks.
   head `0006`.
 - Deterministic plan preview is backend-complete with Profile personalization,
   bounded optional saved-context suggestions, no persistence, and no AI calls.
-- Preview acceptance/persistence, practice launch, goal-aware Progress
-  recommendations, Dashboard integration, and the `/goals` frontend remain
-  intentionally unimplemented.
+- Goal-aware practice launch is backend-complete: active focus areas create new
+  owned Mentor, Interview, or Team conversations from server-stored validated
+  configuration and persist the optional focus-area association.
+- Preview acceptance/persistence, goal-aware Progress recommendations,
+  Dashboard integration, and the `/goals` frontend remain intentionally
+  unimplemented.
 
 ## Planned
 

@@ -105,6 +105,12 @@ class PlanPreviewRequest(BaseModel):
     _clean_description = field_validator("description")(_clean_optional)
 
 
+class PracticeLaunchRequest(BaseModel):
+    """An intentionally empty contract: launch settings are server-owned."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PreviewFocusAreaBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
