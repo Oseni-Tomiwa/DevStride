@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 
 import { LogoutButton } from "../features/auth/components/logout-button";
+import { DevStrideLogo } from "./brand/devstride-logo";
 
 export type AppSection = "dashboard" | "onboarding" | "account" | "profile" | "conversations" | "progress" | "goals" | "memories";
 
@@ -23,8 +24,8 @@ export function AppHeader({ current }: AppHeaderProps) {
   return (
     <header className="app-header">
       <Link href="/dashboard" className="app-brand" aria-label="DevStride dashboard">
-        <span className="brand-mark" aria-hidden="true">D</span>
-        <span>DevStride</span>
+        <DevStrideLogo variant="header" />
+        <span className="app-brand-name">DevStride</span>
       </Link>
       <nav className="app-nav" aria-label="Authenticated navigation">
         {links.map((link) => (

@@ -19,8 +19,10 @@ profile/session-summary sources. Do not implement RAG, embeddings, pgvector,
 vector search, document retrieval, GitHub ingestion, or "remember everything"
 behavior without separate approval.
 
-Live Conversation/realtime voice is planned but has no approved architecture.
-Do not implement it unless a task explicitly approves both design and scope.
+Live Conversation/realtime voice is approved through the bounded Realtime
+Practice Phase 3 experience described in `docs/architecture/REALTIME.md`.
+Keep later voice analysis, video, and broader realtime product expansion out of
+scope unless separately approved.
 
 ## Required reading order
 

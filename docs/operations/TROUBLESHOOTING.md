@@ -33,7 +33,7 @@ database. Production Supabase should use a session-compatible pooler and SSL;
 do not use the transaction pooler for the long-lived SQLAlchemy app or Alembic
 DDL.
 
-Repository head is `0005`. Do not downgrade production automatically as part of
+Repository head is `0007`. Do not downgrade production automatically as part of
 an application rollback. Note that downgrading `0005` requires the resulting
 Mentor/Interview-only summary constraint to be valid; review existing Team
 summary rows and the backup plan first.

@@ -247,6 +247,81 @@ async def start_interview_response(
     yield StreamAssistantComplete(assistant_message)
 
 
+async def complete_live_interview(
+    session: AsyncSession,
+    user_id: UUID,
+    conversation_id: UUID,
+    provider: AIProvider | None,
+) -> Message:
+    """Run the existing Interview assessment without persisting a fake user turn."""
+    conversation = await repository.get_by_id_and_user_id_for_update(
+        session, conversation_id, user_id
+    )
+    if conversation is None or conversation.mode != "interview":
+        raise InterviewStartNotAllowedError
+    metadata = conversation.metadata_ or {}
+    if metadata.get("interview_transport", "text") != "live_voice":
+        raise InterviewStartNotAllowedError
+    if metadata.get("interview_completed"):
+        final_id = metadata.get("final_assessment_message_id")
+        if final_id:
+            existing = await repository.get_message_by_id_and_conversation_id(
+                session, UUID(str(final_id)), conversation_id
+            )
+            if existing is not None:
+                return existing
+        raise InterviewStartNotAllowedError
+    if provider is None:
+        raise AssistantGenerationDisabledError
+
+    messages = await repository.get_recent_by_conversation_id(
+        session, conversation_id, limit=RECENT_MESSAGE_CONTEXT_LIMIT
+    )
+    if not messages:
+        raise InterviewStartNotAllowedError
+    assessment_request = (
+        FINAL_ASSESSMENT_REQUEST_PREFIX
+        + " with strengths, areas to improve, technical or communication gaps, and next "
+        "practice areas. Include practice ratings for correctness, clarity, depth, and "
+        "reasoning from 1 to 5. Clearly state that these are not hiring predictions."
+    )
+    try:
+        result = await provider.generate(
+            list(reversed(_provider_messages(messages)))
+            + [ProviderMessage(role="user", content=assessment_request)],
+            system_instruction=await system_instruction(session, user_id, conversation),
+        )
+    except Exception as exc:
+        logger.warning(
+            "Live interview assessment failed",
+            extra={"provider": provider.__class__.__name__, "error_type": type(exc).__name__},
+        )
+        raise AssistantGenerationError from exc
+
+    message_metadata = {}
+    if result.provider_response_id:
+        message_metadata["provider_response_id"] = result.provider_response_id
+    assistant_message = Message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content=result.text,
+        provider=result.provider,
+        model=result.model,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        latency_ms=result.latency_ms,
+        metadata_=message_metadata,
+    )
+    await repository.create_message(session, assistant_message)
+    _mark_interview_completed(conversation, assistant_message)
+    repository.touch_conversation_activity(conversation)
+    await session.commit()
+    await _maybe_generate_session_summary(
+        session, user_id, conversation, assessment_request, provider
+    )
+    return assistant_message
+
+
 async def start_team_response(
     session: AsyncSession,
     user_id: UUID,

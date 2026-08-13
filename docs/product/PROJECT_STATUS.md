@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-11  
 Current release: v0.1.0  
-Repository migration head: `0006`
+Repository migration head: `0007`
 
 This is the canonical source of truth for the current product state and the
 order of future work. The [PRD](PRD.md) describes product intent; architecture
@@ -52,9 +52,18 @@ configuration and deployment checks.
   reinforcement, manual create/edit/archive behavior, secret-like-content
   rejection, and bounded prompt injection
 - safe assistant Markdown rendering, including developer-oriented code blocks
+- Realtime Practice Phase 1 secure voice-session foundation for owned Interview
+  conversations, using short-lived browser credentials and WebRTC without
+  transcript or assessment persistence
+- Realtime Practice Phase 2 finalized transcript persistence with durable
+  provider-event idempotency and existing Interview assessment/summary
+  completion semantics
+- Realtime Practice Phase 3 usable live Interview experience with automatic
+  interviewer kickoff, remote audio, microphone controls, turn detection,
+  interruption handling, transcript captions, and reconnect behavior
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
-- production database migrations through repository head `0005`
+- production database migrations through repository head `0007`
 - production Progress query correlation fix
 - authenticated, per-user AI rate limiting
 - Next.js 16 migration
@@ -112,7 +121,7 @@ configuration and deployment checks.
 - account privacy and data controls
 - stable AI evaluation datasets
 
-### Planned Live Conversation
+### Planned Live Conversation expansion
 
 Live Conversation is a later, separately approved capability. The historical
 product intent includes:
@@ -131,12 +140,14 @@ an assessment, strengths and weaknesses, communication feedback, and results
 that can feed Progress and bounded Memory. If proven useful, the same realtime
 foundation may later support Mentor and Team Practice.
 
-**Architecture/design not yet completed.** No voice transport, provider,
-permission, transcript, persistence, privacy, or cost design has been approved.
+Phase 1 voice-session transport and security boundaries, Phase 2 finalized
+transcript persistence, and the bounded Phase 3 live Interview experience are
+implemented in `docs/architecture/REALTIME.md`. Deeper voice analysis and
+broader realtime product integration remain later work.
 
 ## Later
 
-- Live Conversation / realtime voice, after a separate architecture decision
+- deeper voice analysis and richer voice metrics after Phase 3 validation
 - RAG or document learning only if separately approved
 - GitHub repository ingestion
 - distributed rate limiting when horizontal API scaling is needed

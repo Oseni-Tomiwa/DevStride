@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 MESSAGE_CONTENT_MAX_LENGTH = 20_000
 ConversationMode = Literal["general", "mentor", "interview", "team"]
 InterviewType = Literal["technical", "behavioral"]
+InterviewTransport = Literal["text", "live_voice"]
 InterviewFocus = Literal[
     "general_backend",
     "apis",
@@ -35,6 +36,7 @@ class ConversationCreateRequest(BaseModel):
     persona: str | None = None
     interview_type: InterviewType | None = None
     interview_focus: InterviewFocus | None = None
+    interview_transport: InterviewTransport = "text"
     team_scenario: TeamScenario | None = None
     team_difficulty: TeamDifficulty | None = None
 
@@ -43,7 +45,9 @@ class ConversationCreateRequest(BaseModel):
         if self.mode == "interview" and self.interview_type is None:
             raise ValueError("interview_type is required for interview conversations")
         if self.mode != "interview" and (
-            self.interview_type is not None or self.interview_focus is not None
+            self.interview_type is not None
+            or self.interview_focus is not None
+            or self.interview_transport != "text"
         ):
             raise ValueError("interview configuration is only valid for interview conversations")
         if self.interview_type == "behavioral" and self.interview_focus is not None:
@@ -108,26 +112,6 @@ class RespondRequest(MessageCreateRequest):
 class RespondResponse(BaseModel):
     user_message: MessageResponse
     assistant_message: MessageResponse
-
-
-class LiveInterviewSpikeRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    sdp_offer: str = Field(min_length=20, max_length=200_000)
-
-    @field_validator("sdp_offer")
-    @classmethod
-    def validate_sdp_offer(cls, value: str) -> str:
-        value = value.strip()
-        if not value.startswith("v=0"):
-            raise ValueError("sdp_offer must be a valid SDP offer")
-        return value
-
-
-class LiveInterviewSpikeResponse(BaseModel):
-    session_id: UUID
-    sdp_answer: str
-    status: Literal["connected"]
 
 
 class ConversationResponse(BaseModel):

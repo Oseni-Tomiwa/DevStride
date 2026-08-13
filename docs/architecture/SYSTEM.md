@@ -28,7 +28,7 @@ Supabase PostgreSQL + Auth       OpenAI
 ```
 
 Render applies Alembic migrations before serving a release. Repository head is
-`0005`. The deployment remains single-instance while AI rate limiting is stored
+`0007`. The deployment remains single-instance while AI rate limiting is stored
 in process memory.
 
 ## Application modules
@@ -50,6 +50,7 @@ FastAPI
   ├── session_summaries
   ├── progress
   ├── memory
+  ├── realtime (short-lived voice-session authorization)
   ├── ai (provider interface, OpenAI adapter, rate-limit dependency)
   └── database (async engine, sessions, declarative models, Alembic)
 ```
@@ -85,7 +86,8 @@ work, not implemented modules or API contracts.
   with `Retry-After` when exceeded.
 
 See [AI Provider](AI_PROVIDER.md) and
-[Conversation Streaming](CONVERSATION_STREAMING.md).
+[Conversation Streaming](CONVERSATION_STREAMING.md) and
+[Realtime Practice](REALTIME.md).
 
 ## Data and ownership boundaries
 
@@ -113,8 +115,9 @@ tables or stores access tokens manually.
 
 Do not add Redis, queues, microservices, Kubernetes, WebSockets, pgvector,
 embeddings, vector search, document retrieval, or agent frameworks without a
-demonstrated and approved requirement. Live Conversation is planned, but its
-transport, privacy, persistence, and provider architecture are not yet designed.
+demonstrated and approved requirement. Realtime Practice uses the documented
+WebRTC foundation and existing Interview persistence/assessment boundaries;
+richer voice analysis remains deferred.
 
 ## Related documentation
 

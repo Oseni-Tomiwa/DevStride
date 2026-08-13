@@ -42,3 +42,23 @@ def require_ai_rate_limit(operation: str) -> Callable[..., Awaitable[None]]:
             ) from None
 
     return enforce
+
+
+async def require_realtime_rate_limit(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    limiter: Annotated[InMemoryRateLimiter, Depends(get_ai_rate_limiter)],
+) -> None:
+    if not settings.ai_rate_limit_enabled or not settings.live_interview_enabled:
+        return
+    try:
+        limiter.consume(
+            current_user.id,
+            "realtime",
+            RateLimitPolicy(*settings.ai_rate_limit_policy("realtime")),
+        )
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many AI requests. Please try again shortly.",
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from None

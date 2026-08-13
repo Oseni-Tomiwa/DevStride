@@ -6,7 +6,8 @@ import type {
   CreateConversationInput,
   CreateUserMessageInput,
   Message,
-  LiveInterviewSpikeResponse,
+  RealtimeSession,
+  RealtimeTranscriptTurn,
   RenameConversationInput,
   RespondResponse,
   SessionSummary,
@@ -117,14 +118,49 @@ export function startInterview(
   );
 }
 
-export function startLiveInterviewSpike(
+export function createRealtimeSession(
   supabase: SupabaseClient,
   conversationId: string,
-  sdpOffer: string,
 ) {
-  return createAuthenticatedApiClient(supabase).post<LiveInterviewSpikeResponse>(
-    `/api/v1/conversations/${conversationId}/live-session/spike`,
-    { sdp_offer: sdpOffer },
+  return createAuthenticatedApiClient(supabase).post<RealtimeSession>(
+    "/api/v1/realtime/sessions",
+    { conversation_id: conversationId },
+  );
+}
+
+export function connectRealtimeSession(
+  supabase: SupabaseClient,
+  conversationId: string,
+  offerSdp: string,
+) {
+  return createAuthenticatedApiClient(supabase)
+    .rawPostResponse(
+      `/api/v1/realtime/sessions/${conversationId}/connect`,
+      offerSdp,
+      "application/sdp",
+    )
+    .then(async (response) => ({
+      sdp: await response.text(),
+      status: response.status,
+      contentType: response.headers.get("content-type") ?? "",
+    }));
+}
+
+export function persistRealtimeTranscriptTurn(
+  supabase: SupabaseClient,
+  conversationId: string,
+  input: { event_id: string; role: "user" | "assistant"; content: string; final: true },
+) {
+  return createAuthenticatedApiClient(supabase).post<RealtimeTranscriptTurn>(
+    `/api/v1/realtime/sessions/${conversationId}/transcript-turns`,
+    input,
+  );
+}
+
+export function endRealtimeInterview(supabase: SupabaseClient, conversationId: string) {
+  return createAuthenticatedApiClient(supabase).post<RealtimeTranscriptTurn>(
+    `/api/v1/realtime/sessions/${conversationId}/end`,
+    {},
   );
 }
 

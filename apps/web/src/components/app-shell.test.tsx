@@ -19,6 +19,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: "Skip to content" })).toHaveAttribute("href", "#main-content");
     expect(container.querySelectorAll("main")).toHaveLength(1);
     expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
+    expect(screen.getAllByAltText("DevStride")).toHaveLength(2);
 
     const navigation = screen.getByRole("navigation", { name: "Authenticated navigation" });
     expect(within(navigation).getByRole("link", { name: "Profile" })).toHaveAttribute("aria-current", "page");

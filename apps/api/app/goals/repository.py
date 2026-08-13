@@ -63,6 +63,22 @@ async def get_focus_owned(
     return result.scalar_one_or_none()
 
 
+async def get_focus_by_id_owned(
+    session: AsyncSession, user_id: UUID, focus_area_id: UUID
+) -> GoalFocusArea | None:
+    result = await session.execute(
+        select(GoalFocusArea)
+        .join(Goal, Goal.id == GoalFocusArea.goal_id)
+        .where(
+            GoalFocusArea.id == focus_area_id,
+            Goal.user_id == user_id,
+            Goal.status == "active",
+            GoalFocusArea.status == "active",
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_current_focus_owned(
     session: AsyncSession, user_id: UUID, goal_id: UUID
 ) -> GoalFocusArea | None:

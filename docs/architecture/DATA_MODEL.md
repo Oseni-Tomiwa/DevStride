@@ -2,7 +2,7 @@
 
 DevStride uses PostgreSQL through SQLAlchemy 2 typed declarative models,
 `asyncpg`, and async sessions. Alembic owns schema evolution. The repository
-migration head is `0006`.
+migration head is `0007`.
 
 User ownership UUIDs correspond to the verified Supabase JWT `sub`. DevStride
 does not maintain a local users table or accept ownership IDs from product
@@ -117,6 +117,7 @@ Migration `0006` does not attach historical conversations; their
 | `content` | text, not null |
 | `provider`, `model` | nullable strings |
 | `input_tokens`, `output_tokens`, `latency_ms` | nullable integers |
+| `provider_event_id` | nullable bounded string; unique per conversation for finalized realtime turns |
 | `metadata` | JSON object, not null, default `{}` |
 | `created_at` | timezone-aware timestamp |
 
@@ -182,6 +183,7 @@ unique constraint for normalized memory content.
 | `0004` | bounded memory records |
 | `0005` | allow Team session summaries |
 | `0006` | goals, ordered focus areas, and optional conversation association |
+| `0007` | finalized realtime transcript event identifiers and per-conversation deduplication |
 
 Run `make api-migrate` to upgrade the configured database. Integration tests use
 `TEST_DATABASE_URL`, upgrade to head, clean between tests, and downgrade to base

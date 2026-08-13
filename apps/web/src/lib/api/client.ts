@@ -58,15 +58,39 @@ async function errorFromResponse(response: Response): Promise<ApiError> {
 }
 
 export function createAuthenticatedApiClient(supabase: SupabaseClient) {
-  async function accessToken(): Promise<string> {
+  async function accessToken(forceRefresh = false): Promise<{ token: string; refreshed: boolean }> {
+    if (forceRefresh) {
+      const { data, error } = await supabase.auth.refreshSession();
+      const token = data.session?.access_token;
+      if (!error && token) return { token, refreshed: true };
+      console.debug("[DevStride auth]", { hasAccessToken: false, sessionAvailable: false, refreshed: true });
+      throw new ApiError("Authentication is required.", 401);
+    }
+
     const { data, error: sessionError } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
+    let session = data.session;
+    let refreshed = false;
+    const expiresSoon = typeof session?.expires_at === "number"
+      && session.expires_at <= Math.floor(Date.now() / 1000) + 30;
+    if (!session || expiresSoon) {
+      const refreshedSession = await supabase.auth.refreshSession();
+      if (!refreshedSession.error && refreshedSession.data.session) {
+        session = refreshedSession.data.session;
+        refreshed = true;
+      }
+    }
+    const token = session?.access_token;
+    console.debug("[DevStride auth]", {
+      hasAccessToken: Boolean(token),
+      sessionAvailable: Boolean(session),
+      refreshed,
+    });
     if (sessionError || !token) throw new ApiError("Authentication is required.", 401);
-    return token;
+    return { token, refreshed };
   }
 
   async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-    const token = await accessToken();
+    const { token } = await accessToken();
     const headers = new Headers(options.headers);
     headers.set("Authorization", `Bearer ${token}`);
     if (options.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -87,7 +111,7 @@ export function createAuthenticatedApiClient(supabase: SupabaseClient) {
   }
 
   async function stream(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
-    const token = await accessToken();
+    const { token } = await accessToken();
     const headers = new Headers({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
     let response: Response;
     try {
@@ -105,6 +129,29 @@ export function createAuthenticatedApiClient(supabase: SupabaseClient) {
     return response;
   }
 
+  async function rawPostResponse(path: string, body: string, contentType: string): Promise<Response> {
+    async function send(forceRefresh: boolean): Promise<Response> {
+      const { token, refreshed } = await accessToken(forceRefresh);
+      const headers = new Headers({ Authorization: `Bearer ${token}`, "Content-Type": contentType });
+      let response: Response;
+      try {
+        response = await fetch(`${apiBaseUrl}${path}`, { method: "POST", body, headers });
+      } catch (cause) {
+        throw new ApiError("The API could not be reached.", 0, cause);
+      }
+      console.debug("[DevStride auth]", { hasAccessToken: true, refreshed, status: response.status });
+      if (response.status === 401 && !forceRefresh) return send(true);
+      if (!response.ok) throw await errorFromResponse(response);
+      return response;
+    }
+
+    return send(false);
+  }
+
+  async function rawPost(path: string, body: string, contentType: string): Promise<string> {
+    return (await rawPostResponse(path, body, contentType)).text();
+  }
+
   return {
     get: <T>(path: string) => request<T>(path),
     post: <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body }),
@@ -112,5 +159,7 @@ export function createAuthenticatedApiClient(supabase: SupabaseClient) {
     delete: <T = void>(path: string) => request<T>(path, { method: "DELETE" }),
     put: <T>(path: string, body: unknown) => request<T>(path, { method: "PUT", body }),
     stream,
+    rawPost,
+    rawPostResponse,
   };
 }

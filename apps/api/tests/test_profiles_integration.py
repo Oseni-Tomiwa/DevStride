@@ -23,6 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 from sqlalchemy.pool import NullPool
 
 from alembic import command
+from app.ai.dependencies import get_ai_provider
+from app.ai.provider import GenerationResult
 from app.auth.jwt import jwks_client
 from app.conversations.models import Conversation, Message
 from app.conversations.response_service import system_instruction
@@ -37,6 +39,34 @@ from app.profiles.models import Profile
 from app.progress import repository as progress_repository
 from app.progress.service import get_progress_summary
 from app.session_summaries.models import SessionSummary
+
+
+class LiveCompletionProvider:
+    async def generate(self, messages: object, *, system_instruction: str) -> GenerationResult:
+        del messages, system_instruction
+        return GenerationResult(
+            text="Final practice assessment with clear reasoning.",
+            provider="test",
+            model="test-model",
+            provider_response_id="assessment-response",
+        )
+
+    async def generate_structured(
+        self, messages: object, *, system_instruction: str, response_model: Any
+    ) -> tuple[Any, GenerationResult]:
+        del messages, system_instruction
+        return response_model(
+            summary="A completed live interview.",
+            topics_covered=["API design"],
+            strengths=["Clear reasoning"],
+            weaknesses=["Add more trade-off detail"],
+            recommended_next_steps=["Practice system design"],
+            correctness_rating=4,
+            clarity_rating=4,
+            depth_rating=3,
+            reasoning_rating=4,
+        ), GenerationResult(text="structured", provider="test", model="test-model")
+
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
@@ -170,6 +200,191 @@ async def persisted_profile(factory: async_sessionmaker[Any], user_id: UUID) -> 
     async with factory() as session:
         result = await session.execute(select(Profile).where(Profile.user_id == user_id))
         return result.scalar_one_or_none()
+
+
+@pytest.mark.asyncio
+async def test_live_transcript_turns_are_final_idempotent_and_owned(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "live_interview_enabled", True)
+    client, signing_key, factory = integration_client
+    owner_id = uuid4()
+    other_id = uuid4()
+    owner_headers = auth_headers(signing_key, owner_id)
+    other_headers = auth_headers(signing_key, other_id)
+    assert (
+        client.post(
+            "/api/v1/onboarding", headers=owner_headers, json=onboarding_payload()
+        ).status_code
+        == 201
+    )
+    created = cast(
+        Response,
+        client.post(
+            "/api/v1/conversations",
+            headers=owner_headers,
+            json={
+                "title": "Live interview",
+                "mode": "interview",
+                "interview_type": "technical",
+                "interview_transport": "live_voice",
+            },
+        ),
+    )
+    assert created.status_code == 201
+    conversation_id = created.json()["id"]
+    payload = {
+        "event_id": "event-user-final-1",
+        "role": "user",
+        "content": "I would start by defining the API contract.",
+        "final": True,
+    }
+    first = cast(
+        Response,
+        client.post(
+            f"/api/v1/realtime/sessions/{conversation_id}/transcript-turns",
+            headers=owner_headers,
+            json=payload,
+        ),
+    )
+    duplicate = cast(
+        Response,
+        client.post(
+            f"/api/v1/realtime/sessions/{conversation_id}/transcript-turns",
+            headers=owner_headers,
+            json=payload,
+        ),
+    )
+    cross_user = cast(
+        Response,
+        client.post(
+            f"/api/v1/realtime/sessions/{conversation_id}/transcript-turns",
+            headers=other_headers,
+            json={**payload, "event_id": "other-user-event"},
+        ),
+    )
+    assert first.status_code == 201
+    assert duplicate.status_code == 201
+    assert duplicate.json()["id"] == first.json()["id"]
+    assert cross_user.status_code == 404
+    partial = cast(
+        Response,
+        client.post(
+            f"/api/v1/realtime/sessions/{conversation_id}/transcript-turns",
+            headers=owner_headers,
+            json={**payload, "event_id": "partial-event", "final": False},
+        ),
+    )
+    assistant = cast(
+        Response,
+        client.post(
+            f"/api/v1/realtime/sessions/{conversation_id}/transcript-turns",
+            headers=owner_headers,
+            json={
+                "event_id": "event-assistant-final-1",
+                "role": "assistant",
+                "content": "Tell me about your trade-offs.",
+                "final": True,
+            },
+        ),
+    )
+    async with factory() as session:
+        messages = list(
+            (
+                await session.execute(
+                    select(Message)
+                    .where(Message.conversation_id == UUID(conversation_id))
+                    .order_by(Message.created_at.asc(), Message.id.asc())
+                )
+            ).scalars()
+        )
+    assert partial.status_code == 422
+    assert assistant.status_code == 201
+    assert len(messages) == 2
+    assert [message.role for message in messages] == ["user", "assistant"]
+    assert messages[0].provider_event_id == "event-user-final-1"
+
+
+@pytest.mark.asyncio
+async def test_live_interview_end_runs_assessment_summary_and_progress(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, signing_key, factory = integration_client
+    monkeypatch.setattr(settings, "live_interview_enabled", True)
+    monkeypatch.setattr(settings, "ai_generation_enabled", True)
+    provider = LiveCompletionProvider()
+    app.dependency_overrides[get_ai_provider] = lambda: provider
+    try:
+        user_id = uuid4()
+        headers = auth_headers(signing_key, user_id)
+        assert (
+            client.post(
+                "/api/v1/onboarding", headers=headers, json=onboarding_payload()
+            ).status_code
+            == 201
+        )
+        created = cast(
+            Response,
+            client.post(
+                "/api/v1/conversations",
+                headers=headers,
+                json={
+                    "title": "Live completion",
+                    "mode": "interview",
+                    "interview_type": "technical",
+                    "interview_transport": "live_voice",
+                },
+            ),
+        )
+        conversation_id = created.json()["id"]
+        for event_id, role, content in (
+            ("completion-user", "user", "I would version the API."),
+            ("completion-assistant", "assistant", "Why would you version it?"),
+        ):
+            response = cast(
+                Response,
+                client.post(
+                    f"/api/v1/realtime/sessions/{conversation_id}/transcript-turns",
+                    headers=headers,
+                    json={"event_id": event_id, "role": role, "content": content, "final": True},
+                ),
+            )
+            assert response.status_code == 201
+        ended = cast(
+            Response,
+            client.post(f"/api/v1/realtime/sessions/{conversation_id}/end", headers=headers),
+        )
+        assert ended.status_code == 200
+        assert ended.json()["role"] == "assistant"
+        summary = cast(
+            Response,
+            client.get(f"/api/v1/conversations/{conversation_id}/summary", headers=headers),
+        )
+        progress = cast(Response, client.get("/api/v1/progress", headers=headers))
+        assert summary.status_code == 200
+        assert progress.status_code == 200
+        session_row = next(
+            item for item in progress.json()["recent_sessions"] if item["id"] == conversation_id
+        )
+        assert session_row["interview_completed"] is True
+        async with factory() as session:
+            conversation = await session.get(Conversation, UUID(conversation_id))
+            messages = list(
+                (
+                    await session.execute(
+                        select(Message)
+                        .where(Message.conversation_id == UUID(conversation_id))
+                        .order_by(Message.created_at.asc(), Message.id.asc())
+                    )
+                ).scalars()
+            )
+        assert conversation is not None
+        assert conversation.metadata_["interview_completed"] is True
+        assert len(messages) == 3
+    finally:
+        app.dependency_overrides.pop(get_ai_provider, None)
 
 
 def auth_headers(signing_key: SigningKey, user_id: UUID) -> dict[str, str]:

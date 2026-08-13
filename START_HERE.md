@@ -27,7 +27,7 @@ or current work order.
 
 v0.1.0 is deployed with a Next.js 16 frontend on Vercel, a single FastAPI
 backend instance on Render, Supabase Auth/PostgreSQL, and backend-only OpenAI
-access. Repository migration head is `0005`.
+access. Repository migration head is `0007`.
 
 The next product direction is richer Dashboard and Progress intelligence,
 recommended practice, explicit Goals / Development Plans, and transparent skill
