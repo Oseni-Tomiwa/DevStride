@@ -3,6 +3,7 @@ from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,6 +93,51 @@ async def create_message(session: AsyncSession, message: Message) -> Message:
     await session.flush()
     await session.refresh(message)
     return message
+
+
+async def get_message_by_provider_event_id(
+    session: AsyncSession, conversation_id: UUID, provider_event_id: str
+) -> Message | None:
+    result = await session.execute(
+        select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.provider_event_id == provider_event_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def create_or_get_transcript_message(
+    session: AsyncSession,
+    message: Message,
+) -> Message:
+    statement = (
+        postgres_insert(Message)
+        .values(
+            conversation_id=message.conversation_id,
+            role=message.role,
+            content=message.content,
+            provider_event_id=message.provider_event_id,
+            metadata_={},
+        )
+        .on_conflict_do_nothing(
+            index_elements=[Message.conversation_id, Message.provider_event_id],
+            index_where=Message.provider_event_id.is_not(None),
+        )
+        .returning(Message.id)
+    )
+    inserted_id = (await session.execute(statement)).scalar_one_or_none()
+    if inserted_id is None:
+        existing = await get_message_by_provider_event_id(
+            session, message.conversation_id, message.provider_event_id or ""
+        )
+        if existing is None:
+            raise RuntimeError("Transcript turn could not be loaded after deduplication")
+        return existing
+    persisted = await session.get(Message, inserted_id)
+    if persisted is None:
+        raise RuntimeError("Transcript turn could not be loaded after insertion")
+    return persisted
 
 
 def touch_conversation_activity(conversation: Conversation) -> None:

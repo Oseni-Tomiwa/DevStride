@@ -50,4 +50,19 @@ describe("InterviewEntry", () => {
       { title: "Behavioral interview", mode: "interview", interview_type: "behavioral" },
     ));
   });
+
+  it("offers live voice as an explicit interview format", async () => {
+    createConversation.mockResolvedValueOnce({ id: "live-id" });
+    render(<InterviewEntry />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Mock Interview" }));
+    fireEvent.click(screen.getByLabelText(/Live voice/));
+    fireEvent.click(screen.getByRole("button", { name: "Begin interview" }));
+
+    await waitFor(() => expect(createConversation).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ interview_transport: "live_voice" }),
+    ));
+    expect(push).toHaveBeenCalledWith("/conversations/live-id/live-spike");
+  });
 });

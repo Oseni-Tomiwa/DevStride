@@ -5,6 +5,7 @@ import React from "react";
 import { useSearchParams } from "next/navigation";
 
 import { createClient } from "../../../lib/supabase/client";
+import { DevStrideLogo } from "../../../components/brand/devstride-logo";
 import { PASSWORD_MIN_LENGTH } from "../validation";
 
 type AuthMode = "login" | "sign-up";
@@ -72,7 +73,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
   return (
     <section className="auth-card" aria-labelledby="auth-title">
-      <p className="eyebrow">DevStride</p>
+      <DevStrideLogo variant="auth" />
       <h1 id="auth-title">{content.title}</h1>
       <p className="muted">Build confidence for your next engineering stride.</p>
       <form onSubmit={handleSubmit}>

@@ -32,13 +32,21 @@ async def create_conversation(
     focus_area_id: UUID | None = None,
 ) -> Conversation:
     conversation_data = data.model_dump(
-        exclude={"interview_type", "interview_focus", "team_scenario", "team_difficulty"}
+        exclude={
+            "interview_type",
+            "interview_focus",
+            "interview_transport",
+            "team_scenario",
+            "team_difficulty",
+        }
     )
     if data.mode == "interview":
         conversation_data["metadata_"] = {
             "interview_type": data.interview_type,
             "interview_focus": data.interview_focus,
         }
+        if data.interview_transport == "live_voice":
+            conversation_data["metadata_"]["interview_transport"] = data.interview_transport
     elif data.mode == "team":
         conversation_data["metadata_"] = {
             "team_scenario": data.team_scenario,

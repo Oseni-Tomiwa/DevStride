@@ -6,7 +6,7 @@ import React, { useState } from "react";
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
 import { createConversation } from "../api";
-import type { InterviewFocus, InterviewType } from "../types";
+import type { InterviewFocus, InterviewTransport, InterviewType } from "../types";
 
 const focusOptions: Array<{ value: InterviewFocus; label: string }> = [
   { value: "general_backend", label: "General backend" },
@@ -22,6 +22,7 @@ export function InterviewEntry() {
   const [isOpen, setIsOpen] = useState(false);
   const [interviewType, setInterviewType] = useState<InterviewType>("technical");
   const [interviewFocus, setInterviewFocus] = useState<InterviewFocus | "">("");
+  const [transport, setTransport] = useState<InterviewTransport>("text");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,8 +35,9 @@ export function InterviewEntry() {
         mode: "interview",
         interview_type: interviewType,
         ...(interviewType === "technical" && interviewFocus ? { interview_focus: interviewFocus } : {}),
+        ...(transport === "live_voice" ? { interview_transport: transport } : {}),
       });
-      router.push(`/conversations/${conversation.id}`);
+      router.push(transport === "live_voice" ? `/conversations/${conversation.id}/live-spike` : `/conversations/${conversation.id}`);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
         router.push("/login");
@@ -73,6 +75,11 @@ export function InterviewEntry() {
             </select>
           </>
         )}
+        <fieldset>
+          <legend>Interview format</legend>
+          <label><input type="radio" name="interview-transport" value="text" checked={transport === "text"} onChange={() => setTransport("text")} /> Text interview</label>
+          <label><input type="radio" name="interview-transport" value="live_voice" checked={transport === "live_voice"} onChange={() => setTransport("live_voice")} /> Live voice <span className="muted">(experimental)</span></label>
+        </fieldset>
       </fieldset>
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="form-actions">

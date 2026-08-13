@@ -110,8 +110,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .skip-link { position: absolute; top: 0.65rem; left: 50%; z-index: 10; translate: -50% -180%; padding: 0.55rem 0.8rem; border-radius: var(--radius-sm); background: var(--ink-950); color: #fff; text-decoration: none; transition: translate 160ms ease; }
 .skip-link:focus { translate: -50% 0; color: #fff; }
-.app-brand { display: inline-flex; align-items: center; gap: 0.7rem; padding: 0.2rem 0.45rem 0.2rem 0.25rem; color: var(--ink-950); text-decoration: none; letter-spacing: -0.04em; font-size: 1.08rem; }
-.brand-mark { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 0.7rem; background: linear-gradient(145deg, var(--ink-950), #32415a); color: white; font-size: 0.9rem; font-weight: 800; box-shadow: 0 6px 14px rgb(16 24 40 / 16%); }
+.app-brand { display: inline-flex; align-items: center; gap: 0.5rem; min-width: 0; padding: 0.15rem 0.45rem 0.15rem 0.25rem; color: var(--ink-950); text-decoration: none; letter-spacing: -0.04em; font-size: 1.08rem; }
+.devstride-logo { display: block; width: auto; max-width: 100%; object-fit: contain; }
+.devstride-logo-header { width: 3.15rem; height: 2.35rem; }
+.devstride-logo-auth { width: 5.75rem; height: 3.2rem; margin-bottom: 0.3rem; }
+.devstride-logo-footer { width: 3.2rem; height: 1.9rem; }
+.devstride-logo-landing { width: 4.2rem; height: 2.35rem; }
+.app-brand-name { white-space: nowrap; }
 .app-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.2rem; }
 .nav-link { min-height: 2.65rem; display: inline-flex; align-items: center; padding: 0.58rem 0.78rem; border-radius: var(--radius-sm); color: var(--ink-600); text-decoration: none; font-size: 0.89rem; }
 .nav-link:hover, .nav-link-active { background: var(--blue-50); color: var(--ink-950); box-shadow: inset 0 0 0 1px rgb(201 216 255 / 72%); }
@@ -136,7 +141,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .app-footer p { margin: 0; }
 .app-footer-copy { display: grid; gap: 0.2rem; }
-.app-footer-brand { width: fit-content; color: var(--ink-900); text-decoration: none; font-size: 0.95rem; letter-spacing: -0.025em; }
+.app-footer-brand { display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content; color: var(--ink-900); text-decoration: none; font-size: 0.95rem; letter-spacing: -0.025em; }
 .app-footer-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-4); }
 .app-footer-nav a { color: var(--ink-600); text-decoration: none; }
 .app-footer-nav a:hover { color: var(--blue-700); }
@@ -148,7 +153,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 /* Landing */
 .landing-shell { min-height: 100vh; padding: 1.5rem clamp(1.25rem, 5vw, 5rem) 4rem; }
 .landing-nav { width: min(var(--content), 100%); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
-.landing-brand { color: var(--ink-950); font-size: 1.15rem; letter-spacing: -0.04em; text-decoration: none; }
+.landing-brand { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--ink-950); font-size: 1.15rem; letter-spacing: -0.04em; text-decoration: none; }
 .landing-nav-actions, .landing-actions { display: flex; align-items: center; gap: var(--space-3); }
 .landing-nav-actions a:not(.landing-button) { color: var(--ink-600); text-decoration: none; }
 .landing-content { width: min(52rem, 100%); margin: clamp(5rem, 15vh, 9rem) auto 0; text-align: center; }

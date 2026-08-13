@@ -39,6 +39,10 @@ the same fields optionally. `id`, `user_id`, timestamps, and
 | POST | `/api/v1/conversations/{conversation_id}/messages/{message_id}/retry` | 200 SSE | Retries an eligible user message without creating a duplicate user row. |
 | POST | `/api/v1/conversations/{conversation_id}/interview-start` | 200 SSE | Idempotent automatic first Interview message for an owned Interview conversation. |
 | POST | `/api/v1/conversations/{conversation_id}/team-start` | 200 SSE | Idempotent automatic first Team Practice message for an owned Team conversation. |
+| POST | `/api/v1/realtime/sessions` | 200 | Authorizes an owned Interview conversation and retains the ephemeral-credential bootstrap contract. |
+| POST | `/api/v1/realtime/sessions/{conversation_id}/connect` | 201 | Accepts an authenticated raw SDP offer and returns the OpenAI SDP answer after server-side negotiation. |
+| POST | `/api/v1/realtime/sessions/{conversation_id}/transcript-turns` | 201 | Persists one finalized owned Live Interview transcript turn idempotently. |
+| POST | `/api/v1/realtime/sessions/{conversation_id}/end` | 200 | Flushes the Live Interview and runs the existing Interview assessment pipeline. |
 
 Conversation creation accepts `title`, `mode`, and optional `persona`.
 Interview conversations require `interview_type` (`technical` or `behavioral`);
@@ -55,6 +59,13 @@ Message creation, complete response, and stream generation accept only:
 
 Clients do not send role, ownership, system prompts, provider, model, token, or
 latency metadata.
+
+`POST /api/v1/realtime/sessions` accepts only `conversation_id`. It requires the
+owned conversation to use Interview Mode and returns only a short-lived
+`client_secret`, its optional expiry, and the backend-selected model. The
+permanent `OPENAI_API_KEY` and server-owned interview instructions never leave
+FastAPI. The browser uses the temporary credential for its direct WebRTC SDP
+exchange with OpenAI.
 
 ## Goals and development plans
 
@@ -175,3 +186,7 @@ are delivered as `error` events after the HTTP stream has opened. AI rate limits
 return 429 with `Retry-After` before the operation begins.
 
 See [Errors](errors.md) for shared behavior.
+Interview conversations may be created with `interview_transport: "text"` or
+`"live_voice"`; text is the default and existing conversations remain text.
+Live voice sessions use `POST /api/v1/realtime/sessions` only after an owned
+live-voice interview has been created.

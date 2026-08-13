@@ -1,5 +1,6 @@
 export type ConversationMode = "general" | "mentor" | "interview" | "team";
 export type InterviewType = "technical" | "behavioral";
+export type InterviewTransport = "text" | "live_voice";
 export type InterviewFocus =
   | "general_backend"
   | "apis"
@@ -40,6 +41,7 @@ export type CreateConversationInput = {
   mode: ConversationMode;
   interview_type?: InterviewType;
   interview_focus?: InterviewFocus;
+  interview_transport?: InterviewTransport;
   team_scenario?: TeamScenario;
   team_difficulty?: TeamDifficulty;
 };
@@ -58,10 +60,18 @@ export type RespondResponse = {
   assistant_message: Message;
 };
 
-export type LiveInterviewSpikeResponse = {
-  session_id: string;
-  sdp_answer: string;
-  status: "connected";
+export type RealtimeSession = {
+  client_secret: string;
+  expires_at: number | null;
+  model: string;
+};
+
+export type RealtimeTranscriptTurn = {
+  id: string;
+  conversation_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
 };
 
 export type SessionSummary = {

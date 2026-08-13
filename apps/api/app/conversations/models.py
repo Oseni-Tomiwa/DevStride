@@ -57,6 +57,7 @@ class Message(Base):
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    provider_event_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, nullable=False, default=dict, server_default="'{}'::json"
     )

@@ -452,7 +452,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
           </p>
         )}
         {conversation.mode === "interview" && liveInterviewEnabled && (
-          <p><Link href={`/conversations/${conversation.id}/live-spike`} className="landing-button landing-button-secondary">Try Live Interview spike</Link></p>
+          <p><Link href={`/conversations/${conversation.id}/live-spike`} className="landing-button landing-button-secondary">Open Live Interview</Link></p>
         )}
         {conversation.mode === "team" && (
           <p className="conversation-context">

@@ -19,8 +19,8 @@ private signing keys, service-role credentials, or OpenAI keys.
 | `SUPABASE_JWT_AUDIENCE` | Optional | Defaults to `authenticated`. |
 | `SUPABASE_JWT_ALGORITHMS` | Optional but should be explicit | Comma-separated allow-list containing only `ES256` and/or `RS256`; default `ES256`. Match the project's active asymmetric key. |
 | `AI_GENERATION_ENABLED` | Optional | Defaults false. Enables provider-backed generation only when a key is present. |
-| `LIVE_INTERVIEW_ENABLED` | Optional | Defaults false. Enables the experimental WebRTC Interview spike only. No transcripts or messages are persisted by the spike. |
-| `LIVE_INTERVIEW_MODEL` | Optional | Backend-selected Realtime model, default `gpt-realtime`. |
+| `LIVE_INTERVIEW_ENABLED` | Optional | Defaults false. Enables Realtime Practice Phase 1 for owned Interview conversations. No transcripts or messages are persisted. |
+| `LIVE_INTERVIEW_MODEL` | Optional | Backend-selected Realtime model, default `gpt-realtime`; never accepted from clients. |
 | `OPENAI_API_KEY` | Required only when AI generation is enabled | Backend-only provider credential. |
 | `OPENAI_MODEL` | Optional | Backend-selected model, default `gpt-4.1-mini`. |
 | `AI_RATE_LIMIT_ENABLED` | Optional | Defaults true. |

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "../lib/supabase/server";
+import { DevStrideLogo } from "../components/brand/devstride-logo";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,10 @@ export default async function HomePage() {
   return (
     <main className="landing-shell">
       <nav className="landing-nav" aria-label="Primary navigation">
-        <Link className="landing-brand" href="/">DevStride</Link>
+        <Link className="landing-brand" href="/" aria-label="DevStride home">
+          <DevStrideLogo variant="landing" />
+          <span>DevStride</span>
+        </Link>
         <div className="landing-nav-actions">
           <Link href="/login">Log in</Link>
           <Link className="landing-button landing-button-small" href="/sign-up">
