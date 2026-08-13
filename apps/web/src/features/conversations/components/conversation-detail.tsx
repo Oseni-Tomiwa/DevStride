@@ -6,9 +6,9 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
-import { createConversationSummary, getConversationSummary, retryConversationMessage, startInterview, startTeam, streamConversation } from "../api";
+import { createConversationSummary, getConversationSummary, getRealtimeAnalytics, retryConversationMessage, startInterview, startTeam, streamConversation } from "../api";
 import { conversationDisplayTitle } from "../title";
-import type { Conversation, Message, SessionSummary } from "../types";
+import type { Conversation, LiveAnalytics, Message, SessionSummary } from "../types";
 import { AssistantMarkdown } from "./assistant-markdown";
 import { SessionSummaryView } from "./session-summary-view";
 
@@ -18,6 +18,7 @@ type ConversationDetailProps = {
   conversation: Conversation;
   initialMessages: Message[];
   initialSummary?: SessionSummary | null;
+  initialLiveAnalytics?: LiveAnalytics | null;
   mentorContext?: { currentLevel: string; targetRole: string };
   interviewContext?: { interviewType: string; interviewFocus: string | null; currentLevel: string; targetRole: string };
   liveInterviewEnabled?: boolean;
@@ -82,7 +83,7 @@ async function* readSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<
   }
 }
 
-export function ConversationDetail({ conversation, initialMessages, initialSummary = null, mentorContext, interviewContext, liveInterviewEnabled = false }: ConversationDetailProps) {
+export function ConversationDetail({ conversation, initialMessages, initialSummary = null, initialLiveAnalytics = null, mentorContext, interviewContext, liveInterviewEnabled = false }: ConversationDetailProps) {
   const router = useRouter();
   const [messages, setMessages] = useState(() => chronologicalMessages(initialMessages));
   const [content, setContent] = useState("");
@@ -96,6 +97,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
   const [teamKickoffPending, setTeamKickoffPending] = useState(conversation.mode === "team" && initialMessages.length === 0);
   const [teamKickoffFailed, setTeamKickoffFailed] = useState(false);
   const [summary, setSummary] = useState<SessionSummary | null>(initialSummary);
+  const [liveAnalytics, setLiveAnalytics] = useState<LiveAnalytics | null>(initialLiveAnalytics);
   const [summaryPending, setSummaryPending] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [sessionEndRequested, setSessionEndRequested] = useState(false);
@@ -295,6 +297,9 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
     setSummaryError(null);
     try {
       setSummary(await getConversationSummary(createClient(), conversation.id));
+      if (conversation.mode === "interview" && conversation.metadata.interview_transport === "live_voice") {
+        try { setLiveAnalytics(await getRealtimeAnalytics(createClient(), conversation.id)); } catch { setLiveAnalytics(null); }
+      }
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 404) {
         setSummary(null);
@@ -313,6 +318,9 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
     setSummaryError(null);
     try {
       setSummary(await createConversationSummary(createClient(), conversation.id));
+      if (conversation.mode === "interview" && conversation.metadata.interview_transport === "live_voice") {
+        try { setLiveAnalytics(await getRealtimeAnalytics(createClient(), conversation.id)); } catch { setLiveAnalytics(null); }
+      }
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
         router.push("/login");
@@ -536,7 +544,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
           <button type="button" className="button-secondary" onClick={() => void generateSummary()}>Retry summary</button>
         </div>
       )}
-      {summary && <SessionSummaryView summary={summary} />}
+      {summary && <SessionSummaryView summary={summary} liveAnalytics={liveAnalytics} />}
       <form className="message-composer" onSubmit={handleSubmit}>
         <label htmlFor="message-content">Your message</label>
         <textarea id="message-content" value={content} maxLength={MESSAGE_MAX_LENGTH} placeholder="Ask a question or describe what you want to practise…" onChange={(event) => { setContent(event.target.value); setError(null); }} onKeyDown={handleComposerKeyDown} rows={4} disabled={isSending} />

@@ -13,6 +13,7 @@ from app.database.base import Base
 from app.goals import models as goal_models  # noqa: F401
 from app.memory import models as memory_models  # noqa: F401
 from app.profiles import models  # noqa: F401
+from app.realtime import models as realtime_models  # noqa: F401
 from app.session_summaries import models as session_summary_models  # noqa: F401
 
 config = context.config

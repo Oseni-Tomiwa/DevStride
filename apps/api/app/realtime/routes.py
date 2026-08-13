@@ -28,7 +28,11 @@ from app.database.session import get_db_session
 from app.goals.repository import get_focus_by_id_owned
 from app.interviews.prompts import build_interview_instruction
 from app.profiles.service import ProfileNotFoundError, get_profile
+from app.realtime.analytics import compute_live_analytics, get_live_analytics, now_utc
+from app.realtime.repository import create_or_get_event
 from app.realtime.schemas import (
+    LiveAnalyticsResponse,
+    RealtimeAnalyticsEventRequest,
     RealtimeSessionRequest,
     RealtimeSessionResponse,
     RealtimeTranscriptTurnRequest,
@@ -243,6 +247,46 @@ async def persist_transcript_turn(
 
 
 @router.post(
+    "/sessions/{conversation_id}/analytics-events",
+    status_code=status.HTTP_201_CREATED,
+)
+async def persist_analytics_event(
+    conversation_id: UUID,
+    data: RealtimeAnalyticsEventRequest,
+    session: Session,
+    current_user: AuthenticatedUser,
+    _rate_limit: TranscriptRateLimit,
+) -> dict[str, str]:
+    await _owned_live_conversation(session, current_user.id, conversation_id)
+    await create_or_get_event(
+        session,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+        event_id=data.event_id,
+        event_type=data.event_type,
+        occurred_at=data.occurred_at,
+    )
+    await session.commit()
+    return {"status": "recorded"}
+
+
+@router.get(
+    "/sessions/{conversation_id}/analytics",
+    response_model=LiveAnalyticsResponse,
+)
+async def get_analytics(
+    conversation_id: UUID,
+    session: Session,
+    current_user: AuthenticatedUser,
+) -> LiveAnalyticsResponse:
+    await _owned_live_conversation(session, current_user.id, conversation_id, allow_completed=True)
+    analytics = await get_live_analytics(session, current_user.id, conversation_id)
+    if analytics is None:
+        raise HTTPException(status_code=404, detail="Live analytics not available")
+    return LiveAnalyticsResponse.model_validate(analytics)
+
+
+@router.post(
     "/sessions/{conversation_id}/end",
     response_model=RealtimeTranscriptTurnResponse,
 )
@@ -263,6 +307,16 @@ async def end_live_interview(
         raise HTTPException(
             status_code=409, detail="The interview could not be completed"
         ) from None
+    await create_or_get_event(
+        session,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+        event_id=f"server-session-ended-{conversation_id}",
+        event_type="session_ended",
+        occurred_at=now_utc(),
+    )
+    await session.commit()
+    await compute_live_analytics(session, current_user.id, conversation_id)
     return RealtimeTranscriptTurnResponse(
         id=str(message.id),
         conversation_id=str(message.conversation_id),

@@ -6,6 +6,7 @@ import type {
   CreateConversationInput,
   CreateUserMessageInput,
   Message,
+  LiveAnalytics,
   RealtimeSession,
   RealtimeTranscriptTurn,
   RenameConversationInput,
@@ -161,6 +162,23 @@ export function endRealtimeInterview(supabase: SupabaseClient, conversationId: s
   return createAuthenticatedApiClient(supabase).post<RealtimeTranscriptTurn>(
     `/api/v1/realtime/sessions/${conversationId}/end`,
     {},
+  );
+}
+
+export function recordRealtimeAnalyticsEvent(
+  supabase: SupabaseClient,
+  conversationId: string,
+  input: { event_id: string; event_type: string; occurred_at: string },
+) {
+  return createAuthenticatedApiClient(supabase).post<{ status: string }>(
+    `/api/v1/realtime/sessions/${conversationId}/analytics-events`,
+    input,
+  );
+}
+
+export function getRealtimeAnalytics(supabase: SupabaseClient, conversationId: string) {
+  return createAuthenticatedApiClient(supabase).get<LiveAnalytics>(
+    `/api/v1/realtime/sessions/${conversationId}/analytics`,
   );
 }
 

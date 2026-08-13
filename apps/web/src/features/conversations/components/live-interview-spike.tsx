@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
-import { connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn } from "../api";
+import { connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent } from "../api";
 import { connectRealtime, parseLiveTranscriptEvent, RealtimeConnectionError, type LiveTranscriptEvent, type RealtimeConnection } from "../realtime-client";
 
 type LiveState = "Ready" | "Connecting" | "Connected" | "Listening" | "Assistant speaking" | "Muted" | "Reconnecting" | "Ending" | "Ended" | "Error";
@@ -26,6 +26,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
   const persistedEventIdsRef = useRef(new Set(transcript.map((line) => line.eventId)));
   const pendingWritesRef = useRef(new Set<Promise<unknown>>());
+  const pendingAnalyticsWritesRef = useRef(new Set<Promise<unknown>>());
   const mountedRef = useRef(true);
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -35,6 +36,42 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   const connectionAttemptRef = useRef<string | null>(null);
   const hasStartedRef = useRef(false);
   const audioAttachedRef = useRef(false);
+  const interviewerSpeakingRef = useRef(false);
+  const interviewerFinalizedRef = useRef(false);
+  const lifecycleEventCounterRef = useRef(0);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectScheduledRef = useRef(false);
+  const endingRef = useRef(false);
+
+  function scheduleReconnect() {
+    if (!hasStartedRef.current || endingRef.current || reconnectScheduledRef.current) return;
+    if (reconnectAttemptsRef.current >= 3) {
+      setState("Error");
+      setError("Realtime Practice could not reconnect. You can try again manually.");
+      return;
+    }
+    reconnectScheduledRef.current = true;
+    reconnectAttemptsRef.current += 1;
+    setState("Reconnecting");
+    const delay = 500 * (2 ** (reconnectAttemptsRef.current - 1));
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      reconnectScheduledRef.current = false;
+      void start();
+    }, delay);
+  }
+
+  function recordAnalyticsEvent(eventType: string, providerEventId?: string) {
+    const eventId = providerEventId ?? `client-${eventType}-${++lifecycleEventCounterRef.current}`;
+    const write = recordRealtimeAnalyticsEvent(createClient(), conversationId, {
+      event_id: eventId,
+      event_type: eventType,
+      occurred_at: new Date().toISOString(),
+    }).catch(() => undefined);
+    pendingAnalyticsWritesRef.current.add(write);
+    void write.finally(() => pendingAnalyticsWritesRef.current.delete(write));
+  }
 
   function connectionErrorMessage(error: RealtimeConnectionError): string {
     const stage = error.stage;
@@ -60,12 +97,36 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   function handleEvent(value: unknown) {
     const event = providerEvent(value);
     if (!event || typeof event.type !== "string") return;
+    if (event.type === "input_audio_buffer.speech_started") {
+      recordAnalyticsEvent(
+        "candidate_speech_started",
+        typeof event.id === "string" ? `candidate-start-${event.id}` : undefined,
+      );
+    }
     if (event.type === "input_audio_buffer.speech_started" && stateRef.current === "Assistant speaking") {
       connectionRef.current?.cancelResponse();
+      recordAnalyticsEvent("interruption");
       setState("Listening");
     }
-    if (event.type.includes("audio") && event.type.includes("delta")) setState("Assistant speaking");
-    if (event.type === "response.done" || event.type.includes("audio.done")) setState("Listening");
+    if (event.type.includes("audio") && event.type.includes("delta")) {
+      if (!interviewerSpeakingRef.current) {
+        interviewerSpeakingRef.current = true;
+        interviewerFinalizedRef.current = false;
+        recordAnalyticsEvent(
+          "interviewer_speech_started",
+          typeof event.id === "string" ? `interviewer-start-${event.id}` : undefined,
+        );
+      }
+      setState("Assistant speaking");
+    }
+    if (event.type === "response.done" || event.type.includes("audio.done")) {
+      if (interviewerSpeakingRef.current) {
+        interviewerSpeakingRef.current = false;
+        interviewerFinalizedRef.current = true;
+        recordAnalyticsEvent("interviewer_speech_finalized", typeof event.id === "string" ? event.id : undefined);
+      }
+      setState("Listening");
+    }
     const caption = parseLiveTranscriptEvent(value);
     if (!caption || persistedEventIdsRef.current.has(caption.eventId)) return;
     setTranscript((current) => {
@@ -82,6 +143,13 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
       return [...current, caption];
     });
     if (!caption.final) return;
+    if (caption.speaker === "user" || !interviewerFinalizedRef.current) {
+      recordAnalyticsEvent(
+        caption.speaker === "user" ? "candidate_speech_finalized" : "interviewer_speech_finalized",
+        `${caption.speaker === "user" ? "candidate-final" : "interviewer-final"}-${caption.eventId}`,
+      );
+      if (caption.speaker === "assistant") interviewerFinalizedRef.current = true;
+    }
     persistedEventIdsRef.current.add(caption.eventId);
     setSaveState("saving");
     const write = persistRealtimeTranscriptTurn(createClient(), conversationId, {
@@ -134,7 +202,13 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
 
   async function start() {
     if (connectingRef.current || connectionRef.current) return;
+    endingRef.current = false;
     connectingRef.current = true;
+    if (reconnectTimerRef.current !== null) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+      reconnectScheduledRef.current = false;
+    }
     const attemptId = `realtime-${++attemptCounterRef.current}`;
     const controller = new AbortController();
     activeAttemptRef.current = { id: attemptId, controller };
@@ -142,6 +216,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
     setError(null);
     setAudioBlocked(false);
     if (hasStartedRef.current) await refreshPersistedTranscript();
+    if (hasStartedRef.current) recordAnalyticsEvent("reconnect");
     try {
       const connection = await connectRealtime({
         attemptId,
@@ -190,6 +265,8 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
       connectionRef.current = connection;
       connectionAttemptRef.current = attemptId;
       hasStartedRef.current = true;
+      reconnectAttemptsRef.current = 0;
+      recordAnalyticsEvent("session_connected");
       setState("Connected");
     } catch (cause) {
       setState("Error");
@@ -204,6 +281,9 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
       } else {
         setError("Realtime Practice could not connect. Please try again.");
       }
+      if (hasStartedRef.current && !(cause instanceof ApiError && cause.status === 401)) {
+        scheduleReconnect();
+      }
     } finally {
       if (activeAttemptRef.current?.id === attemptId) {
         activeAttemptRef.current = null;
@@ -213,6 +293,9 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   }
 
   function closeConnection() {
+    if (reconnectTimerRef.current !== null) clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+    reconnectScheduledRef.current = false;
     activeAttemptRef.current?.controller.abort();
     activeAttemptRef.current = null;
     connectingRef.current = false;
@@ -220,14 +303,19 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
     connectionRef.current = null;
     connectionAttemptRef.current = null;
     releaseAudio();
+    interviewerSpeakingRef.current = false;
+    interviewerFinalizedRef.current = false;
   }
 
   async function end() {
+    endingRef.current = true;
     setState("Ending");
     closeConnection();
     setMuted(false);
     try {
+      await Promise.all([...pendingAnalyticsWritesRef.current]);
       await Promise.all([...pendingWritesRef.current]);
+      await Promise.all([...pendingAnalyticsWritesRef.current]);
       await endRealtimeInterview(createClient(), conversationId);
       setState("Ended");
       router.push(`/conversations/${conversationId}`);
@@ -240,6 +328,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   function toggleMute() {
     const nextMuted = !muted;
     connectionRef.current?.mute(nextMuted);
+    recordAnalyticsEvent(nextMuted ? "mute" : "unmute");
     setMuted(nextMuted);
     setState(nextMuted ? "Muted" : "Listening");
   }
@@ -257,6 +346,9 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
     const audioElement = audioRef.current;
     return () => {
       mountedRef.current = false;
+      if (reconnectTimerRef.current !== null) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+      reconnectScheduledRef.current = false;
       activeAttemptRef.current?.controller.abort();
       activeAttemptRef.current = null;
       connectingRef.current = false;

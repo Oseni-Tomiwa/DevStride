@@ -1,4 +1,4 @@
-# Realtime Practice Phases 1–3
+# Realtime Practice Phases 1–4A
 
 Phase 1 provides a bounded voice-session foundation for an authenticated owned
 Interview conversation. It does not persist transcripts or messages and does
@@ -68,3 +68,32 @@ interviewer turns. Only finalized events are persisted through the existing
 idempotent transcript endpoint. A transport failure leaves the Interview
 incomplete and offers reconnect; End Interview waits for pending transcript
 writes before using the existing assessment and summary completion path.
+
+## Phase 4A voice analytics and reliability
+
+Live Interview clients send only normalized lifecycle observations to
+`/api/v1/realtime/sessions/{conversation_id}/analytics-events`. Approved event
+types cover connection, candidate/interviewer speech start and finalized turn,
+interruption, reconnect, mute/unmute, and explicit session end. Events are
+ownership-scoped and deduplicated by event ID per conversation. They contain no
+raw provider event, audio, SDP, prompt, credential, or transcript data.
+
+Explicit End Interview creates one structured analytics snapshot at
+`realtime_session_analytics`; transport failure, refresh, unmount, and tab
+close do not finalize or create analytics. Repeated End requests reuse the
+existing completed assessment and analytics rather than recomputing them.
+
+Speaking duration is paired start-to-finalized-turn time. Candidate talk share
+is candidate speaking time divided by candidate plus interviewer speaking time.
+Response latency is the time from the latest interviewer finalized event to the
+next candidate speech start. WPM uses finalized candidate words over measured
+candidate speaking minutes. Filler frequency uses whole-word matching for
+`um`, `uh`, `erm`, `like`, `you know`, `basically`, and `actually`.
+
+Missing or unmatched timing events produce unavailable values rather than
+invented estimates. Exact pauses, overlap, audio levels, and prosody are not
+measured. Metrics are coaching signals, not emotion, personality, confidence,
+hiring, or readiness judgments. Reconnect retries are bounded to three
+attempts with 500ms, 1s, and 2s backoff; authentication expiry stops retries
+with a safe message. The live UI shows connection state only; analytics appear
+in the completed Interview assessment view.
