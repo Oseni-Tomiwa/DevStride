@@ -92,3 +92,23 @@ export type SessionSummary = {
   created_at: string;
   updated_at: string;
 };
+
+export type LiveAnalytics = {
+  conversation_id: string;
+  candidate_speaking_ms: number | null;
+  interviewer_speaking_ms: number | null;
+  candidate_talk_share: number | null;
+  candidate_turn_count: number;
+  interviewer_turn_count: number;
+  average_candidate_response_ms: number | null;
+  longest_candidate_response_ms: number | null;
+  average_response_latency_ms: number | null;
+  interruption_count: number;
+  reconnect_count: number;
+  mute_count: number;
+  session_duration_ms: number | null;
+  finalized_word_count: number;
+  approximate_wpm: number | null;
+  filler_word_count: number;
+  filler_words_per_100: number | null;
+};

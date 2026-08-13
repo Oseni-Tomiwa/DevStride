@@ -84,10 +84,13 @@ def test_realtime_session_rejects_invalid_conversation_id(
     assert response.status_code == 422
 
 
-def test_realtime_session_is_disabled_safely(authenticated_client: CurrentUser) -> None:
+def test_realtime_session_is_disabled_safely(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
     del authenticated_client
     original = settings.live_interview_enabled
     settings.live_interview_enabled = False
+    monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(make_interview()))
     try:
         response = post_session({"conversation_id": str(uuid4())})
     finally:
@@ -124,10 +127,10 @@ def test_realtime_session_rejects_non_interview_mode(
 ) -> None:
     del authenticated_client
     conversation = make_interview(mode="general")
-    monkeypatch.setattr("app.realtime.routes.settings.live_interview_enabled", True)
     monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    monkeypatch.setattr("app.realtime.routes.settings.live_interview_enabled", False)
     response = post_session({"conversation_id": str(conversation.id)})
-    assert response.status_code == 409
+    assert response.status_code == 400
 
 
 def test_realtime_session_rejects_text_interview(
@@ -248,8 +251,9 @@ def test_realtime_connect_rejects_empty_sdp(
 ) -> None:
     del authenticated_client
     conversation = make_interview()
-    monkeypatch.setattr("app.realtime.routes.settings.live_interview_enabled", True)
     monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    monkeypatch.setattr("app.realtime.routes.settings.live_interview_enabled", False)
+    monkeypatch.setattr("app.realtime.routes.settings.openai_api_key", None)
     response = cast(
         Response,
         client.post(  # pyright: ignore[reportUnknownMemberType]
@@ -260,6 +264,63 @@ def test_realtime_connect_rejects_empty_sdp(
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "A valid SDP offer is required"
+
+
+def test_realtime_invalid_requests_do_not_require_provider_configuration(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del authenticated_client
+    conversation = make_interview(mode="general")
+    monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    monkeypatch.setattr("app.realtime.routes.settings.live_interview_enabled", False)
+    monkeypatch.setattr("app.realtime.routes.settings.openai_api_key", None)
+
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/realtime/sessions/{conversation.id}/connect",
+            content=b"",
+            headers={"Content-Type": "application/sdp"},
+        ),
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Realtime Practice requires Interview Mode"
+
+
+def test_realtime_analytics_event_requires_live_voice_and_ownership(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del authenticated_client
+    conversation = make_interview()
+    monkeypatch.setattr("app.realtime.routes.settings.live_interview_enabled", False)
+    monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/realtime/sessions/{conversation.id}/analytics-events",
+            json={
+                "event_id": "event-1",
+                "event_type": "session_connected",
+                "occurred_at": "2026-01-01T00:00:00Z",
+            },
+        ),
+    )
+    assert response.status_code == 503
+
+    monkeypatch.setattr("app.realtime.routes.settings.live_interview_enabled", True)
+    conversation.metadata_["interview_transport"] = "text"
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/realtime/sessions/{conversation.id}/analytics-events",
+            json={
+                "event_id": "event-1",
+                "event_type": "session_connected",
+                "occurred_at": "2026-01-01T00:00:00Z",
+            },
+        ),
+    )
+    assert response.status_code == 409
 
 
 def test_realtime_provider_failure_is_generic(

@@ -42,7 +42,9 @@ the same fields optionally. `id`, `user_id`, timestamps, and
 | POST | `/api/v1/realtime/sessions` | 200 | Authorizes an owned Interview conversation and retains the ephemeral-credential bootstrap contract. |
 | POST | `/api/v1/realtime/sessions/{conversation_id}/connect` | 201 | Accepts an authenticated raw SDP offer and returns the OpenAI SDP answer after server-side negotiation. |
 | POST | `/api/v1/realtime/sessions/{conversation_id}/transcript-turns` | 201 | Persists one finalized owned Live Interview transcript turn idempotently. |
-| POST | `/api/v1/realtime/sessions/{conversation_id}/end` | 200 | Flushes the Live Interview and runs the existing Interview assessment pipeline. |
+| POST | `/api/v1/realtime/sessions/{conversation_id}/analytics-events` | 201 | Records one bounded, deduplicated lifecycle event for an owned Live Interview. |
+| GET | `/api/v1/realtime/sessions/{conversation_id}/analytics` | 200 | Returns completed owned Live Interview communication analytics; 404 before explicit End Interview. |
+| POST | `/api/v1/realtime/sessions/{conversation_id}/end` | 200 | Flushes the Live Interview, runs the existing Interview assessment pipeline, and creates idempotent communication analytics. |
 
 Conversation creation accepts `title`, `mode`, and optional `persona`.
 Interview conversations require `interview_type` (`technical` or `behavioral`);
@@ -64,8 +66,9 @@ latency metadata.
 owned conversation to use Interview Mode and returns only a short-lived
 `client_secret`, its optional expiry, and the backend-selected model. The
 permanent `OPENAI_API_KEY` and server-owned interview instructions never leave
-FastAPI. The browser uses the temporary credential for its direct WebRTC SDP
-exchange with OpenAI.
+FastAPI. The browser sends its raw SDP offer to the authenticated DevStride
+`/connect` endpoint; FastAPI performs provider negotiation and returns the
+opaque SDP answer.
 
 ## Goals and development plans
 

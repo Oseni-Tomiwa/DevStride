@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LiveInterviewSpike } from "./live-interview-spike";
 
-const { connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn } = vi.hoisted(() => ({ connectRealtimeSession: vi.fn(), endRealtimeInterview: vi.fn(), listMessages: vi.fn(), persistRealtimeTranscriptTurn: vi.fn() }));
-vi.mock("../api", () => ({ connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn }));
+const { connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent } = vi.hoisted(() => ({ connectRealtimeSession: vi.fn(), endRealtimeInterview: vi.fn(), listMessages: vi.fn(), persistRealtimeTranscriptTurn: vi.fn(), recordRealtimeAnalyticsEvent: vi.fn() }));
+vi.mock("../api", () => ({ connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent }));
 vi.mock("../../../lib/supabase/client", () => ({ createClient: () => ({}) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -109,6 +109,7 @@ describe("LiveInterviewSpike", () => {
     endRealtimeInterview.mockResolvedValue({});
     listMessages.mockResolvedValue([]);
     persistRealtimeTranscriptTurn.mockResolvedValue({});
+    recordRealtimeAnalyticsEvent.mockResolvedValue({ status: "recorded" });
   });
 
   it("starts without requesting microphone permission", () => {
@@ -122,6 +123,11 @@ describe("LiveInterviewSpike", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
     expect(connectRealtimeSession).toHaveBeenCalledTimes(1);
+    expect(recordRealtimeAnalyticsEvent).toHaveBeenCalledWith(
+      {},
+      "conversation-id",
+      expect.objectContaining({ event_type: "session_connected" }),
+    );
     expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({ audio: true });
     expect(connectRealtimeSession).toHaveBeenCalledWith(
       {},
@@ -132,6 +138,11 @@ describe("LiveInterviewSpike", () => {
     expect(FakePeerConnection.latest?.dataChannel.send).toHaveBeenCalledWith(JSON.stringify({ type: "response.create" }));
     fireEvent.click(screen.getByRole("button", { name: "Mute microphone" }));
     expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeInTheDocument();
+    expect(recordRealtimeAnalyticsEvent).toHaveBeenCalledWith(
+      {},
+      "conversation-id",
+      expect.objectContaining({ event_type: "mute" }),
+    );
   });
 
   it("allows only one negotiation while a connection attempt is in flight", async () => {

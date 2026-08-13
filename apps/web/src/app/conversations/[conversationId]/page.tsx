@@ -2,8 +2,8 @@ import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "../../../components/app-shell";
 import { ConversationDetail } from "../../../features/conversations/components/conversation-detail";
-import { getConversation, getConversationSummary, listMessages } from "../../../features/conversations/api";
-import type { SessionSummary } from "../../../features/conversations/types";
+import { getConversation, getConversationSummary, getRealtimeAnalytics, listMessages } from "../../../features/conversations/api";
+import type { LiveAnalytics, SessionSummary } from "../../../features/conversations/types";
 import { getAuthenticatedProfile } from "../../../features/profile/api";
 import type { Profile } from "../../../features/profile/types";
 import { ApiError } from "../../../lib/api/client";
@@ -28,9 +28,17 @@ export default async function ConversationPage({ params }: ConversationPageProps
     ]);
     let mentorProfile: Profile | null = null;
     let sessionSummary: SessionSummary | null = null;
+    let liveAnalytics: LiveAnalytics | null = null;
     if (conversation.mode === "mentor" || conversation.mode === "interview" || conversation.mode === "team") {
       try {
         sessionSummary = await getConversationSummary(supabase, conversationId);
+      } catch (cause) {
+        if (!(cause instanceof ApiError && cause.status === 404)) throw cause;
+      }
+    }
+    if (conversation.mode === "interview" && conversation.metadata.interview_transport === "live_voice") {
+      try {
+        liveAnalytics = await getRealtimeAnalytics(supabase, conversationId);
       } catch (cause) {
         if (!(cause instanceof ApiError && cause.status === 404)) throw cause;
       }
@@ -60,6 +68,7 @@ export default async function ConversationPage({ params }: ConversationPageProps
           } : undefined}
           liveInterviewEnabled={process.env.LIVE_INTERVIEW_ENABLED === "true"}
           initialSummary={sessionSummary}
+          initialLiveAnalytics={liveAnalytics}
         />
       </AppShell>
     );

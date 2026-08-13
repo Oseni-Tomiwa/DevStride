@@ -2,7 +2,7 @@
 
 DevStride uses PostgreSQL through SQLAlchemy 2 typed declarative models,
 `asyncpg`, and async sessions. Alembic owns schema evolution. The repository
-migration head is `0007`.
+migration head is `0008`.
 
 User ownership UUIDs correspond to the verified Supabase JWT `sub`. DevStride
 does not maintain a local users table or accept ownership IDs from product
@@ -173,6 +173,21 @@ Equivalent active content for the same user/category is detected in the
 repository and reinforced at the application boundary. There is no database
 unique constraint for normalized memory content.
 
+## `realtime_session_events`
+
+Normalized, ownership-scoped lifecycle observations for Live Interview
+analytics. Events contain only a bounded event ID, approved event type, and
+timezone-aware timestamp. They never contain raw provider payloads, audio,
+SDP, prompts, credentials, or transcript content.
+
+## `realtime_session_analytics`
+
+One structured analytics snapshot per owned Live Interview, created only by
+explicit End Interview and idempotent on retries. It stores speaking durations,
+talk share, turn counts, response duration and latency, interruption/reconnect/
+mute counts, session duration, finalized word count, approximate WPM, and
+filler-word counts/rate. Text interviews do not create this row.
+
 ## Migrations
 
 | Revision | Purpose |
@@ -184,6 +199,7 @@ unique constraint for normalized memory content.
 | `0005` | allow Team session summaries |
 | `0006` | goals, ordered focus areas, and optional conversation association |
 | `0007` | finalized realtime transcript event identifiers and per-conversation deduplication |
+| `0008` | normalized Live Interview lifecycle events and analytics snapshots |
 
 Run `make api-migrate` to upgrade the configured database. Integration tests use
 `TEST_DATABASE_URL`, upgrade to head, clean between tests, and downgrade to base

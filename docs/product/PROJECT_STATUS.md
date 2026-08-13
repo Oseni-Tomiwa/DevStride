@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-11  
 Current release: v0.1.0  
-Repository migration head: `0007`
+Repository migration head: `0008`
 
 This is the canonical source of truth for the current product state and the
 order of future work. The [PRD](PRD.md) describes product intent; architecture
@@ -61,9 +61,12 @@ configuration and deployment checks.
 - Realtime Practice Phase 3 usable live Interview experience with automatic
   interviewer kickoff, remote audio, microphone controls, turn detection,
   interruption handling, transcript captions, and reconnect behavior
+- Realtime Practice Phase 4A bounded voice analytics from normalized lifecycle
+  events and finalized transcript timing, with explicit-end persistence and
+  bounded reconnect hardening
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
-- production database migrations through repository head `0007`
+- production database migrations through repository head `0008`
 - production Progress query correlation fix
 - authenticated, per-user AI rate limiting
 - Next.js 16 migration
@@ -141,13 +144,15 @@ that can feed Progress and bounded Memory. If proven useful, the same realtime
 foundation may later support Mentor and Team Practice.
 
 Phase 1 voice-session transport and security boundaries, Phase 2 finalized
-transcript persistence, and the bounded Phase 3 live Interview experience are
-implemented in `docs/architecture/REALTIME.md`. Deeper voice analysis and
-broader realtime product integration remain later work.
+transcript persistence, the bounded Phase 3 live Interview experience, and the
+Phase 4A voice analytics/reliability slice are implemented in
+`docs/architecture/REALTIME.md`. Broader realtime product integration remains
+later work.
 
 ## Later
 
-- deeper voice analysis and richer voice metrics after Phase 3 validation
+- video, raw-audio analysis, emotion/personality inference, and richer voice
+  metrics beyond the bounded Phase 4A signals
 - RAG or document learning only if separately approved
 - GitHub repository ingestion
 - distributed rate limiting when horizontal API scaling is needed
