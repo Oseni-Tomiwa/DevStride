@@ -53,14 +53,12 @@ async def _owned_live_conversation(
     *,
     allow_completed: bool = False,
 ):
-    if not settings.live_interview_enabled:
-        raise HTTPException(status_code=503, detail="Realtime Practice is currently disabled")
     try:
         conversation = await get_conversation(session, user_id, conversation_id)
     except ConversationNotFoundError:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
     if conversation.mode != "interview":
-        raise HTTPException(status_code=409, detail="Realtime Practice requires Interview Mode")
+        raise HTTPException(status_code=400, detail="Realtime Practice requires Interview Mode")
     metadata = conversation.metadata_ or {}
     if metadata.get("interview_transport", "text") != "live_voice":
         raise HTTPException(
@@ -78,6 +76,11 @@ async def _owned_live_conversation(
     return conversation
 
 
+def _require_realtime_enabled() -> None:
+    if not settings.live_interview_enabled:
+        raise HTTPException(status_code=503, detail="Realtime Practice is currently disabled")
+
+
 @router.post("/sessions", response_model=RealtimeSessionResponse)
 async def create_session(
     data: RealtimeSessionRequest,
@@ -85,18 +88,13 @@ async def create_session(
     current_user: AuthenticatedUser,
     _rate_limit: RealtimeRateLimit,
 ) -> RealtimeSessionResponse:
-    if not settings.live_interview_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Realtime Practice is currently disabled",
-        )
     try:
         conversation = await get_conversation(session, current_user.id, data.conversation_id)
     except ConversationNotFoundError:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
     if conversation.mode != "interview":
         raise HTTPException(
-            status_code=409,
+            status_code=400,
             detail="Realtime Practice is only available for Interview Mode conversations",
         )
     metadata = conversation.metadata_
@@ -113,6 +111,7 @@ async def create_session(
             raise HTTPException(
                 status_code=409, detail="This practice focus is no longer available"
             )
+    _require_realtime_enabled()
     try:
         profile = await get_profile(session, current_user.id)
     except ProfileNotFoundError:
@@ -177,6 +176,7 @@ async def connect_session(
         raise HTTPException(status_code=415, detail="A valid SDP offer is required") from None
     if not offer or not offer.startswith("v=0"):
         raise HTTPException(status_code=400, detail="A valid SDP offer is required")
+    _require_realtime_enabled()
     try:
         profile = await get_profile(session, current_user.id)
     except ProfileNotFoundError:
@@ -258,6 +258,7 @@ async def persist_analytics_event(
     _rate_limit: TranscriptRateLimit,
 ) -> dict[str, str]:
     await _owned_live_conversation(session, current_user.id, conversation_id)
+    _require_realtime_enabled()
     await create_or_get_event(
         session,
         conversation_id=conversation_id,
@@ -280,6 +281,7 @@ async def get_analytics(
     current_user: AuthenticatedUser,
 ) -> LiveAnalyticsResponse:
     await _owned_live_conversation(session, current_user.id, conversation_id, allow_completed=True)
+    _require_realtime_enabled()
     analytics = await get_live_analytics(session, current_user.id, conversation_id)
     if analytics is None:
         raise HTTPException(status_code=404, detail="Live analytics not available")
@@ -297,6 +299,7 @@ async def end_live_interview(
     provider: Annotated[AIProvider | None, Depends(get_ai_provider)],
 ) -> RealtimeTranscriptTurnResponse:
     await _owned_live_conversation(session, current_user.id, conversation_id, allow_completed=True)
+    _require_realtime_enabled()
     try:
         message = await complete_live_interview(session, current_user.id, conversation_id, provider)
     except AssistantGenerationDisabledError:
