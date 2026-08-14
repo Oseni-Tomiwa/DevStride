@@ -56,7 +56,7 @@ describe("InterviewEntry", () => {
     render(<InterviewEntry />);
 
     fireEvent.click(screen.getByRole("button", { name: "Start Interview Mode" }));
-    fireEvent.click(screen.getByLabelText(/Live voice/));
+    fireEvent.click(screen.getByLabelText(/Live Interview/));
     fireEvent.click(screen.getByRole("button", { name: "Begin interview" }));
 
     await waitFor(() => expect(createConversation).toHaveBeenCalledWith(
@@ -64,5 +64,13 @@ describe("InterviewEntry", () => {
       expect.objectContaining({ interview_transport: "live_voice" }),
     ));
     expect(push).toHaveBeenCalledWith("/conversations/live-id/live-spike");
+  });
+
+  it("keeps Text Interview selected by default with native radio semantics", () => {
+    render(<InterviewEntry />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Interview Mode" }));
+    expect(screen.getByRole("radio", { name: /Text Interview/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Live Interview/ })).not.toBeChecked();
   });
 });
