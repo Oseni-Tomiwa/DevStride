@@ -136,6 +136,55 @@ async def test_mentor_summary_generation_persists_structured_content(
 
 
 @pytest.mark.asyncio
+async def test_summary_without_substantive_user_evidence_is_neutral_and_skips_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    conversation = mentor_conversation(user_id)
+    provider = StructuredProvider()
+    created: list[SessionSummary] = []
+
+    async def owned(*args: Any) -> Conversation:
+        del args
+        return conversation
+
+    async def no_existing(*args: Any) -> None:
+        del args
+        return None
+
+    async def recent(*args: Any, **kwargs: Any) -> list[Message]:
+        del args, kwargs
+        return [Message(conversation_id=conversation.id, role="assistant", content="Try this.")]
+
+    async def create(*args: Any) -> SessionSummary:
+        summary = cast(SessionSummary, args[1])
+        created.append(summary)
+        return summary
+
+    monkeypatch.setattr(
+        "app.session_summaries.service.conversation_repository.get_by_id_and_user_id_for_update",
+        owned,
+    )
+    monkeypatch.setattr(repository, "get_by_conversation_id_and_user_id", no_existing)
+    monkeypatch.setattr(
+        "app.session_summaries.service.conversation_repository.get_recent_by_conversation_id",
+        recent,
+    )
+    monkeypatch.setattr(repository, "create", create)
+
+    summary = await generate_summary(
+        cast(AsyncSession, SummarySession()), user_id, conversation.id, provider
+    )
+
+    assert provider.calls == 0
+    assert summary.strengths == []
+    assert summary.weaknesses == []
+    assert summary.correctness_rating is None
+    assert summary.summary.startswith("No meaningful user response")
+    assert created == [summary]
+
+
+@pytest.mark.asyncio
 async def test_summary_is_idempotent_and_does_not_call_provider_again(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

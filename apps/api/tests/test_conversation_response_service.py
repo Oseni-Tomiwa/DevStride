@@ -20,6 +20,7 @@ from app.conversations.response_service import (
     StreamAssistantComplete,
     StreamAssistantDelta,
     StreamUserMessage,
+    complete_live_interview,
     generate_response,
     retry_stream_response,
     start_interview_response,
@@ -347,6 +348,127 @@ async def test_successful_final_assessment_marks_interview_complete_after_persis
     assert assistant in added
     assert conversation.metadata_["interview_completed"] is True
     assert conversation.metadata_["final_assessment_message_id"] == str(assistant.id)
+
+
+@pytest.mark.asyncio
+async def test_live_interview_without_candidate_response_creates_neutral_assessment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id=uuid4(),
+        user_id=uuid4(),
+        title="Live interview",
+        mode="interview",
+        metadata_={"interview_transport": "live_voice"},
+    )
+    kickoff = make_message(conversation.id, "assistant", "Tell me about an API you built.")
+    added: list[Message] = []
+
+    async def owned(*args: Any) -> Conversation:
+        del args
+        return conversation
+
+    async def recent(*args: Any, **kwargs: Any) -> list[Message]:
+        del args, kwargs
+        return [kickoff]
+
+    async def create_message(_session: AsyncSession, message: Message) -> Message:
+        added.append(message)
+        return message
+
+    async def no_summary(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+
+    provider = FakeProvider(
+        GenerationResult(text="This must never be generated", provider="openai", model="model")
+    )
+    monkeypatch.setattr(
+        "app.conversations.response_service.repository.get_by_id_and_user_id_for_update",
+        owned,
+    )
+    monkeypatch.setattr(
+        "app.conversations.response_service.repository.get_recent_by_conversation_id",
+        recent,
+    )
+    monkeypatch.setattr(
+        "app.conversations.response_service.repository.create_message",
+        create_message,
+    )
+    monkeypatch.setattr(
+        "app.conversations.response_service._maybe_generate_session_summary",
+        no_summary,
+    )
+
+    result = await complete_live_interview(
+        cast(AsyncSession, type("Session", (), {"commit": _commit})()),
+        conversation.user_id,
+        conversation.id,
+        provider,
+    )
+
+    assert provider.messages == []
+    assert result.metadata_ == {"evidence_status": "insufficient"}
+    assert "no interview evidence" in result.content
+    assert added == [result]
+    assert conversation.metadata_["interview_completed"] is True
+
+
+@pytest.mark.asyncio
+async def test_live_interview_with_empty_history_can_finalize_neutrally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id=uuid4(),
+        user_id=uuid4(),
+        title="Live interview",
+        mode="interview",
+        metadata_={"interview_transport": "live_voice"},
+    )
+    added: list[Message] = []
+
+    async def owned(*args: Any) -> Conversation:
+        del args
+        return conversation
+
+    async def recent(*args: Any, **kwargs: Any) -> list[Message]:
+        del args, kwargs
+        return []
+
+    async def create_message(_session: AsyncSession, message: Message) -> Message:
+        added.append(message)
+        return message
+
+    async def no_summary(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+
+    monkeypatch.setattr(
+        "app.conversations.response_service.repository.get_by_id_and_user_id_for_update",
+        owned,
+    )
+    monkeypatch.setattr(
+        "app.conversations.response_service.repository.get_recent_by_conversation_id",
+        recent,
+    )
+    monkeypatch.setattr(
+        "app.conversations.response_service.repository.create_message",
+        create_message,
+    )
+    monkeypatch.setattr(
+        "app.conversations.response_service._maybe_generate_session_summary",
+        no_summary,
+    )
+
+    result = await complete_live_interview(
+        cast(AsyncSession, type("Session", (), {"commit": _commit})()),
+        conversation.user_id,
+        conversation.id,
+        None,
+    )
+
+    assert result.metadata_ == {"evidence_status": "insufficient"}
+    assert result.role == "assistant"
+    assert len(added) == 1
+    assert conversation.metadata_["interview_completed"] is True
 
 
 @pytest.mark.asyncio

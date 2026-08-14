@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.provider import AIProvider, AIProviderError, ProviderMessage
 from app.conversations import repository as conversation_repository
+from app.conversations.evidence import has_meaningful_user_evidence
+from app.conversations.models import Conversation
 from app.session_summaries import repository
 from app.session_summaries.models import SessionSummary
 from app.session_summaries.prompts import build_summary_instruction
@@ -13,6 +15,13 @@ from app.session_summaries.schemas import SessionSummaryContent
 
 logger = logging.getLogger(__name__)
 SUMMARY_MESSAGE_LIMIT = 40
+NO_EVIDENCE_SUMMARY = (
+    "No meaningful user response was recorded, so there is not enough evidence "
+    "for a practice assessment."
+)
+NO_EVIDENCE_NEXT_STEP = (
+    "Respond to the next prompt with a substantive answer so it can be evaluated."
+)
 
 
 class SessionSummaryNotAllowedError(Exception):
@@ -25,6 +34,25 @@ class SessionSummaryNotFoundError(Exception):
 
 class SessionSummaryGenerationError(Exception):
     pass
+
+
+def _neutral_summary(conversation: Conversation, user_id: UUID) -> SessionSummary:
+    return SessionSummary(
+        conversation_id=conversation.id,
+        user_id=user_id,
+        session_mode=conversation.mode,
+        summary=NO_EVIDENCE_SUMMARY,
+        topics_covered=[],
+        strengths=[],
+        weaknesses=[],
+        recommended_next_steps=[NO_EVIDENCE_NEXT_STEP],
+        concepts_practiced=[],
+        exercises_completed=[],
+        correctness_rating=None,
+        clarity_rating=None,
+        depth_rating=None,
+        reasoning_rating=None,
+    )
 
 
 def _provider_messages(messages: Sequence[object]) -> list[ProviderMessage]:
@@ -65,13 +93,26 @@ async def generate_summary(
     )
     if existing is not None:
         return existing
-    if provider is None:
-        raise SessionSummaryGenerationError
 
     messages = await conversation_repository.get_recent_by_conversation_id(
         session, conversation_id, limit=SUMMARY_MESSAGE_LIMIT
     )
     if not messages:
+        raise SessionSummaryGenerationError
+    if not has_meaningful_user_evidence(messages):
+        summary = _neutral_summary(conversation, user_id)
+        try:
+            await repository.create(session, summary)
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            logger.warning(
+                "Session summary persistence failed",
+                extra={"mode": conversation.mode, "error_type": type(exc).__name__},
+            )
+            raise SessionSummaryGenerationError from exc
+        return summary
+    if provider is None:
         raise SessionSummaryGenerationError
     try:
         content, _result = await provider.generate_structured(

@@ -202,3 +202,41 @@ async def test_equivalent_candidate_is_reinforced_not_duplicated(
         cast(AsyncSession, FakeSession()), user_id, summary, CandidateProvider(batch)
     )
     assert reinforced == 1
+
+
+@pytest.mark.asyncio
+async def test_neutral_no_evidence_summary_does_not_extract_memory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    summary = SessionSummary(
+        id=uuid4(),
+        conversation_id=uuid4(),
+        user_id=uuid4(),
+        session_mode="interview",
+        summary="No meaningful user response was recorded, so there is not enough evidence.",
+        topics_covered=[],
+        strengths=[],
+        weaknesses=[],
+        recommended_next_steps=[],
+    )
+
+    async def unexpected(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        raise AssertionError("neutral summaries must not query or persist memory")
+
+    monkeypatch.setattr(repository, "find_equivalent", unexpected)
+    batch = MemoryCandidateBatch.model_validate(
+        {
+            "candidates": [
+                {
+                    "category": "skill",
+                    "content": "The learner explained the concept correctly",
+                    "importance": 5,
+                    "confidence": 1.0,
+                }
+            ]
+        }
+    )
+    await extract_and_persist_candidates(
+        cast(AsyncSession, FakeSession()), summary.user_id, summary, CandidateProvider(batch)
+    )

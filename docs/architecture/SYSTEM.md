@@ -90,6 +90,12 @@ context and cannot override system behavior or the user's current request.
   current explicit user input has higher priority.
 - The provider adapter supports complete responses, SSE streaming, and
   structured outputs for summaries/memory extraction.
+- Practice feedback and structured summaries require substantive user-authored
+  evidence. Empty, placeholder, control-only, or unusable turns produce neutral
+  no-evidence outcomes rather than positive ratings or strengths.
+- Practice request timing may be emitted at debug level as content-free stages
+  with a correlation ID and elapsed milliseconds; prompts, transcripts,
+  credentials, and provider payloads are never logged.
 - Messages and provider metadata are persisted only by FastAPI.
 - AI operations use authenticated per-user, process-local limits and return 429
   with `Retry-After` when exceeded.

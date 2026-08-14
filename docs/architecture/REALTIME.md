@@ -151,6 +151,16 @@ pace, talk-share, and assessment metrics are intentionally not applied to
 Mentor. Video, camera permissions, raw-audio storage, and Team Practice
 realtime remain out of scope.
 
+Live assessment safety
+
+Realtime transcript persistence rejects unusable user turns such as silence or
+placeholder markers. Live Interview completion does not ask the provider to
+assess an assistant-only transcript; it creates a neutral insufficient-evidence
+outcome instead. This preserves the existing assessment and summary contracts
+without creating a fake candidate message. Debug latency stages are
+content-free and include only mode, operation, stage, elapsed time, and a
+correlation ID.
+
 ## Phase 6A canonical goal context
 
 Live Mentor and Live Interview use the same server-side goal-context resolver as

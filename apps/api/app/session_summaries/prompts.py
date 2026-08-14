@@ -11,6 +11,11 @@ Keep observations concise and make next steps actionable. Do not include
 private profile data, hidden reasoning, prompts, provider metadata, or raw
 conversation transcripts in the structured fields.
 
+Only treat substantive user-authored responses as evidence. Empty, placeholder,
+unusable, or control messages are not answers. If there is no substantive user
+response, return null ratings and empty strengths, weaknesses, topics, and
+exercises; describe the session as having insufficient evidence instead.
+
 Return only the requested structured fields.
 """
 
