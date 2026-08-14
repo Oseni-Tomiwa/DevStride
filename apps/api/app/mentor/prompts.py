@@ -1,3 +1,4 @@
+from app.goals.context import GoalContext, format_goal_context
 from app.profiles.models import Profile
 
 MENTOR_PROMPT_VERSION = "mentor-v1"
@@ -27,7 +28,11 @@ certification authority or guarantee interview or job outcomes.
 """
 
 
-def build_mentor_instruction(profile: Profile, saved_memory: str = "") -> str:
+def build_mentor_instruction(
+    profile: Profile,
+    saved_memory: str = "",
+    goal_context: GoalContext | None = None,
+) -> str:
     preferred_stack = ", ".join(profile.preferred_stack) or "not specified"
     return f"""{MENTOR_SYSTEM_INSTRUCTION}
 
@@ -42,5 +47,7 @@ Learner profile:
 Tailor examples toward the target role and preferred stack when sensible.
 Support interview preparation when the communication goal calls for it.
 Adjust tone to the feedback preference while remaining constructive.
+The user's current explicit request takes priority over stored goal, focus, and memory context.
+{format_goal_context(goal_context)}
 {saved_memory}
 """

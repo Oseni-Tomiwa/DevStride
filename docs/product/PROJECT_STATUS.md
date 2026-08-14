@@ -100,9 +100,8 @@ configuration and deployment checks.
 
 ## Next
 
-1. Complete the Goals / Development Plan user experience on top of the backend
-   persistence foundation now in progress.
-2. Integrate explicit goals with practice launch, Progress, and Dashboard.
+1. Refine goal-aware Mentor, Interview, Team, and live practice context.
+2. Integrate goal evidence more deeply into the Dashboard and Progress loop.
 3. Skills and recurring weakness tracking with transparent evidence.
 
 ## Backend foundation in progress
@@ -119,6 +118,9 @@ configuration and deployment checks.
 - Goal-aware Progress backend integration is complete: explicitly linked
   practice, focus-area completion, bounded linked evidence, and deterministic
   Goal next actions are available without changing the Dashboard UI.
+- Phase 6A canonical goal-context propagation is complete: linked active goals
+  and focus areas now reach the server-built Mentor, Interview, Team, Live
+  Mentor, and Live Interview prompts with ownership and stale-state checks.
 - Preview acceptance/persistence and deeper Dashboard integration remain future
   work; the `/goals` frontend is shipped.
 

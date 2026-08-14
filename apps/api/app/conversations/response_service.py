@@ -16,6 +16,7 @@ from app.conversations import repository
 from app.conversations.models import Conversation, Message
 from app.conversations.schemas import RespondRequest
 from app.conversations.service import get_conversation, get_retry_message
+from app.goals.context import resolve_conversation_goal_context
 from app.interviews.prompts import build_interview_instruction
 from app.memory.service import memory_context, retrieve_for_prompt
 from app.mentor.prompts import build_mentor_instruction
@@ -422,13 +423,21 @@ async def system_instruction(
         if mode == "team":
             raise TeamProfileRequiredError
         raise MentorProfileRequiredError
+    goal_context = (
+        await resolve_conversation_goal_context(session, user_id, conversation.id)
+        if mode in {"mentor", "interview", "team"} and conversation.focus_area_id is not None
+        else None
+    )
     if mode == "interview":
         try:
             memories = await retrieve_for_prompt(session, user_id)
         except Exception:
             memories = []
         return build_interview_instruction(
-            profile, conversation.metadata_ or {}, memory_context(memories)
+            profile,
+            conversation.metadata_ or {},
+            memory_context(memories),
+            goal_context,
         )
     if mode == "team":
         try:
@@ -436,13 +445,16 @@ async def system_instruction(
         except Exception:
             memories = []
         return build_team_instruction(
-            profile, conversation.metadata_ or {}, memory_context(memories)
+            profile,
+            conversation.metadata_ or {},
+            memory_context(memories),
+            goal_context,
         )
     try:
         memories = await retrieve_for_prompt(session, user_id)
     except Exception:
         memories = []
-    return build_mentor_instruction(profile, memory_context(memories))
+    return build_mentor_instruction(profile, memory_context(memories), goal_context)
 
 
 async def generate_response(

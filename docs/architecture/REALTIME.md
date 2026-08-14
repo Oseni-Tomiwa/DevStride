@@ -1,4 +1,4 @@
-# Realtime Practice Phases 1–4A
+# Realtime Practice Phases 1–5 and Phase 6A
 
 Phase 1 provides a bounded voice-session foundation for an authenticated owned
 Interview conversation. It does not persist transcripts or messages and does
@@ -150,3 +150,18 @@ Live Mentor has no user-facing voice analytics in v1. Interview-specific filler,
 pace, talk-share, and assessment metrics are intentionally not applied to
 Mentor. Video, camera permissions, raw-audio storage, and Team Practice
 realtime remain out of scope.
+
+## Phase 6A canonical goal context
+
+Live Mentor and Live Interview use the same server-side goal-context resolver as
+text Mentor, Interview, and Team Practice. The resolver verifies conversation
+ownership, follows the owned focus-area relationship to an owned goal, and
+returns context only while both goal and focus area are active. Archived,
+completed, stale, missing, and cross-user relationships are treated as absent;
+they do not block the conversation or leak historical context into a prompt.
+
+Goal and focus titles/descriptions are bounded and inserted as explicitly
+delimited, untrusted user-authored context. Prompts retain server-controlled
+mode behavior and state that the user's current request takes priority. No goal
+context is injected into General conversations, and no IDs, ownership data,
+timestamps, or other persistence metadata are sent to the provider.

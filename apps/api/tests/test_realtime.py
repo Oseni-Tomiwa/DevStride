@@ -20,6 +20,7 @@ from app.conversations.models import Conversation
 from app.conversations.service import ConversationNotFoundError
 from app.core.config import settings
 from app.database.session import get_db_session
+from app.goals.context import GoalContext
 from app.main import app
 
 client = TestClient(app)
@@ -254,9 +255,25 @@ def test_realtime_connect_negotiates_sdp_server_side(
 ) -> None:
     del authenticated_client
     conversation = make_interview()
+    conversation.focus_area_id = uuid4()
     monkeypatch.setattr("app.realtime.routes.settings.live_interview_enabled", True)
     monkeypatch.setattr("app.realtime.routes.settings.openai_api_key", "server-only-key")
     monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    monkeypatch.setattr(
+        "app.realtime.routes.get_focus_by_id_owned",
+        _returning(SimpleNamespace(status="active")),
+    )
+    monkeypatch.setattr(
+        "app.realtime.routes.resolve_conversation_goal_context",
+        _returning(
+            GoalContext(
+                goal_title="Improve API design",
+                goal_description="Build stronger backend explanations.",
+                focus_title="Explain trade-offs",
+                focus_description="Practice concise technical reasoning.",
+            )
+        ),
+    )
     monkeypatch.setattr("app.realtime.routes.get_profile", _profile)
     captured: list[tuple[str, str, str, str]] = []
 
@@ -288,6 +305,7 @@ def test_realtime_connect_negotiates_sdp_server_side(
     assert captured[0][0] == "server-only-key"
     assert captured[0][1] == SDP_OFFER
     assert "ask the first interview question immediately" in captured[0][3]
+    assert "Improve API design" in captured[0][3]
     assert "server-only-key" not in response.text
 
 
@@ -296,9 +314,25 @@ def test_live_mentor_connect_marks_kickoff_started(
 ) -> None:
     del authenticated_client
     conversation = make_mentor()
+    conversation.focus_area_id = uuid4()
     monkeypatch.setattr("app.realtime.routes.settings.live_mentor_enabled", True)
     monkeypatch.setattr("app.realtime.routes.settings.openai_api_key", "server-only-key")
     monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    monkeypatch.setattr(
+        "app.realtime.routes.get_focus_by_id_owned",
+        _returning(SimpleNamespace(status="active")),
+    )
+    monkeypatch.setattr(
+        "app.realtime.routes.resolve_conversation_goal_context",
+        _returning(
+            GoalContext(
+                goal_title="Lead technical discussions",
+                goal_description=None,
+                focus_title="Clarify decisions",
+                focus_description=None,
+            )
+        ),
+    )
     monkeypatch.setattr("app.realtime.routes.get_profile", _profile)
 
     async def fake_call(api_key: str, offer: str, model: str, instructions: str) -> bytes:
@@ -308,6 +342,7 @@ def test_live_mentor_connect_marks_kickoff_started(
             settings.live_mentor_model,
         )
         assert "Live Mentor voice behavior" in instructions
+        assert "Lead technical discussions" in instructions
         return b"v=0\r\no=- answer\r\n"
 
     monkeypatch.setattr("app.realtime.routes.create_realtime_call", fake_call)
@@ -604,7 +639,7 @@ async def test_realtime_call_rejects_invalid_sdp_before_provider(
         await create_realtime_call("server-key", offer, "gpt-realtime", "instructions")
 
 
-def _returning(value: Conversation) -> Any:
+def _returning(value: Any) -> Any:
     async def result(*args: object, **kwargs: object) -> Conversation:
         del args, kwargs
         return value
