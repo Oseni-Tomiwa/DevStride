@@ -8,6 +8,7 @@ import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
 import { createConversation } from "../api";
 import type { MentorTransport } from "../types";
+import { FormatOptionCard } from "./format-option-card";
 
 export function MentorEntry() {
   const router = useRouter();
@@ -42,14 +43,25 @@ export function MentorEntry() {
     <form className="mentor-setup" onSubmit={(event) => { event.preventDefault(); void startMentorMode(); }}>
       <fieldset disabled={isCreating}>
         <legend>Mentor format</legend>
-        <label>
-          <input type="radio" name="mentor-transport" value="text" checked={transport === "text"} onChange={() => setTransport("text")} />
-          Text Mentor
-        </label>
-        <label>
-          <input type="radio" name="mentor-transport" value="live_voice" checked={transport === "live_voice"} onChange={() => setTransport("live_voice")} />
-          Live Mentor <span className="muted">(microphone required)</span>
-        </label>
+        <div className="format-options">
+          <FormatOptionCard
+            name="mentor-transport"
+            value="text"
+            title="Text Mentor"
+            description="Practice through chat."
+            checked={transport === "text"}
+            onChange={() => setTransport("text")}
+          />
+          <FormatOptionCard
+            name="mentor-transport"
+            value="live_voice"
+            title="Live Mentor"
+            description="Practice by voice."
+            note="Microphone required."
+            checked={transport === "live_voice"}
+            onChange={() => setTransport("live_voice")}
+          />
+        </div>
       </fieldset>
       {error && <p className="form-error" role="alert">{error}</p>}
       <button type="submit" disabled={isCreating}>

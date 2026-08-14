@@ -108,6 +108,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(14px);
 }
+.app-nav-wrap { display: flex; align-items: center; justify-content: flex-end; min-width: 0; }
 .skip-link { position: absolute; top: 0.65rem; left: 50%; z-index: 10; translate: -50% -180%; padding: 0.55rem 0.8rem; border-radius: var(--radius-sm); background: var(--ink-950); color: #fff; text-decoration: none; transition: translate 160ms ease; }
 .skip-link:focus { translate: -50% 0; color: #fff; }
 .app-brand { display: inline-flex; align-items: center; gap: 0.5rem; min-width: 0; padding: 0.15rem 0.45rem 0.15rem 0.25rem; color: var(--ink-950); text-decoration: none; letter-spacing: -0.04em; font-size: 1.08rem; }
@@ -118,10 +119,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .devstride-logo-landing { width: 4.2rem; height: 2.35rem; }
 .app-brand-name { white-space: nowrap; }
 .app-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.2rem; }
+.app-nav-toggle { display: none; }
 .nav-link { min-height: 2.65rem; display: inline-flex; align-items: center; padding: 0.58rem 0.78rem; border-radius: var(--radius-sm); color: var(--ink-600); text-decoration: none; font-size: 0.89rem; }
 .nav-link:hover, .nav-link-active { background: var(--blue-50); color: var(--ink-950); box-shadow: inset 0 0 0 1px rgb(201 216 255 / 72%); }
 .nav-link-active { color: var(--blue-800); }
-.app-nav > div { margin-left: 0.3rem; }
+.app-nav-logout { margin-left: 0.3rem; }
 .app-nav button { min-height: 2.65rem; padding: 0.58rem 0.8rem; background: transparent; color: var(--ink-600); }
 .app-nav button:hover { background: var(--surface); color: var(--ink-950); box-shadow: var(--shadow-sm); }
 .page-content, .dashboard-shell, .conversation-shell { width: min(100%, var(--content)); margin: 0 auto; }
@@ -273,6 +275,35 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .interview-setup fieldset, .team-setup fieldset { display: grid; gap: var(--space-2); border: 0; padding: 0; }
 .interview-setup legend, .team-setup legend { margin-bottom: var(--space-2); font-weight: 750; }
 .interview-setup .form-actions, .team-setup .form-actions { justify-content: flex-start; padding-top: var(--space-2); }
+.format-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.format-option {
+  position: relative;
+  display: flex;
+  min-height: 5.75rem;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  color: var(--ink-950);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.format-option:hover, .format-option-selected { border-color: var(--blue-600); background: var(--blue-50); }
+.format-option-selected { box-shadow: inset 0 0 0 1px var(--blue-600); }
+.format-option:has(.format-option-input:focus-visible) { outline: 3px solid rgb(53 103 232 / 38%); outline-offset: 2px; }
+.format-option-input { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.format-option-indicator { display: grid; width: 1.2rem; height: 1.2rem; flex: 0 0 auto; place-items: center; margin-top: 0.1rem; border: 2px solid var(--line-strong); border-radius: 50%; background: var(--surface); }
+.format-option-selected .format-option-indicator { border-color: var(--blue-600); }
+.format-option-selected .format-option-indicator::after { width: 0.52rem; height: 0.52rem; border-radius: 50%; background: var(--blue-600); content: ""; }
+.format-option-copy { display: grid; gap: 0.2rem; min-width: 0; }
+.format-option-title { font-weight: 800; }
+.format-option-description, .format-option-note { color: var(--ink-600); font-size: 0.82rem; font-weight: 500; line-height: 1.4; }
+.format-option-note { color: var(--blue-800); font-weight: 700; }
 
 /* Recovery and confirmation dialogs */
 .recovery-page { display: grid; min-height: 100vh; place-items: center; padding: clamp(1.25rem, 5vw, 4rem) 1rem; }
@@ -465,14 +496,18 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
   .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .focus-card { grid-column: 1 / -1; }
 }
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .page-shell { padding: 1rem 0.85rem 2.5rem; }
-  .app-header { align-items: stretch; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-8); padding: 0.65rem; }
+  .app-header { align-items: center; flex-direction: row; gap: var(--space-3); margin-bottom: var(--space-6); padding: 0.55rem; }
   .app-brand { align-self: flex-start; }
-  .app-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; gap: 0.3rem; }
-  .nav-link { justify-content: center; min-width: 0; padding-inline: 0.4rem; font-size: 0.8rem; text-align: center; }
-  .app-nav > div { display: contents; }
-  .app-nav button { width: 100%; margin: 0; font-size: 0.8rem; }
+  .app-nav-wrap { position: relative; }
+  .app-nav-toggle { display: inline-grid; width: 2.75rem; height: 2.75rem; min-height: 2.75rem; place-items: center; padding: 0; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-900); font-size: 1.35rem; line-height: 1; }
+  .app-nav-toggle:hover { background: var(--blue-50); color: var(--ink-950); }
+  .app-nav { display: none; position: absolute; top: calc(100% + 0.65rem); right: 0; z-index: 5; width: min(19rem, calc(100vw - 2rem)); padding: var(--space-2); flex-direction: column; align-items: stretch; gap: 0.2rem; border: 1px solid var(--line-strong); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-md); }
+  .app-nav.app-nav-open { display: flex; }
+  .nav-link { justify-content: flex-start; min-width: 0; min-height: 2.75rem; padding-inline: var(--space-3); font-size: 0.9rem; text-align: left; }
+  .app-nav-logout { margin: var(--space-2) 0 0; padding-top: var(--space-2); border-top: 1px solid var(--line); }
+  .app-nav button { width: 100%; min-height: 2.75rem; margin: 0; padding-inline: var(--space-3); font-size: 0.9rem; text-align: left; }
   .app-nav .form-error { grid-column: 1 / -1; }
   .landing-nav-actions a:not(.landing-button) { display: none; }
   .landing-content { margin-top: 5rem; }
@@ -520,9 +555,9 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
   .goal-actions button, .goal-actions .landing-button, .goal-current-focus .landing-button, .goal-suggestion .landing-button { width: 100%; }
   .goal-type-grid, .goal-config-grid { grid-template-columns: 1fr; }
   .goal-focus-row-actions button { flex: 1; }
+  .format-options { grid-template-columns: 1fr; }
 }
 @media (max-width: 430px) {
-  .app-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .landing-shell { padding-inline: 1rem; }
   .conversation-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .progress-counts, .mode-breakdown dl, .rating-grid, .rating-observation-values { grid-template-columns: 1fr; }

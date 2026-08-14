@@ -7,6 +7,7 @@ import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
 import { createConversation } from "../api";
 import type { InterviewFocus, InterviewTransport, InterviewType } from "../types";
+import { FormatOptionCard } from "./format-option-card";
 
 const focusOptions: Array<{ value: InterviewFocus; label: string }> = [
   { value: "general_backend", label: "General backend" },
@@ -77,8 +78,25 @@ export function InterviewEntry() {
         )}
         <fieldset>
           <legend>Interview format</legend>
-          <label><input type="radio" name="interview-transport" value="text" checked={transport === "text"} onChange={() => setTransport("text")} /> Text interview</label>
-          <label><input type="radio" name="interview-transport" value="live_voice" checked={transport === "live_voice"} onChange={() => setTransport("live_voice")} /> Live voice <span className="muted">(experimental)</span></label>
+          <div className="format-options">
+            <FormatOptionCard
+              name="interview-transport"
+              value="text"
+              title="Text Interview"
+              description="Practice through chat."
+              checked={transport === "text"}
+              onChange={() => setTransport("text")}
+            />
+            <FormatOptionCard
+              name="interview-transport"
+              value="live_voice"
+              title="Live Interview"
+              description="Practice by voice."
+              note="Microphone required."
+              checked={transport === "live_voice"}
+              onChange={() => setTransport("live_voice")}
+            />
+          </div>
         </fieldset>
       </fieldset>
       {error && <p className="form-error" role="alert">{error}</p>}

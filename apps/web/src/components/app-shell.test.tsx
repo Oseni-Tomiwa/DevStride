@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
 
@@ -30,5 +30,26 @@ describe("AppShell", () => {
     expect(within(footer).getByText("Focused practice for software engineers.")).toBeInTheDocument();
     expect(within(footer).getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/profile");
     expect(within(footer).getByText(new RegExp(`${new Date().getUTCFullYear()} DevStride`))).toBeInTheDocument();
+  });
+
+  it("collapses and controls authenticated navigation on mobile", () => {
+    render(<AppShell current="profile"><h1>Profile content</h1></AppShell>);
+
+    const navigation = screen.getByRole("navigation", { name: "Authenticated navigation" });
+    const menuButton = screen.getByRole("button", { name: "Open navigation menu" });
+    expect(menuButton).toHaveAttribute("aria-expanded", "false");
+    expect(navigation).not.toHaveClass("app-nav-open");
+
+    fireEvent.click(menuButton);
+    expect(screen.getByRole("button", { name: "Close navigation menu" })).toHaveAttribute("aria-expanded", "true");
+    expect(navigation).toHaveClass("app-nav-open");
+    expect(within(navigation).getByRole("link", { name: "Profile" })).toHaveAttribute("aria-current", "page");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "Open navigation menu" })).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(menuButton);
+    fireEvent.click(within(navigation).getByRole("link", { name: "Conversations" }));
+    expect(navigation).not.toHaveClass("app-nav-open");
   });
 });
