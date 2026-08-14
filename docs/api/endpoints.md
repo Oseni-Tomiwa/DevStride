@@ -135,11 +135,18 @@ active Goal; its Goal focus outranks saved Memory and Profile fallback focus.
 | --- | --- | --- | --- |
 | GET | `/api/v1/conversations/{conversation_id}/summary` | 200 | Returns the owned Mentor, Interview, or Team summary; 404 when absent/inapplicable. |
 | POST | `/api/v1/conversations/{conversation_id}/summary` | 201 | Generates or returns the one summary for a supported owned conversation. |
+| GET | `/api/v1/conversations/{conversation_id}/report` | 200 | Reconstructs an owned Mentor, Interview, or Team practice report from persisted summary, optional Live Interview analytics, Goal/Focus attribution, and the canonical next-practice recommendation. |
 
 Summary generation is not available for General mode. It may also be generated
 automatically by supported end-session flows. A summary contains concise
 observations, lists of topics/strengths/weaknesses/next steps, optional mode
 details, and optional 1–5 practice ratings.
+
+Practice reports are reconstructed on read and do not create a second
+evaluation or persisted report row. They expose insufficient-evidence status
+when no meaningful user response exists, include Live Interview analytics only
+when an owned completed analytics snapshot exists, and reuse the existing
+deterministic Progress recommendation.
 
 ## Progress
 

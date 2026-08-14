@@ -6,11 +6,12 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
-import { createConversationSummary, getConversationSummary, getRealtimeAnalytics, retryConversationMessage, startInterview, startTeam, streamConversation } from "../api";
+import { createConversationSummary, getConversationReport, getConversationSummary, getRealtimeAnalytics, retryConversationMessage, startInterview, startTeam, streamConversation } from "../api";
 import { conversationDisplayTitle } from "../title";
-import type { Conversation, LiveAnalytics, Message, SessionSummary } from "../types";
+import type { Conversation, LiveAnalytics, Message, PracticeReport, SessionSummary } from "../types";
 import { AssistantMarkdown } from "./assistant-markdown";
 import { SessionSummaryView } from "./session-summary-view";
+import { PracticeReportView } from "./practice-report-view";
 
 const MESSAGE_MAX_LENGTH = 20_000;
 
@@ -19,6 +20,7 @@ type ConversationDetailProps = {
   initialMessages: Message[];
   initialSummary?: SessionSummary | null;
   initialLiveAnalytics?: LiveAnalytics | null;
+  initialReport?: PracticeReport | null;
   mentorContext?: { currentLevel: string; targetRole: string };
   interviewContext?: { interviewType: string; interviewFocus: string | null; currentLevel: string; targetRole: string };
   liveInterviewEnabled?: boolean;
@@ -84,7 +86,7 @@ async function* readSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<
   }
 }
 
-export function ConversationDetail({ conversation, initialMessages, initialSummary = null, initialLiveAnalytics = null, mentorContext, interviewContext, liveInterviewEnabled = false, liveMentorEnabled = false }: ConversationDetailProps) {
+export function ConversationDetail({ conversation, initialMessages, initialSummary = null, initialLiveAnalytics = null, initialReport = null, mentorContext, interviewContext, liveInterviewEnabled = false, liveMentorEnabled = false }: ConversationDetailProps) {
   const router = useRouter();
   const [messages, setMessages] = useState(() => chronologicalMessages(initialMessages));
   const [content, setContent] = useState("");
@@ -99,6 +101,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
   const [teamKickoffFailed, setTeamKickoffFailed] = useState(false);
   const [summary, setSummary] = useState<SessionSummary | null>(initialSummary);
   const [liveAnalytics, setLiveAnalytics] = useState<LiveAnalytics | null>(initialLiveAnalytics);
+  const [report, setReport] = useState<PracticeReport | null>(initialReport);
   const [summaryPending, setSummaryPending] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [sessionEndRequested, setSessionEndRequested] = useState(false);
@@ -298,6 +301,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
     setSummaryError(null);
     try {
       setSummary(await getConversationSummary(createClient(), conversation.id));
+      try { setReport(await getConversationReport(createClient(), conversation.id)); } catch { /* Keep the summary available if report refresh is unavailable. */ }
       if (conversation.mode === "interview" && conversation.metadata.interview_transport === "live_voice") {
         try { setLiveAnalytics(await getRealtimeAnalytics(createClient(), conversation.id)); } catch { setLiveAnalytics(null); }
       }
@@ -319,6 +323,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
     setSummaryError(null);
     try {
       setSummary(await createConversationSummary(createClient(), conversation.id));
+      try { setReport(await getConversationReport(createClient(), conversation.id)); } catch { /* Keep the summary available if report refresh is unavailable. */ }
       if (conversation.mode === "interview" && conversation.metadata.interview_transport === "live_voice") {
         try { setLiveAnalytics(await getRealtimeAnalytics(createClient(), conversation.id)); } catch { setLiveAnalytics(null); }
       }
@@ -548,7 +553,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
           <button type="button" className="button-secondary" onClick={() => void generateSummary()}>Retry summary</button>
         </div>
       )}
-      {summary && <SessionSummaryView summary={summary} liveAnalytics={liveAnalytics} />}
+      {report ? <PracticeReportView report={report} /> : summary && <SessionSummaryView summary={summary} liveAnalytics={liveAnalytics} />}
       <form className="message-composer" onSubmit={handleSubmit}>
         <label htmlFor="message-content">Your message</label>
         <textarea id="message-content" value={content} maxLength={MESSAGE_MAX_LENGTH} placeholder="Ask a question or describe what you want to practice…" onChange={(event) => { setContent(event.target.value); setError(null); }} onKeyDown={handleComposerKeyDown} rows={4} disabled={isSending} />
