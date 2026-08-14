@@ -67,6 +67,7 @@ export default async function ConversationPage({ params }: ConversationPageProps
             targetRole: mentorProfile.target_role,
           } : undefined}
           liveInterviewEnabled={process.env.LIVE_INTERVIEW_ENABLED === "true"}
+          liveMentorEnabled={process.env.LIVE_MENTOR_ENABLED === "true"}
           initialSummary={sessionSummary}
           initialLiveAnalytics={liveAnalytics}
         />

@@ -90,7 +90,8 @@ class FakePeerConnection extends EventTarget {
   }
 }
 
-export function LiveInterviewE2EHarness() {
+export function LiveInterviewE2EHarness({ practiceMode = "interview" }: { practiceMode?: "interview" | "mentor" }) {
+  const isMentor = practiceMode === "mentor";
   const [ready, setReady] = useState(false);
   const [, setMode] = useState<E2EMode>("healthy");
   const modeRef = useRef<E2EMode>("healthy");
@@ -159,6 +160,6 @@ export function LiveInterviewE2EHarness() {
       <button type="button" onClick={() => (FakePeerConnection.latest?.dataChannel.emit({ id: "user-1", type: "input_audio_transcription.completed", transcript: "My answer" }), FakePeerConnection.latest?.dataChannel.emit({ id: "assistant-1", type: "response.audio_transcript.done", transcript: "Good answer" }))}>Emit transcript</button>
       <button type="button" onClick={() => FakeTrack.latest?.stop()}>Simulate microphone loss</button>
     </div>
-    <LiveInterviewSpike conversationId={conversationId} interviewType="technical" interviewFocus="apis" initialMessages={messages} testApi={api} />
+    <LiveInterviewSpike conversationId={conversationId} practiceMode={practiceMode} mentorStarted={isMentor && messages.length > 0} interviewType="technical" interviewFocus="apis" initialMessages={messages} testApi={api} />
   </main>;
 }

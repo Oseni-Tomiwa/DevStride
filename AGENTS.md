@@ -20,9 +20,10 @@ vector search, document retrieval, GitHub ingestion, or "remember everything"
 behavior without separate approval.
 
 Live Conversation/realtime voice is approved through the bounded Realtime
-Practice Phase 4B experience described in `docs/architecture/REALTIME.md`.
-Keep video, emotion/personality inference, raw-audio storage, and broader
-realtime product expansion out of scope unless separately approved.
+Practice Phase 5 Live Mentor experience described in
+`docs/architecture/REALTIME.md`. Keep video, emotion/personality inference,
+raw-audio storage, Team Practice realtime, and broader realtime product
+expansion out of scope unless separately approved.
 
 ## Required reading order
 

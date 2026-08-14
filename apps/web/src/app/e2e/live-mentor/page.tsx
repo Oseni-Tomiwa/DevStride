@@ -4,7 +4,7 @@ import { LiveInterviewE2EHarness } from "../../../features/conversations/compone
 
 export const dynamic = "force-dynamic";
 
-export default function LiveInterviewE2EPage() {
+export default function LiveMentorE2EPage() {
   if (process.env.E2E_TEST !== "true") notFound();
-  return <LiveInterviewE2EHarness />;
+  return <LiveInterviewE2EHarness practiceMode="mentor" />;
 }

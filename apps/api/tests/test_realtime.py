@@ -4,6 +4,7 @@ from email import policy
 from email.parser import BytesParser
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import httpx
@@ -50,10 +51,20 @@ def make_interview(user_id: UUID = USER_ID, mode: str = "interview") -> Conversa
     )
 
 
+def make_mentor(user_id: UUID = USER_ID, transport: str = "live_voice") -> Conversation:
+    return Conversation(
+        id=uuid4(),
+        user_id=user_id,
+        title="Mentor session",
+        mode="mentor",
+        metadata_={"mentor_transport": transport},
+    )
+
+
 @pytest.fixture
 def authenticated_client() -> Generator[CurrentUser, None, None]:
     async def override_db() -> AsyncIterator[AsyncSession]:
-        yield cast(AsyncSession, object())
+        yield cast(AsyncSession, SimpleNamespace(commit=AsyncMock()))
 
     user = CurrentUser(id=USER_ID, email="voice@example.com")
     app.dependency_overrides[get_current_user] = lambda: user
@@ -203,6 +214,41 @@ def test_realtime_session_returns_only_short_lived_client_secret(
     assert "server-only-key" not in response.text
 
 
+def test_live_mentor_bootstrap_uses_mentor_instructions(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del authenticated_client
+    conversation = make_mentor()
+    monkeypatch.setattr("app.realtime.routes.settings.live_mentor_enabled", True)
+    monkeypatch.setattr("app.realtime.routes.settings.openai_api_key", "server-only-key")
+    monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    monkeypatch.setattr("app.realtime.routes.get_profile", _profile)
+    calls: list[str] = []
+
+    async def fake_secret(api_key: str, model: str, instructions: str) -> tuple[str, int | None]:
+        assert api_key == "server-only-key"
+        calls.append(instructions)
+        return "ek_temporary", 123
+
+    monkeypatch.setattr("app.realtime.routes.create_realtime_client_secret", fake_secret)
+    response = post_session({"conversation_id": str(conversation.id)})
+    assert response.status_code == 200
+    assert response.json()["model"] == settings.live_mentor_model
+    assert "Live Mentor voice behavior" in calls[0]
+    assert "You are a professional DevStride software-engineering interviewer." not in calls[0]
+
+
+def test_live_mentor_text_transport_is_rejected(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del authenticated_client
+    conversation = make_mentor(transport="text")
+    monkeypatch.setattr("app.realtime.routes.settings.live_mentor_enabled", True)
+    monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    response = post_session({"conversation_id": str(conversation.id)})
+    assert response.status_code == 409
+
+
 def test_realtime_connect_negotiates_sdp_server_side(
     authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -242,6 +288,80 @@ def test_realtime_connect_negotiates_sdp_server_side(
     assert captured[0][0] == "server-only-key"
     assert captured[0][1] == SDP_OFFER
     assert "ask the first interview question immediately" in captured[0][3]
+    assert "server-only-key" not in response.text
+
+
+def test_live_mentor_connect_marks_kickoff_started(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del authenticated_client
+    conversation = make_mentor()
+    monkeypatch.setattr("app.realtime.routes.settings.live_mentor_enabled", True)
+    monkeypatch.setattr("app.realtime.routes.settings.openai_api_key", "server-only-key")
+    monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    monkeypatch.setattr("app.realtime.routes.get_profile", _profile)
+
+    async def fake_call(api_key: str, offer: str, model: str, instructions: str) -> bytes:
+        assert (api_key, offer, model) == (
+            "server-only-key",
+            SDP_OFFER,
+            settings.live_mentor_model,
+        )
+        assert "Live Mentor voice behavior" in instructions
+        return b"v=0\r\no=- answer\r\n"
+
+    monkeypatch.setattr("app.realtime.routes.create_realtime_call", fake_call)
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/realtime/sessions/{conversation.id}/connect",
+            content=SDP_OFFER,
+            headers={"Content-Type": "application/sdp"},
+        ),
+    )
+    assert response.status_code == 201
+    assert conversation.metadata_["mentor_started"] is True
+
+
+def test_live_mentor_connect_is_disabled_before_provider_access(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del authenticated_client
+    conversation = make_mentor()
+    monkeypatch.setattr("app.realtime.routes.settings.live_mentor_enabled", False)
+    monkeypatch.setattr("app.realtime.routes.settings.openai_api_key", None)
+    monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/realtime/sessions/{conversation.id}/connect",
+            content=SDP_OFFER,
+            headers={"Content-Type": "application/sdp"},
+        ),
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Live Mentor is currently disabled"
+    assert "server-only-key" not in response.text
+
+
+def test_live_mentor_connect_rejects_missing_provider_configuration(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del authenticated_client
+    conversation = make_mentor()
+    monkeypatch.setattr("app.realtime.routes.settings.live_mentor_enabled", True)
+    monkeypatch.setattr("app.realtime.routes.settings.openai_api_key", None)
+    monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    response = cast(
+        Response,
+        client.post(  # pyright: ignore[reportUnknownMemberType]
+            f"/api/v1/realtime/sessions/{conversation.id}/connect",
+            content=SDP_OFFER,
+            headers={"Content-Type": "application/sdp"},
+        ),
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Live Mentor is currently unavailable"
     assert "server-only-key" not in response.text
 
 

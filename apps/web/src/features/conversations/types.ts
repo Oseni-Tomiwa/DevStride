@@ -1,6 +1,7 @@
 export type ConversationMode = "general" | "mentor" | "interview" | "team";
 export type InterviewType = "technical" | "behavioral";
 export type InterviewTransport = "text" | "live_voice";
+export type MentorTransport = "text" | "live_voice";
 export type InterviewFocus =
   | "general_backend"
   | "apis"
@@ -42,6 +43,7 @@ export type CreateConversationInput = {
   interview_type?: InterviewType;
   interview_focus?: InterviewFocus;
   interview_transport?: InterviewTransport;
+  mentor_transport?: MentorTransport;
   team_scenario?: TeamScenario;
   team_difficulty?: TeamDifficulty;
 };

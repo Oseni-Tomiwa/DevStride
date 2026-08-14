@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveInterviewSpike } from "./live-interview-spike";
 import { ApiError } from "../../../lib/api/client";
 
-const { connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent } = vi.hoisted(() => ({ connectRealtimeSession: vi.fn(), endRealtimeInterview: vi.fn(), listMessages: vi.fn(), persistRealtimeTranscriptTurn: vi.fn(), recordRealtimeAnalyticsEvent: vi.fn() }));
-vi.mock("../api", () => ({ connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent }));
+const { connectRealtimeSession, endLiveMentor, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent } = vi.hoisted(() => ({ connectRealtimeSession: vi.fn(), endLiveMentor: vi.fn(), endRealtimeInterview: vi.fn(), listMessages: vi.fn(), persistRealtimeTranscriptTurn: vi.fn(), recordRealtimeAnalyticsEvent: vi.fn() }));
+vi.mock("../api", () => ({ connectRealtimeSession, endLiveMentor, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent }));
 vi.mock("../../../lib/supabase/client", () => ({ createClient: () => ({}) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -133,6 +133,7 @@ describe("LiveInterviewSpike", () => {
       contentType: answerContentType,
     });
     endRealtimeInterview.mockResolvedValue({});
+    endLiveMentor.mockResolvedValue({ status: "ended", summary_id: "summary-id" });
     listMessages.mockResolvedValue([]);
     persistRealtimeTranscriptTurn.mockResolvedValue({});
     recordRealtimeAnalyticsEvent.mockResolvedValue({ status: "recorded" });
@@ -169,6 +170,16 @@ describe("LiveInterviewSpike", () => {
       "conversation-id",
       expect.objectContaining({ event_type: "mute" }),
     );
+  });
+
+  it("supports Live Mentor without interview analytics or wording", async () => {
+    render(<LiveInterviewSpike conversationId="conversation-id" practiceMode="mentor" />);
+    fireEvent.click(screen.getByRole("button", { name: "Start Live Mentor" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
+    expect(screen.getByRole("heading", { name: "Live Mentor" })).toBeInTheDocument();
+    expect(screen.queryByText(/Interviewer/)).not.toBeInTheDocument();
+    expect(recordRealtimeAnalyticsEvent).not.toHaveBeenCalled();
+    expect(FakePeerConnection.latest?.dataChannel.send).toHaveBeenCalledWith(JSON.stringify({ type: "response.create" }));
   });
 
   it("allows only one negotiation while a connection attempt is in flight", async () => {

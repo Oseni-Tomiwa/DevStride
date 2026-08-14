@@ -192,12 +192,15 @@ def test_user_creates_owned_mentor_conversation(
     create = AsyncMock(return_value=conversation)
     monkeypatch.setattr("app.conversations.routes.create_conversation", create)
 
-    response = post_conversation({"title": "Mentor session", "mode": "mentor"})
+    response = post_conversation(
+        {"title": "Mentor session", "mode": "mentor", "mentor_transport": "live_voice"}
+    )
 
     assert response.status_code == 201
     assert response.json()["mode"] == "mentor"
     assert create.await_args is not None
     assert create.await_args.args[2].mode == "mentor"
+    assert create.await_args.args[2].mentor_transport == "live_voice"
 
 
 def test_user_creates_team_conversation_with_configuration(

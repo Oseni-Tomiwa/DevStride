@@ -39,14 +39,16 @@ the same fields optionally. `id`, `user_id`, timestamps, and
 | POST | `/api/v1/conversations/{conversation_id}/messages/{message_id}/retry` | 200 SSE | Retries an eligible user message without creating a duplicate user row. |
 | POST | `/api/v1/conversations/{conversation_id}/interview-start` | 200 SSE | Idempotent automatic first Interview message for an owned Interview conversation. |
 | POST | `/api/v1/conversations/{conversation_id}/team-start` | 200 SSE | Idempotent automatic first Team Practice message for an owned Team conversation. |
-| POST | `/api/v1/realtime/sessions` | 200 | Authorizes an owned Interview conversation and retains the ephemeral-credential bootstrap contract. |
-| POST | `/api/v1/realtime/sessions/{conversation_id}/connect` | 201 | Accepts an authenticated raw SDP offer and returns the OpenAI SDP answer after server-side negotiation. |
-| POST | `/api/v1/realtime/sessions/{conversation_id}/transcript-turns` | 201 | Persists one finalized owned Live Interview transcript turn idempotently. |
+| POST | `/api/v1/realtime/sessions` | 200 | Authorizes an owned active Interview or Live Mentor conversation and retains the ephemeral-credential bootstrap contract. |
+| POST | `/api/v1/realtime/sessions/{conversation_id}/connect` | 201 | Accepts an authenticated raw SDP offer for an owned live Interview or Mentor conversation and returns the OpenAI SDP answer after server-side negotiation. |
+| POST | `/api/v1/realtime/sessions/{conversation_id}/transcript-turns` | 201 | Persists one finalized owned Live Interview or Live Mentor transcript turn idempotently. |
 | POST | `/api/v1/realtime/sessions/{conversation_id}/analytics-events` | 201 | Records one bounded, deduplicated lifecycle event for an owned Live Interview. |
 | GET | `/api/v1/realtime/sessions/{conversation_id}/analytics` | 200 | Returns completed owned Live Interview communication analytics; 404 before explicit End Interview. |
-| POST | `/api/v1/realtime/sessions/{conversation_id}/end` | 200 | Flushes the Live Interview, runs the existing Interview assessment pipeline, and creates idempotent communication analytics. |
+| POST | `/api/v1/realtime/sessions/{conversation_id}/end` | 200 | Flushes Live Interview assessment/analytics or completes Live Mentor through the existing summary and Memory pipeline. |
 
 Conversation creation accepts `title`, `mode`, and optional `persona`.
+Mentor conversations may select `mentor_transport=live_voice` before creation;
+the default is text and transport cannot be switched after the session starts.
 Interview conversations require `interview_type` (`technical` or `behavioral`);
 technical interviews may use an approved `interview_focus`. Team conversations
 require one of the approved `team_scenario` values and may select `guided`,
