@@ -835,6 +835,7 @@ async def test_goal_progress_is_linked_owned_and_non_mutating(
     created = cast(Response, client.post("/api/v1/goals", headers=headers, json=goal_payload()))
     goal_id = UUID(created.json()["id"])
     focus_id = UUID(created.json()["focus_areas"][0]["id"])
+    unpracticed_focus_id = UUID(created.json()["focus_areas"][1]["id"])
     other_goal = cast(
         Response, client.post("/api/v1/goals", headers=other_headers, json=goal_payload())
     )
@@ -884,7 +885,7 @@ async def test_goal_progress_is_linked_owned_and_non_mutating(
     assert body["focus_areas"][0]["linked_practiced_sessions"] == 1
     assert body["recent_strength"]["text"] == "Clear trade-offs"
     assert body["recent_weakness"]["text"] == "Explain failure handling"
-    assert body["next_action"]["focus_area_id"] == str(focus_id)
+    assert body["next_action"]["focus_area_id"] == str(unpracticed_focus_id)
 
     unowned = cast(
         Response,

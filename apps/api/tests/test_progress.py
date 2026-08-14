@@ -539,6 +539,56 @@ def test_goal_progress_incomplete_practice_wins_next_action() -> None:
     assert progress.next_action.action.conversation_id == row.conversation.id
 
 
+def test_goal_recommendation_moves_to_unpracticed_focus_area() -> None:
+    goal = make_goal_with_focus(focus_statuses=["active", "active"])
+    practiced = make_row("mentor", user_turns=1, days_ago=1, metadata={"mentor_completed": True})
+    practiced.conversation.focus_area_id = goal.focus_areas[0].id
+
+    progress = build_goal_progress(goal=goal, rows=[practiced], summary_rows=[], now=NOW)
+
+    assert progress.current_focus is not None
+    assert progress.current_focus.focus_area_id == goal.focus_areas[0].id
+    assert progress.next_action.focus_area_id == goal.focus_areas[1].id
+    assert progress.next_action.action.focus_area_id == goal.focus_areas[1].id
+    assert "not been practiced" in progress.next_action.reason
+
+
+def test_goal_recommendation_prefers_repeated_weakness_over_unpracticed_focus() -> None:
+    goal = make_goal_with_focus(focus_statuses=["active", "active"])
+    first = make_row("mentor", user_turns=1, days_ago=1, metadata={"mentor_completed": True})
+    first.conversation.focus_area_id = goal.focus_areas[0].id
+    second = make_row("mentor", user_turns=1, days_ago=3, metadata={"mentor_completed": True})
+    second.conversation.focus_area_id = goal.focus_areas[0].id
+    summaries = [
+        make_summary_row(first.conversation, weaknesses=["Explain trade-offs"]),
+        make_summary_row(second.conversation, days_ago=2, weaknesses=["Explain trade-offs"]),
+    ]
+
+    progress = build_goal_progress(
+        goal=goal,
+        rows=[first, second],
+        summary_rows=summaries,
+        now=NOW,
+    )
+
+    assert progress.next_action.focus_area_id == goal.focus_areas[0].id
+    assert progress.next_action.activity == "mentor"
+    assert "Explain trade-offs" in progress.next_action.reason
+
+
+def test_goal_recommendation_uses_least_practiced_focus_as_deterministic_fallback() -> None:
+    goal = make_goal_with_focus(focus_statuses=["active", "active"])
+    first = make_row("mentor", user_turns=1, days_ago=4, metadata={"mentor_completed": True})
+    first.conversation.focus_area_id = goal.focus_areas[0].id
+    second = make_row("mentor", user_turns=2, days_ago=1, metadata={"mentor_completed": True})
+    second.conversation.focus_area_id = goal.focus_areas[1].id
+
+    progress = build_goal_progress(goal=goal, rows=[first, second], summary_rows=[], now=NOW)
+
+    assert progress.next_action.focus_area_id == goal.focus_areas[0].id
+    assert "least recent linked practice" in progress.next_action.reason
+
+
 def test_goal_progress_does_not_auto_complete_goal_without_active_focus() -> None:
     goal = make_goal_with_focus(focus_statuses=["completed", "archived"])
 

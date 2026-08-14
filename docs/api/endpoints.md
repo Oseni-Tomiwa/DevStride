@@ -74,8 +74,9 @@ opaque SDP answer.
 
 ## Goals and development plans
 
-The backend Goals foundation is available; the user-facing Goals experience and
-goal-aware recommendations are not implemented yet.
+The Goals experience and deterministic goal-aware recommendations are available.
+Recommendations use only the authenticated user's owned practice evidence and
+return an explainable next action; they do not expose model reasoning.
 
 | Method | Path | Success | Behavior |
 | --- | --- | --- | --- |
