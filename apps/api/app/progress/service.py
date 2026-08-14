@@ -423,85 +423,171 @@ def _goal_next_action(
     summary_rows: list[SummaryEvidenceRow],
     now: datetime,
 ) -> GoalNextActionResponse:
-    if focus is not None:
-        focus_rows = [row for row in rows if row.conversation.focus_area_id == focus.id]
-        continue_candidate = _continue_candidate(focus_rows, now)
-        if continue_candidate is not None and continue_candidate.incomplete_structured:
-            return GoalNextActionResponse(
-                activity="continue",
-                title=f"Continue {continue_candidate.response.title}",
-                reason="You started this focus-area practice recently and have not completed it.",
-                focus_area_id=focus.id,
-                evidence=[
-                    f"Your latest user turn was within the last {CONTINUE_WINDOW_DAYS} days."
-                ],
-                action=RecommendationActionResponse(
-                    kind="continue_conversation",
-                    mode=continue_candidate.response.mode,
-                    conversation_id=continue_candidate.response.conversation_id,
-                    goal_id=goal.id,
-                    focus_area_id=focus.id,
-                ),
-            )
-
-        focus_summaries = [
-            row for row in summary_rows if row.conversation.focus_area_id == focus.id
-        ]
-        _, recurring_weaknesses = derive_summary_evidence(focus_summaries, "weaknesses")
-        if recurring_weaknesses:
-            weakness = recurring_weaknesses[0]
-            return GoalNextActionResponse(
-                activity=cast(RecommendationActivity, focus.practice_mode),
-                title=f"Work on {focus.title}",
-                reason=f"{weakness.text} appeared in {weakness.occurrences} linked summaries.",
-                focus_area_id=focus.id,
-                evidence=[
-                    f"Observed across {weakness.occurrences} summaries in linked "
-                    f"{focus.practice_mode} practice."
-                ],
-                action=_focus_start_action(goal, focus),
-            )
-
-        low_ratings = _repeated_low_ratings(focus_summaries)
-        if low_ratings:
-            signal = low_ratings[0]
-            return GoalNextActionResponse(
-                activity=cast(RecommendationActivity, focus.practice_mode),
-                title=f"Continue {focus.title}",
-                reason=(
-                    f"{signal.dimension.title()} was rated 2/5 or lower in "
-                    f"{signal.occurrences} comparable linked Interview summaries."
-                ),
-                focus_area_id=focus.id,
-                evidence=[
-                    "These are recorded practice ratings, not proof of mastery or readiness."
-                ],
-                action=_focus_start_action(goal, focus),
-            )
-
+    active_focuses = sorted(
+        (item for item in goal.focus_areas if item.status == "active"),
+        key=lambda item: (item.position, item.created_at, item.id),
+    )
+    if not active_focuses:
         return GoalNextActionResponse(
-            activity=cast(RecommendationActivity, focus.practice_mode),
-            title=f"Start {focus.title}",
-            reason="This is the next active focus area in your development plan.",
-            focus_area_id=focus.id,
-            evidence=["The focus area remains active and is ready for practice."],
-            action=_focus_start_action(goal, focus),
+            activity="mentor",
+            title="Review your development plan",
+            reason=(
+                "All focus areas are complete or archived; review the plan before choosing "
+                "what to do next."
+            ),
+            focus_area_id=None,
+            evidence=["The Goal remains user-controlled and was not completed automatically."],
+            action=RecommendationActionResponse(
+                kind="review_goal",
+                mode="mentor",
+                goal_id=goal.id,
+            ),
         )
 
+    focus_data: list[
+        tuple[
+            GoalFocusArea,
+            _ContinueCandidate | None,
+            list[ProgressEvidenceResponse],
+            list[_LowRatingSignal],
+            int,
+            datetime | None,
+        ]
+    ] = []
+    for candidate_focus in active_focuses:
+        focus_rows = [row for row in rows if row.conversation.focus_area_id == candidate_focus.id]
+        focus_summaries = [
+            row for row in summary_rows if row.conversation.focus_area_id == candidate_focus.id
+        ]
+        practiced_rows = [row for row in focus_rows if row.user_turns > 0]
+        latest_practice = max(
+            (
+                row.last_user_message_at
+                for row in practiced_rows
+                if row.last_user_message_at is not None
+            ),
+            default=None,
+        )
+        focus_data.append(
+            (
+                candidate_focus,
+                _continue_candidate(focus_rows, now),
+                derive_summary_evidence(focus_summaries, "weaknesses")[1],
+                _repeated_low_ratings(focus_summaries),
+                len(practiced_rows),
+                latest_practice,
+            )
+        )
+
+    incomplete = [
+        item for item in focus_data if item[1] is not None and item[1].incomplete_structured
+    ]
+    if incomplete:
+        selected = max(
+            incomplete,
+            key=lambda item: (
+                (
+                    item[1].response.last_activity_at
+                    if item[1] is not None
+                    else datetime.min.replace(tzinfo=UTC)
+                ),
+                -item[0].position,
+                str(item[0].id),
+            ),
+        )
+        candidate = selected[1]
+        assert candidate is not None
+        return GoalNextActionResponse(
+            activity="continue",
+            title=f"Continue {candidate.response.title}",
+            reason="You started this focus-area practice recently and have not completed it.",
+            focus_area_id=selected[0].id,
+            evidence=[f"Your latest user turn was within the last {CONTINUE_WINDOW_DAYS} days."],
+            action=RecommendationActionResponse(
+                kind="continue_conversation",
+                mode=candidate.response.mode,
+                conversation_id=candidate.response.conversation_id,
+                goal_id=goal.id,
+                focus_area_id=selected[0].id,
+            ),
+        )
+
+    weakness_candidates = [item for item in focus_data if item[2]]
+    if weakness_candidates:
+        selected = max(
+            weakness_candidates,
+            key=lambda item: (
+                item[2][0].occurrences,
+                item[2][0].latest_at.timestamp(),
+                -item[0].position,
+                str(item[0].id),
+            ),
+        )
+        weakness = selected[2][0]
+        return GoalNextActionResponse(
+            activity=cast(RecommendationActivity, selected[0].practice_mode),
+            title=f"Work on {selected[0].title}",
+            reason=f"{weakness.text} appeared in {weakness.occurrences} linked summaries.",
+            focus_area_id=selected[0].id,
+            evidence=[
+                f"Observed across {weakness.occurrences} summaries in linked "
+                f"{selected[0].practice_mode} practice."
+            ],
+            action=_focus_start_action(goal, selected[0]),
+        )
+
+    rating_candidates = [item for item in focus_data if item[3]]
+    if rating_candidates:
+        selected = max(
+            rating_candidates,
+            key=lambda item: (
+                item[3][0].occurrences,
+                item[3][0].latest_at.timestamp(),
+                -item[0].position,
+                str(item[0].id),
+            ),
+        )
+        signal = selected[3][0]
+        return GoalNextActionResponse(
+            activity=cast(RecommendationActivity, selected[0].practice_mode),
+            title=f"Continue {selected[0].title}",
+            reason=(
+                f"{signal.dimension.title()} was rated 2/5 or lower in "
+                f"{signal.occurrences} comparable linked Interview summaries."
+            ),
+            focus_area_id=selected[0].id,
+            evidence=["These are recorded practice ratings, not proof of mastery or readiness."],
+            action=_focus_start_action(goal, selected[0]),
+        )
+
+    unpracticed = [item for item in focus_data if item[4] == 0]
+    if unpracticed:
+        selected = unpracticed[0]
+        return GoalNextActionResponse(
+            activity=cast(RecommendationActivity, selected[0].practice_mode),
+            title=f"Start {selected[0].title}",
+            reason="This active focus area has not been practiced yet.",
+            focus_area_id=selected[0].id,
+            evidence=["No owned user turns are linked to this focus area yet."],
+            action=_focus_start_action(goal, selected[0]),
+        )
+
+    selected = min(
+        focus_data,
+        key=lambda item: (
+            item[4],
+            item[5] or datetime.min.replace(tzinfo=UTC),
+            item[0].position,
+            str(item[0].id),
+        ),
+    )
     return GoalNextActionResponse(
-        activity="mentor",
-        title="Review your development plan",
-        reason=(
-            "All focus areas are complete or archived; review the plan before choosing "
-            "what to do next."
-        ),
-        focus_area_id=None,
-        evidence=["The Goal remains user-controlled and was not completed automatically."],
-        action=RecommendationActionResponse(
-            kind="review_goal",
-            mode="mentor",
-            goal_id=goal.id,
-        ),
+        activity=cast(RecommendationActivity, selected[0].practice_mode),
+        title=f"Continue {selected[0].title}",
+        reason="This active focus area has the least recent linked practice in your plan.",
+        focus_area_id=selected[0].id,
+        evidence=["The recommendation is based on owned linked practice activity."],
+        action=_focus_start_action(goal, selected[0]),
     )
 
 

@@ -50,6 +50,9 @@ configuration and deployment checks.
 - Progress Intelligence v1 with practiced/completed activity semantics, mode
   breakdown, session history, bounded strength/weakness evidence, compatible
   Interview rating history, and deterministic recommendations
+- Phase 6C smarter next-practice recommendations that rank active Goal focus
+  areas from incomplete practice, repeated weaknesses, Interview ratings, and
+  owned practice coverage with explainable reasons
 - Phase 6B Practice Intelligence & Response Quality safeguards: substantive
   response evidence gates, neutral no-response assessments, safe transcript
   handling, conservative Memory extraction, and content-free practice latency
@@ -92,9 +95,6 @@ configuration and deployment checks.
   lockfile policy used for production after confirming the lockfile is stable
 - add global Next.js `error.tsx` and `not-found.tsx` experiences
 - add browser end-to-end coverage for critical authenticated flows
-- Phase 6C recommendation-loop work remains future scope; Phase 6B does not
-  claim adaptive recommendations beyond the existing deterministic Progress
-  behavior
 - add automated accessibility testing
 - add production request correlation and structured observability
 - verify production backup and restore procedures against a separate database
