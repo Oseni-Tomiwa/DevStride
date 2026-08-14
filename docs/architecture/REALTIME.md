@@ -120,3 +120,33 @@ are included in browser diagnostics. Browser autoplay policies may still
 require the existing user gesture to enable interviewer audio. Real provider
 connectivity and device-specific WebRTC behavior remain manual verification
 responsibilities.
+
+## Phase 5 Live Mentor
+
+Live Mentor reuses the Phase 4B browser WebRTC lifecycle, authenticated raw-SDP
+client, server-side OpenAI `/v1/realtime/calls` negotiation, remote audio,
+captions, finalized transcript persistence, reconnect handling, and cleanup.
+It is selected before Mentor conversation creation with
+`mentor_transport=live_voice`; existing Mentor conversations without that
+metadata remain text conversations and cannot be switched in place.
+
+The backend authorizes only an owned active Mentor conversation, validates its
+goal/focus ownership, and builds Mentor-specific instructions from the Profile,
+approved bounded active Memory, and conversation context. No prompt, provider,
+model override, credential, SDP, raw audio, or memory metadata is sent by the
+browser. A successful first connection marks the Mentor conversation started;
+refresh/reconnect therefore does not issue a duplicate greeting. The first
+voice response is requested over the existing data channel without a fake user
+message.
+
+Live Mentor persists only finalized `user` and `assistant` transcript turns in
+the existing `messages` table. Explicit End Session uses the existing Mentor
+summary and Memory extraction pipeline; it does not create Interview ratings or
+voice analytics. Transport failure remains resumable and never completes the
+session. Authentication expiry stops automatic retry, device loss remains
+recoverable, and explicit End Session cancels pending reconnects.
+
+Live Mentor has no user-facing voice analytics in v1. Interview-specific filler,
+pace, talk-share, and assessment metrics are intentionally not applied to
+Mentor. Video, camera permissions, raw-audio storage, and Team Practice
+realtime remain out of scope.

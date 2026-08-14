@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
-import { connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent } from "../api";
+import { connectRealtimeSession, endLiveMentor, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent } from "../api";
 import { connectRealtime, parseLiveTranscriptEvent, RealtimeConnectionError, type LiveTranscriptEvent, type RealtimeConnection } from "../realtime-client";
 import type { RealtimeSdpAnswer } from "../realtime-client";
 
-type LiveState = "Ready" | "Connecting" | "Connected" | "Listening" | "Assistant speaking" | "Muted" | "Reconnecting" | "Ending" | "Ended" | "Error";
+type LiveState = "Ready" | "Connecting" | "Connected" | "Listening" | "Assistant speaking" | "Mentor speaking" | "Muted" | "Reconnecting" | "Ending" | "Ended" | "Error";
 
 export type LiveInterviewTestApi = {
   connect: (conversationId: string, offerSdp: string) => Promise<RealtimeSdpAnswer>;
@@ -31,7 +31,10 @@ function apiStatus(value: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
-export function LiveInterviewSpike({ conversationId, interviewType, interviewFocus, initialMessages = [], testApi }: { conversationId: string; interviewType: string; interviewFocus: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi }) {
+export function LiveInterviewSpike({ conversationId, interviewType = "technical", interviewFocus = null, initialMessages = [], testApi, practiceMode = "interview", mentorStarted = false }: { conversationId: string; interviewType?: string; interviewFocus?: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi; practiceMode?: "interview" | "mentor"; mentorStarted?: boolean }) {
+  const isMentor = practiceMode === "mentor";
+  const experienceLabel = isMentor ? "Live Mentor" : "Live Interview";
+  const speakerLabel = isMentor ? "Mentor" : "Interviewer";
   const router = useRouter();
   const [state, setState] = useState<LiveState>("Ready");
   const stateRef = useRef<LiveState>("Ready");
@@ -64,7 +67,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
     if (!hasStartedRef.current || endingRef.current || reconnectScheduledRef.current) return;
     if (reconnectAttemptsRef.current >= 3) {
       setState("Error");
-      setError("Live Interview could not reconnect. You can try again manually.");
+      setError(`${experienceLabel} could not reconnect. You can try again manually.`);
       return;
     }
     reconnectScheduledRef.current = true;
@@ -79,6 +82,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   }
 
   function recordAnalyticsEvent(eventType: string, providerEventId?: string) {
+    if (isMentor) return;
     const eventId = providerEventId ?? `client-${eventType}-${++lifecycleEventCounterRef.current}`;
     const write = (testApi
       ? testApi.recordAnalyticsEvent(conversationId, {
@@ -107,7 +111,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   }
 
   function setConnectionError(error: RealtimeConnectionError): void {
-    setError(process.env.NODE_ENV === "production" ? "Live Interview could not connect. Please try again." : connectionErrorMessage(error));
+    setError(process.env.NODE_ENV === "production" ? `${experienceLabel} could not connect. Please try again.` : connectionErrorMessage(error));
   }
 
   function isAttemptAlive(attemptId: string) {
@@ -125,7 +129,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
         typeof event.id === "string" ? `candidate-start-${event.id}` : undefined,
       );
     }
-    if (event.type === "input_audio_buffer.speech_started" && stateRef.current === "Assistant speaking") {
+    if (event.type === "input_audio_buffer.speech_started" && (stateRef.current === "Assistant speaking" || stateRef.current === "Mentor speaking")) {
       connectionRef.current?.cancelResponse();
       recordAnalyticsEvent("interruption");
       setState("Listening");
@@ -139,7 +143,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
           typeof event.id === "string" ? `interviewer-start-${event.id}` : undefined,
         );
       }
-      setState("Assistant speaking");
+      setState(isMentor ? "Mentor speaking" : "Assistant speaking");
     }
     if (event.type === "response.done" || event.type.includes("audio.done")) {
       if (interviewerSpeakingRef.current) {
@@ -254,7 +258,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
         attemptId,
         signal: controller.signal,
         isAttemptCurrent: () => activeAttemptRef.current?.id === attemptId || connectionAttemptRef.current === attemptId,
-        kickoff: !hasStartedRef.current && initialMessages.length === 0,
+        kickoff: !hasStartedRef.current && !mentorStarted && initialMessages.length === 0,
         connectSdp: (offerSdp) => testApi
           ? testApi.connect(conversationId, offerSdp)
           : connectRealtimeSession(createClient(), conversationId, offerSdp),
@@ -283,13 +287,13 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
           }
           if (connectionState === "disconnected") {
             setState(hasStartedRef.current ? "Reconnecting" : "Error");
-            setError(process.env.NODE_ENV === "production" ? "Live Interview could not connect. Please try again." : "Peer connection disconnected. Reconnect to continue the interview.");
+            setError(process.env.NODE_ENV === "production" ? `${experienceLabel} could not connect. Please try again.` : `Peer connection disconnected. Reconnect to continue ${isMentor ? "Mentor" : "the interview"}.`);
             if (hasStartedRef.current) markTransportDisconnected();
             if (hasStartedRef.current) scheduleReconnect();
           }
           if (connectionState === "closed") {
             setState(hasStartedRef.current ? "Reconnecting" : "Error");
-            setError(process.env.NODE_ENV === "production" ? "Live Interview could not connect. Please try again." : "Peer connection closed. Reconnect to continue the interview.");
+            setError(process.env.NODE_ENV === "production" ? `${experienceLabel} could not connect. Please try again.` : `Peer connection closed. Reconnect to continue ${isMentor ? "Mentor" : "the interview"}.`);
             if (hasStartedRef.current) markTransportDisconnected();
             if (hasStartedRef.current) scheduleReconnect();
           }
@@ -315,15 +319,15 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
       const status = apiStatus(cause);
       setState("Error");
       if (cause instanceof DOMException && (cause.name === "NotAllowedError" || cause.name === "PermissionDeniedError")) {
-        setError("Microphone access was denied. Allow microphone access or use Text Interview instead.");
+        setError(`Microphone access was denied. Allow microphone access or use Text ${isMentor ? "Mentor" : "Interview"} instead.`);
       } else if (status === 401) {
-        setError("Authentication is required to start Live Interview.");
+        setError(`Authentication is required to start ${experienceLabel}.`);
       } else if (status !== undefined && [403, 404, 409].includes(status)) {
-        setError("This interview is not available for Live Interview.");
+        setError(`This ${isMentor ? "Mentor session" : "interview"} is not available for ${experienceLabel}.`);
       } else if (cause instanceof RealtimeConnectionError) {
         setConnectionError(cause);
       } else {
-        setError("Live Interview could not connect. Please try again.");
+        setError(`${experienceLabel} could not connect. Please try again.`);
       }
       const isNonRetryableApiError = status !== undefined && [401, 403, 404, 409].includes(status);
       if (hasStartedRef.current && !isNonRetryableApiError) {
@@ -362,12 +366,12 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
       await Promise.all([...pendingAnalyticsWritesRef.current]);
       await Promise.all([...pendingWritesRef.current]);
       await Promise.all([...pendingAnalyticsWritesRef.current]);
-      await (testApi ? testApi.end(conversationId) : endRealtimeInterview(createClient(), conversationId));
+      await (testApi ? testApi.end(conversationId) : isMentor ? endLiveMentor(createClient(), conversationId) : endRealtimeInterview(createClient(), conversationId));
       setState("Ended");
       router.push(`/conversations/${conversationId}`);
     } catch {
       setState("Error");
-      setError("The interview could not be finalized. Your saved turns are still safe; try again.");
+      setError(`The ${isMentor ? "Mentor session" : "interview"} could not be finalized. Your saved turns are still safe; try again.`);
     }
   }
 
@@ -409,17 +413,17 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
     };
   }, []);
 
-  const active = ["Connecting", "Connected", "Listening", "Assistant speaking", "Muted"].includes(state);
+  const active = ["Connecting", "Connected", "Listening", "Assistant speaking", "Mentor speaking", "Muted"].includes(state);
   const canEnd = active || state === "Reconnecting";
   const reconnecting = state === "Reconnecting";
   return <section className="live-spike" aria-labelledby="live-spike-title">
-    <header className="live-spike-header"><div><p className="eyebrow">Live Interview</p><h1 id="live-spike-title">Live Interview</h1><p className="muted">{interviewType === "behavioral" ? "Behavioral" : "Technical"}{interviewFocus ? ` · ${interviewFocus.replaceAll("_", " ")}` : ""}</p></div><span className="status-pill" role="status">{state}</span></header>
-    <p className="field-hint">Final transcript turns are saved to this Interview. Partial speech remains temporary until finalized.</p>
-    <audio ref={audioRef} autoPlay aria-label="Live interviewer audio" />
-    <div className="live-spike-controls">{!active && !canEnd ? <button type="button" onClick={() => void start()}>{state === "Ready" ? "Start live interview" : "Try again"}</button> : <>{reconnecting && <button type="button" onClick={() => void start()}>{"Reconnect"}</button>}{active && <button type="button" className="button-secondary" onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>}<button type="button" className="button-danger" onClick={() => void end()}>End interview</button></>}</div>
-    {audioBlocked && <button type="button" className="button-secondary" onClick={enableAudio}>Enable interviewer audio</button>}
+    <header className="live-spike-header"><div><p className="eyebrow">{experienceLabel}</p><h1 id="live-spike-title">{experienceLabel}</h1><p className="muted">{isMentor ? "Conversational coaching with your profile and approved memory context." : `${interviewType === "behavioral" ? "Behavioral" : "Technical"}${interviewFocus ? ` · ${interviewFocus.replaceAll("_", " ")}` : ""}`}</p></div><span className="status-pill" role="status">{state}</span></header>
+    <p className="field-hint">Final transcript turns are saved to this {isMentor ? "Mentor session" : "Interview"}. Partial speech remains temporary until finalized.</p>
+    <audio ref={audioRef} autoPlay aria-label={`${experienceLabel} audio`} />
+    <div className="live-spike-controls">{!active && !canEnd ? <button type="button" onClick={() => void start()}>{state === "Ready" ? (isMentor ? "Start Live Mentor" : "Start live interview") : "Try again"}</button> : <>{reconnecting && <button type="button" onClick={() => void start()}>Reconnect</button>}{active && <button type="button" className="button-secondary" onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>}<button type="button" className="button-danger" onClick={() => void end()}>End {isMentor ? "session" : "interview"}</button></>}</div>
+    {audioBlocked && <button type="button" className="button-secondary" onClick={enableAudio}>Enable {isMentor ? "Mentor" : "interviewer"} audio</button>}
     {error && <p className="form-error" role="alert">{error}</p>}
     {saveState === "saving" && <p className="field-hint" role="status">Saving final transcript turn…</p>}
-    <section className="live-spike-transcript" aria-labelledby="live-captions-title"><h2 id="live-captions-title">Temporary transcript</h2>{transcript.length === 0 ? <p className="muted">Transcript lines will appear here when available.</p> : transcript.map((line, index) => <p key={`${index}-${line.text}`}><strong>{line.speaker === "user" ? "You" : "Interviewer"}:</strong> {line.text}{!line.final && <em> (in progress)</em>}</p>)}</section>
+    <section className="live-spike-transcript" aria-labelledby="live-captions-title"><h2 id="live-captions-title">Temporary transcript</h2>{transcript.length === 0 ? <p className="muted">Transcript lines will appear here when available.</p> : transcript.map((line, index) => <p key={`${index}-${line.text}`}><strong>{line.speaker === "user" ? "You" : speakerLabel}:</strong> {line.text}{!line.final && <em> (in progress)</em>}</p>)}</section>
   </section>;
 }

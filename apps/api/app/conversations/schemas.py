@@ -10,6 +10,7 @@ MESSAGE_CONTENT_MAX_LENGTH = 20_000
 ConversationMode = Literal["general", "mentor", "interview", "team"]
 InterviewType = Literal["technical", "behavioral"]
 InterviewTransport = Literal["text", "live_voice"]
+MentorTransport = Literal["text", "live_voice"]
 InterviewFocus = Literal[
     "general_backend",
     "apis",
@@ -37,6 +38,7 @@ class ConversationCreateRequest(BaseModel):
     interview_type: InterviewType | None = None
     interview_focus: InterviewFocus | None = None
     interview_transport: InterviewTransport = "text"
+    mentor_transport: MentorTransport = "text"
     team_scenario: TeamScenario | None = None
     team_difficulty: TeamDifficulty | None = None
 
@@ -50,6 +52,8 @@ class ConversationCreateRequest(BaseModel):
             or self.interview_transport != "text"
         ):
             raise ValueError("interview configuration is only valid for interview conversations")
+        if self.mode != "mentor" and self.mentor_transport != "text":
+            raise ValueError("mentor transport is only valid for Mentor Mode conversations")
         if self.interview_type == "behavioral" and self.interview_focus is not None:
             raise ValueError("interview_focus is only valid for technical interviews")
         if self.mode == "team" and self.team_scenario is None:

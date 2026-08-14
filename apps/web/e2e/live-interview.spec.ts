@@ -52,7 +52,7 @@ test("stops reconnecting after authentication expiry", async ({ page }) => {
   await expect(page.getByRole("status")).toHaveText("Connected");
   await page.getByRole("button", { name: "Prepare auth expiry" }).click();
   await page.getByRole("button", { name: "Drop connection" }).click();
-  await expect(page.locator("p[role=alert]")).toHaveText("Authentication is required to start Realtime Practice.", { timeout: 10_000 });
+  await expect(page.locator("p[role=alert]")).toHaveText("Authentication is required to start Live Interview.", { timeout: 10_000 });
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
 });
 
@@ -61,7 +61,7 @@ test("reports a permanent reconnect failure without finalizing", async ({ page }
   await expect(page.getByRole("status")).toHaveText("Connected");
   await page.getByRole("button", { name: "Prepare permanent failure" }).click();
   await page.getByRole("button", { name: "Drop connection" }).click();
-  await expect(page.locator("p[role=alert]")).toHaveText("Realtime Practice could not reconnect. You can try again manually.", { timeout: 10_000 });
+  await expect(page.locator("p[role=alert]")).toHaveText("Live Interview could not reconnect. You can try again manually.", { timeout: 10_000 });
   await expect.poll(() => page.evaluate(() => localStorage.getItem("devstride-e2e-ended"))).not.toBe("true");
 });
 

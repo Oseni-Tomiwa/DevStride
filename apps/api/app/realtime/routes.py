@@ -15,7 +15,7 @@ from app.ai.realtime import (
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations import repository as conversation_repository
-from app.conversations.models import Message
+from app.conversations.models import Conversation, Message
 from app.conversations.response_service import (
     AssistantGenerationDisabledError,
     AssistantGenerationError,
@@ -27,6 +27,8 @@ from app.core.config import settings
 from app.database.session import get_db_session
 from app.goals.repository import get_focus_by_id_owned
 from app.interviews.prompts import build_interview_instruction
+from app.memory.service import memory_context, retrieve_for_prompt
+from app.mentor.prompts import build_mentor_instruction
 from app.profiles.service import ProfileNotFoundError, get_profile
 from app.realtime.analytics import compute_live_analytics, get_live_analytics, now_utc
 from app.realtime.repository import create_or_get_event
@@ -37,6 +39,10 @@ from app.realtime.schemas import (
     RealtimeSessionResponse,
     RealtimeTranscriptTurnRequest,
     RealtimeTranscriptTurnResponse,
+)
+from app.session_summaries.service import (
+    SessionSummaryGenerationError,
+    generate_summary,
 )
 
 router = APIRouter(prefix="/api/v1/realtime", tags=["realtime"])
@@ -51,29 +57,80 @@ async def _owned_live_conversation(
     user_id: UUID,
     conversation_id: UUID,
     *,
+    mode: Literal["interview", "mentor"] | None = "interview",
     allow_completed: bool = False,
 ):
     try:
         conversation = await get_conversation(session, user_id, conversation_id)
     except ConversationNotFoundError:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
-    if conversation.mode != "interview":
-        raise HTTPException(status_code=400, detail="Realtime Practice requires Interview Mode")
+    resolved_mode = mode or conversation.mode
+    if resolved_mode not in {"interview", "mentor"} or conversation.mode != resolved_mode:
+        if mode is None and conversation.mode not in {"interview", "mentor"}:
+            raise HTTPException(status_code=400, detail="Realtime Practice requires Interview Mode")
+        label = "Interview Mode" if resolved_mode == "interview" else "Mentor Mode"
+        raise HTTPException(status_code=400, detail=f"Live {label} requires {label}")
     metadata = conversation.metadata_ or {}
-    if metadata.get("interview_transport", "text") != "live_voice":
+    transport_key = "interview_transport" if resolved_mode == "interview" else "mentor_transport"
+    if metadata.get(transport_key, "text") != "live_voice":
         raise HTTPException(
-            status_code=409, detail="This interview is configured for text practice"
+            status_code=409,
+            detail=f"This {resolved_mode} conversation is configured for text practice",
         )
+    completion_key = "interview_completed" if resolved_mode == "interview" else "mentor_completed"
     if conversation.status not in {None, "active"} or (
-        metadata.get("interview_completed") and not allow_completed
+        metadata.get(completion_key) and not allow_completed
     ):
-        raise HTTPException(status_code=409, detail="This interview is no longer available")
+        raise HTTPException(
+            status_code=409,
+            detail=f"This {resolved_mode} session is no longer available",
+        )
     if (
         conversation.focus_area_id is not None
         and await get_focus_by_id_owned(session, user_id, conversation.focus_area_id) is None
     ):
         raise HTTPException(status_code=409, detail="This practice focus is no longer available")
     return conversation
+
+
+async def _live_instructions(
+    session: AsyncSession, user_id: UUID, conversation: Conversation, mode: str
+) -> str:
+    profile = await get_profile(session, user_id)
+    if mode == "mentor":
+        try:
+            memories = await retrieve_for_prompt(session, user_id)
+        except Exception:
+            memories = []
+        return (
+            build_mentor_instruction(profile, memory_context(memories))
+            + """
+
+Live Mentor voice behavior:
+- Speak as a patient, conversational mentor, not an interviewer.
+- Greet the learner naturally, then ask what they want to work on unless the
+  linked goal context gives a clear starting point.
+- Explain concepts at the learner's level, ask clarifying questions, and offer
+  examples or exercises when useful.
+- Coach through reasoning without pretending to know facts not in the profile,
+  conversation, goal, or approved memory context.
+- Current explicit user input has priority over saved context.
+"""
+        )
+    return (
+        build_interview_instruction(profile, conversation.metadata_, saved_memory="")
+        + """
+
+Realtime voice behavior:
+- Speak as the interviewer, not as a tutor.
+- When the realtime session starts without a candidate turn, greet the candidate
+  briefly and ask the first interview question immediately.
+- Ask one question at a time and wait for the candidate to finish speaking.
+- Use realistic, concise follow-ups and do not reveal hidden evaluation.
+- Do not provide answers during the interview.
+- If the candidate explicitly ends the interview, acknowledge that request briefly.
+"""
+    )
 
 
 def _require_realtime_enabled() -> None:
@@ -92,57 +149,60 @@ async def create_session(
         conversation = await get_conversation(session, current_user.id, data.conversation_id)
     except ConversationNotFoundError:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
-    if conversation.mode != "interview":
+    if conversation.mode not in {"interview", "mentor"}:
         raise HTTPException(
             status_code=400,
-            detail="Realtime Practice is only available for Interview Mode conversations",
+            detail="Live voice is only available for Mentor Mode or Interview Mode conversations",
         )
     metadata = conversation.metadata_
-    if metadata.get("interview_transport", "text") != "live_voice":
+    transport_key = (
+        "interview_transport" if conversation.mode == "interview" else "mentor_transport"
+    )
+    if metadata.get(transport_key, "text") != "live_voice":
         raise HTTPException(
             status_code=409,
-            detail="This interview is configured for text practice",
+            detail=f"This {conversation.mode} conversation is configured for text practice",
         )
-    if conversation.status not in {None, "active"} or metadata.get("interview_completed"):
-        raise HTTPException(status_code=409, detail="This interview is no longer available")
+    completion_key = (
+        "interview_completed" if conversation.mode == "interview" else "mentor_completed"
+    )
+    if conversation.status not in {None, "active"} or metadata.get(completion_key):
+        raise HTTPException(
+            status_code=409,
+            detail=f"This {conversation.mode} session is no longer available",
+        )
     if conversation.focus_area_id is not None:
         focus = await get_focus_by_id_owned(session, current_user.id, conversation.focus_area_id)
         if focus is None:
             raise HTTPException(
                 status_code=409, detail="This practice focus is no longer available"
             )
-    _require_realtime_enabled()
-    try:
-        profile = await get_profile(session, current_user.id)
-    except ProfileNotFoundError:
-        raise HTTPException(
-            status_code=409,
-            detail="Complete onboarding before using Realtime Practice",
-        ) from None
+    if conversation.mode == "mentor":
+        if not settings.live_mentor_enabled:
+            raise HTTPException(status_code=503, detail="Live Mentor is currently disabled")
+        model = settings.live_mentor_model
+    else:
+        _require_realtime_enabled()
+        model = settings.live_interview_model
     if settings.openai_api_key is None:
         raise HTTPException(
             status_code=503,
             detail="Realtime Practice is currently unavailable",
         )
 
-    instructions = (
-        build_interview_instruction(profile, metadata, saved_memory="")
-        + """
-
-Realtime voice behavior:
-- Speak as the interviewer, not as a tutor.
-- When the realtime session starts without a candidate turn, greet the candidate
-  briefly and ask the first interview question immediately.
-- Ask one question at a time and wait for the candidate to finish speaking.
-- Use realistic, concise follow-ups and do not reveal hidden evaluation.
-- Do not provide answers during the interview.
-- If the candidate explicitly ends the interview, acknowledge that request briefly.
-"""
-    )
+    try:
+        instructions = await _live_instructions(
+            session, current_user.id, conversation, conversation.mode
+        )
+    except ProfileNotFoundError:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Complete onboarding before using {conversation.mode.title()} Mode",
+        ) from None
     try:
         client_secret, expires_at = await create_realtime_client_secret(
             settings.openai_api_key,
-            settings.live_interview_model,
+            model,
             instructions,
         )
     except RealtimeInitializationError:
@@ -153,7 +213,7 @@ Realtime voice behavior:
     return RealtimeSessionResponse(
         client_secret=client_secret,
         expires_at=expires_at,
-        model=settings.live_interview_model,
+        model=model,
     )
 
 
@@ -165,7 +225,9 @@ async def connect_session(
     current_user: AuthenticatedUser,
     _rate_limit: RealtimeRateLimit,
 ) -> Response:
-    conversation = await _owned_live_conversation(session, current_user.id, conversation_id)
+    conversation = await _owned_live_conversation(
+        session, current_user.id, conversation_id, mode=None
+    )
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     offer_sdp = await request.body()
     if content_type != "application/sdp" or len(offer_sdp) > 200_000:
@@ -176,40 +238,38 @@ async def connect_session(
         raise HTTPException(status_code=415, detail="A valid SDP offer is required") from None
     if not offer or not offer.startswith("v=0"):
         raise HTTPException(status_code=400, detail="A valid SDP offer is required")
-    _require_realtime_enabled()
+    mode = conversation.mode
+    if mode == "mentor":
+        if not settings.live_mentor_enabled:
+            raise HTTPException(status_code=503, detail="Live Mentor is currently disabled")
+        model = settings.live_mentor_model
+    else:
+        _require_realtime_enabled()
+        model = settings.live_interview_model
+    if settings.openai_api_key is None:
+        raise HTTPException(status_code=503, detail=f"Live {mode.title()} is currently unavailable")
     try:
-        profile = await get_profile(session, current_user.id)
+        instructions = await _live_instructions(session, current_user.id, conversation, mode)
     except ProfileNotFoundError:
         raise HTTPException(
-            status_code=409, detail="Complete onboarding before using Realtime Practice"
+            status_code=409, detail=f"Complete onboarding before using {mode.title()} Mode"
         ) from None
-    if settings.openai_api_key is None:
-        raise HTTPException(status_code=503, detail="Realtime Practice is currently unavailable")
-    instructions = (
-        build_interview_instruction(profile, conversation.metadata_, saved_memory="")
-        + """
-
-Realtime voice behavior:
-- Speak as the interviewer, not as a tutor.
-- When the realtime session starts without a candidate turn, greet the candidate
-  briefly and ask the first interview question immediately.
-- Ask one question at a time and wait for the candidate to finish speaking.
-- Use realistic, concise follow-ups and do not reveal hidden evaluation.
-- Do not provide answers during the interview.
-- If the candidate explicitly ends the interview, acknowledge that request briefly.
-"""
-    )
     try:
         answer = await create_realtime_call(
             settings.openai_api_key,
             offer,
-            settings.live_interview_model,
+            model,
             instructions,
         )
     except RealtimeInitializationError:
         raise HTTPException(
             status_code=502, detail="Realtime Practice could not be connected"
         ) from None
+    metadata = dict(conversation.metadata_ or {})
+    if mode == "mentor" and not metadata.get("mentor_started"):
+        metadata["mentor_started"] = True
+        conversation.metadata_ = metadata
+        await session.commit()
     return Response(content=answer, status_code=201, media_type="application/sdp")
 
 
@@ -225,7 +285,7 @@ async def persist_transcript_turn(
     current_user: AuthenticatedUser,
     _rate_limit: TranscriptRateLimit,
 ) -> RealtimeTranscriptTurnResponse:
-    await _owned_live_conversation(session, current_user.id, conversation_id)
+    await _owned_live_conversation(session, current_user.id, conversation_id, mode=None)
     message = Message(
         conversation_id=conversation_id,
         role=data.role,
@@ -290,15 +350,31 @@ async def get_analytics(
 
 @router.post(
     "/sessions/{conversation_id}/end",
-    response_model=RealtimeTranscriptTurnResponse,
 )
 async def end_live_interview(
     conversation_id: UUID,
     session: Session,
     current_user: AuthenticatedUser,
     provider: Annotated[AIProvider | None, Depends(get_ai_provider)],
-) -> RealtimeTranscriptTurnResponse:
-    await _owned_live_conversation(session, current_user.id, conversation_id, allow_completed=True)
+) -> RealtimeTranscriptTurnResponse | dict[str, str]:
+    conversation = await _owned_live_conversation(
+        session, current_user.id, conversation_id, mode=None, allow_completed=True
+    )
+    if conversation.mode == "mentor":
+        if not settings.live_mentor_enabled:
+            raise HTTPException(status_code=503, detail="Live Mentor is currently disabled")
+        try:
+            summary = await generate_summary(session, current_user.id, conversation_id, provider)
+        except SessionSummaryGenerationError:
+            raise HTTPException(
+                status_code=409, detail="Live Mentor could not be completed"
+            ) from None
+        metadata = dict(conversation.metadata_ or {})
+        metadata["mentor_completed"] = True
+        conversation.metadata_ = metadata
+        await session.commit()
+        return {"status": "ended", "summary_id": str(summary.id)}
+
     _require_realtime_enabled()
     try:
         message = await complete_live_interview(session, current_user.id, conversation_id, provider)

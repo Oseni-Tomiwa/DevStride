@@ -69,6 +69,10 @@ configuration and deployment checks.
 - Realtime Practice Phase 4B browser-level E2E coverage and resilience for
   authentication expiry, reconnect failure, microphone denial/loss, stale
   attempt cleanup, and explicit end behavior
+- Realtime Practice Phase 5 Live Mentor voice experience reusing the bounded
+  WebRTC transport, finalized transcript persistence, reconnect/device/auth
+  hardening, and existing Mentor summary/Memory pipeline without Interview
+  analytics
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
 - production database migrations through repository head `0008`
@@ -146,12 +150,12 @@ The expanded vision is a realtime Interview conversation with natural spoken
 follow-up questions, technical and behavioral interview support, a transcript,
 an assessment, strengths and weaknesses, communication feedback, and results
 that can feed Progress and bounded Memory. If proven useful, the same realtime
-foundation may later support Mentor and Team Practice.
+foundation may later support Team Practice.
 
 Phase 1 voice-session transport and security boundaries, Phase 2 finalized
 transcript persistence, the bounded Phase 3 live Interview experience, the
-Phase 4A voice analytics/reliability slice, and Phase 4B browser resilience are
-implemented in
+Phase 4A voice analytics/reliability slice, Phase 4B browser resilience, and
+Phase 5 Live Mentor are implemented in
 `docs/architecture/REALTIME.md`. Broader realtime product integration remains
 later work.
 

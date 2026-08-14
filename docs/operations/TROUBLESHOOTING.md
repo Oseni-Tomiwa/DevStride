@@ -109,6 +109,21 @@ interviewer audio” action; autoplay policy may require a user gesture. Never
 collect or log SDP, tokens, raw audio, transcript text, or provider payloads
 while diagnosing a transport issue.
 
+## Live Mentor does not start or reconnect
+
+Live Mentor requires an owned Mentor conversation created with
+`mentor_transport=live_voice`, a completed Profile, `LIVE_MENTOR_ENABLED=true`,
+and the server-only OpenAI configuration. Existing text Mentor conversations
+remain text-only. A successful first connection marks the conversation started;
+refresh and reconnect do not request a duplicate greeting. Authentication
+expiry stops automatic retry, microphone/device loss leaves the session
+recoverable, and explicit End Session cancels pending reconnects before the
+existing Mentor summary and Memory pipeline runs.
+
+Live Mentor does not use Interview assessment or voice analytics. Diagnose only
+with safe state/status information; never collect SDP, tokens, raw audio,
+transcript dumps, prompts, memory metadata, or provider payloads.
+
 ## Deployment container fails
 
 Build from repository root:

@@ -131,7 +131,7 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Clear API examples")).toBeInTheDocument();
     expect(screen.getByText("State trade-offs earlier")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Mentor Mode" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start Mentor Mode" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start Text Mentor" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Team Practice" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Interview Mode" })).toBeInTheDocument();
   });
@@ -220,10 +220,23 @@ describe("DashboardPage", () => {
     createConversation.mockReturnValueOnce(new Promise(() => {}));
 
     render(await DashboardPage());
-    fireEvent.click(screen.getByRole("button", { name: "Start Mentor Mode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Text Mentor" }));
     await waitFor(() => expect(createConversation).toHaveBeenCalledWith(
       {},
       { title: "Mentor session", mode: "mentor" },
+    ));
+  });
+
+  it("starts Live Mentor with explicit voice transport", async () => {
+    get.mockResolvedValueOnce({ ...profile, preferred_stack: ["Python"] }).mockResolvedValueOnce(progress);
+    createConversation.mockResolvedValueOnce({ id: "mentor-live-id" });
+
+    render(await DashboardPage());
+    fireEvent.click(screen.getByLabelText(/Live Mentor/));
+    fireEvent.click(screen.getByRole("button", { name: "Start Live Mentor" }));
+    await waitFor(() => expect(createConversation).toHaveBeenCalledWith(
+      {},
+      { title: "Mentor session", mode: "mentor", mentor_transport: "live_voice" },
     ));
   });
 

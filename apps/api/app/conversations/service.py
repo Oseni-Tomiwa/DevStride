@@ -36,6 +36,7 @@ async def create_conversation(
             "interview_type",
             "interview_focus",
             "interview_transport",
+            "mentor_transport",
             "team_scenario",
             "team_difficulty",
         }
@@ -47,6 +48,8 @@ async def create_conversation(
         }
         if data.interview_transport == "live_voice":
             conversation_data["metadata_"]["interview_transport"] = data.interview_transport
+    elif data.mode == "mentor" and data.mentor_transport == "live_voice":
+        conversation_data["metadata_"] = {"mentor_transport": data.mentor_transport}
     elif data.mode == "team":
         conversation_data["metadata_"] = {
             "team_scenario": data.team_scenario,

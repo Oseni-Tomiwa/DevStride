@@ -165,6 +165,13 @@ export function endRealtimeInterview(supabase: SupabaseClient, conversationId: s
   );
 }
 
+export function endLiveMentor(supabase: SupabaseClient, conversationId: string) {
+  return createAuthenticatedApiClient(supabase).post<{ status: string; summary_id: string }>(
+    `/api/v1/realtime/sessions/${conversationId}/end`,
+    {},
+  );
+}
+
 export function recordRealtimeAnalyticsEvent(
   supabase: SupabaseClient,
   conversationId: string,

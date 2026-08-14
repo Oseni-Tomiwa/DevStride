@@ -22,6 +22,7 @@ type ConversationDetailProps = {
   mentorContext?: { currentLevel: string; targetRole: string };
   interviewContext?: { interviewType: string; interviewFocus: string | null; currentLevel: string; targetRole: string };
   liveInterviewEnabled?: boolean;
+  liveMentorEnabled?: boolean;
 };
 type SseEvent = { event: string; data: unknown };
 type SseRecord = Record<string, unknown>;
@@ -83,7 +84,7 @@ async function* readSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<
   }
 }
 
-export function ConversationDetail({ conversation, initialMessages, initialSummary = null, initialLiveAnalytics = null, mentorContext, interviewContext, liveInterviewEnabled = false }: ConversationDetailProps) {
+export function ConversationDetail({ conversation, initialMessages, initialSummary = null, initialLiveAnalytics = null, mentorContext, interviewContext, liveInterviewEnabled = false, liveMentorEnabled = false }: ConversationDetailProps) {
   const router = useRouter();
   const [messages, setMessages] = useState(() => chronologicalMessages(initialMessages));
   const [content, setContent] = useState("");
@@ -461,6 +462,9 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
         )}
         {conversation.mode === "interview" && liveInterviewEnabled && (
           <p><Link href={`/conversations/${conversation.id}/live-spike`} className="landing-button landing-button-secondary">Open Live Interview</Link></p>
+        )}
+        {conversation.mode === "mentor" && conversation.metadata.mentor_transport === "live_voice" && liveMentorEnabled && (
+          <p><Link href={`/conversations/${conversation.id}/live-mentor`} className="landing-button landing-button-secondary">Open Live Mentor</Link></p>
         )}
         {conversation.mode === "team" && (
           <p className="conversation-context">

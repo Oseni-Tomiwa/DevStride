@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     ai_generation_enabled: bool = False
     live_interview_enabled: bool = False
     live_interview_model: str = "gpt-realtime"
+    live_mentor_enabled: bool = False
+    live_mentor_model: str = "gpt-realtime"
     ai_rate_limit_enabled: bool = True
     ai_rate_limit_requests: int = 20
     ai_rate_limit_window_seconds: int = 60
@@ -96,8 +98,12 @@ class Settings(BaseSettings):
             raise ValueError("OPENAI_API_KEY is required when AI_GENERATION_ENABLED is true")
         if not self.live_interview_model.strip():
             raise ValueError("LIVE_INTERVIEW_MODEL must not be blank")
+        if not self.live_mentor_model.strip():
+            raise ValueError("LIVE_MENTOR_MODEL must not be blank")
         if self.live_interview_enabled and not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY is required when LIVE_INTERVIEW_ENABLED is true")
+        if self.live_mentor_enabled and not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY is required when LIVE_MENTOR_ENABLED is true")
         if self.ai_rate_limit_requests <= 0 or self.ai_rate_limit_window_seconds <= 0:
             raise ValueError("AI rate-limit requests and window must be positive")
         if self.ai_rate_limit_kickoff_requests <= 0 or self.ai_rate_limit_summary_requests <= 0:
