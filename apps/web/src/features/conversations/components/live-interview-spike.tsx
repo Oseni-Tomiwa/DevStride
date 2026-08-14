@@ -64,7 +64,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
     if (!hasStartedRef.current || endingRef.current || reconnectScheduledRef.current) return;
     if (reconnectAttemptsRef.current >= 3) {
       setState("Error");
-      setError("Realtime Practice could not reconnect. You can try again manually.");
+      setError("Live Interview could not reconnect. You can try again manually.");
       return;
     }
     reconnectScheduledRef.current = true;
@@ -107,7 +107,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   }
 
   function setConnectionError(error: RealtimeConnectionError): void {
-    setError(process.env.NODE_ENV === "production" ? "Realtime Practice could not connect. Please try again." : connectionErrorMessage(error));
+    setError(process.env.NODE_ENV === "production" ? "Live Interview could not connect. Please try again." : connectionErrorMessage(error));
   }
 
   function isAttemptAlive(attemptId: string) {
@@ -283,13 +283,13 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
           }
           if (connectionState === "disconnected") {
             setState(hasStartedRef.current ? "Reconnecting" : "Error");
-            setError(process.env.NODE_ENV === "production" ? "Realtime Practice could not connect. Please try again." : "Peer connection disconnected. Reconnect to continue the interview.");
+            setError(process.env.NODE_ENV === "production" ? "Live Interview could not connect. Please try again." : "Peer connection disconnected. Reconnect to continue the interview.");
             if (hasStartedRef.current) markTransportDisconnected();
             if (hasStartedRef.current) scheduleReconnect();
           }
           if (connectionState === "closed") {
             setState(hasStartedRef.current ? "Reconnecting" : "Error");
-            setError(process.env.NODE_ENV === "production" ? "Realtime Practice could not connect. Please try again." : "Peer connection closed. Reconnect to continue the interview.");
+            setError(process.env.NODE_ENV === "production" ? "Live Interview could not connect. Please try again." : "Peer connection closed. Reconnect to continue the interview.");
             if (hasStartedRef.current) markTransportDisconnected();
             if (hasStartedRef.current) scheduleReconnect();
           }
@@ -317,13 +317,13 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
       if (cause instanceof DOMException && (cause.name === "NotAllowedError" || cause.name === "PermissionDeniedError")) {
         setError("Microphone access was denied. Allow microphone access or use Text Interview instead.");
       } else if (status === 401) {
-        setError("Authentication is required to start Realtime Practice.");
+        setError("Authentication is required to start Live Interview.");
       } else if (status !== undefined && [403, 404, 409].includes(status)) {
-        setError("This interview is not available for Realtime Practice.");
+        setError("This interview is not available for Live Interview.");
       } else if (cause instanceof RealtimeConnectionError) {
         setConnectionError(cause);
       } else {
-        setError("Realtime Practice could not connect. Please try again.");
+        setError("Live Interview could not connect. Please try again.");
       }
       const isNonRetryableApiError = status !== undefined && [401, 403, 404, 409].includes(status);
       if (hasStartedRef.current && !isNonRetryableApiError) {
@@ -413,7 +413,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   const canEnd = active || state === "Reconnecting";
   const reconnecting = state === "Reconnecting";
   return <section className="live-spike" aria-labelledby="live-spike-title">
-    <header className="live-spike-header"><div><p className="eyebrow">Live Interview</p><h1 id="live-spike-title">Realtime practice</h1><p className="muted">{interviewType === "behavioral" ? "Behavioral" : "Technical"}{interviewFocus ? ` · ${interviewFocus.replaceAll("_", " ")}` : ""}</p></div><span className="status-pill" role="status">{state}</span></header>
+    <header className="live-spike-header"><div><p className="eyebrow">Live Interview</p><h1 id="live-spike-title">Live Interview</h1><p className="muted">{interviewType === "behavioral" ? "Behavioral" : "Technical"}{interviewFocus ? ` · ${interviewFocus.replaceAll("_", " ")}` : ""}</p></div><span className="status-pill" role="status">{state}</span></header>
     <p className="field-hint">Final transcript turns are saved to this Interview. Partial speech remains temporary until finalized.</p>
     <audio ref={audioRef} autoPlay aria-label="Live interviewer audio" />
     <div className="live-spike-controls">{!active && !canEnd ? <button type="button" onClick={() => void start()}>{state === "Ready" ? "Start live interview" : "Try again"}</button> : <>{reconnecting && <button type="button" onClick={() => void start()}>{"Reconnect"}</button>}{active && <button type="button" className="button-secondary" onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>}<button type="button" className="button-danger" onClick={() => void end()}>End interview</button></>}</div>

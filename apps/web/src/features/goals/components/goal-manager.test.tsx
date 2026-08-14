@@ -37,10 +37,9 @@ describe("GoalManager", () => {
     const archivedGoal = { ...activeGoal, status: "archived" as const, focus_areas: [{ ...focus, status: "archived" as const }] };
     listGoals.mockResolvedValue([archivedGoal]);
     archiveGoal.mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
     render(<GoalManager initialGoals={[activeGoal]} initialProgress={null} />);
     fireEvent.click(screen.getAllByRole("button", { name: "Archive" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Archive goal" }));
 
     await waitFor(() => expect(screen.getByText("Archived · read-only · 1 focus areas")).toBeInTheDocument());
     expect(screen.queryByText("Active goal · Technical growth")).not.toBeInTheDocument();

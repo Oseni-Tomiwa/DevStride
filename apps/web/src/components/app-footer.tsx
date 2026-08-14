@@ -6,7 +6,7 @@ export function AppFooter() {
     <footer className="app-footer">
       <div className="app-footer-copy">
         <Link href="/dashboard" className="app-footer-brand" aria-label="DevStride dashboard">
-          <DevStrideLogo variant="footer" />
+          <DevStrideLogo variant="footer" decorative />
           <span>DevStride</span>
         </Link>
         <p>Focused practice for software engineers.</p>

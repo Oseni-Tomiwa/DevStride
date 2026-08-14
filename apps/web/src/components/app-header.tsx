@@ -24,7 +24,7 @@ export function AppHeader({ current }: AppHeaderProps) {
   return (
     <header className="app-header">
       <Link href="/dashboard" className="app-brand" aria-label="DevStride dashboard">
-        <DevStrideLogo variant="header" />
+        <DevStrideLogo variant="header" decorative />
         <span className="app-brand-name">DevStride</span>
       </Link>
       <nav className="app-nav" aria-label="Authenticated navigation">

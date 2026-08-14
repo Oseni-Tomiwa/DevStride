@@ -130,10 +130,10 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Prepare concise backend explanations")).toBeInTheDocument();
     expect(screen.getByText("Clear API examples")).toBeInTheDocument();
     expect(screen.getByText("State trade-offs earlier")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Learn with Mentor" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mentor Mode" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Mentor Mode" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Team Practice" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start Mock Interview" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start Interview Mode" })).toBeInTheDocument();
   });
 
   it("shows a profile-aligned starter recommendation with truthful zero activity", async () => {
@@ -170,7 +170,7 @@ describe("DashboardPage", () => {
     render(await DashboardPage());
 
     expect(screen.getByRole("heading", { name: "Start profile-aligned practice" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Start Mock Interview" })).toHaveAttribute("href", "/dashboard#interview-practice");
+    expect(screen.getByRole("link", { name: "Start Interview Mode" })).toHaveAttribute("href", "/dashboard#interview-practice");
     expect(screen.queryByText("Recent strength")).not.toBeInTheDocument();
     expect(screen.queryByText("Recent area to improve")).not.toBeInTheDocument();
   });

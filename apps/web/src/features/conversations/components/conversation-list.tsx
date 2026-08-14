@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import React from "react";
 import { useState } from "react";
 
+import { Dialog } from "../../../components/dialog";
 import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
 import {
@@ -34,7 +35,8 @@ function sortedConversations(conversations: Conversation[]): Conversation[] {
 export function ConversationList({ initialConversations }: ConversationListProps) {
   const router = useRouter();
   const [conversations, setConversations] = useState(() => sortedConversations(initialConversations));
-  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renamingConversation, setRenamingConversation] = useState<Conversation | null>(null);
+  const [deletingConversation, setDeletingConversation] = useState<Conversation | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -71,11 +73,13 @@ export function ConversationList({ initialConversations }: ConversationListProps
   function beginRename(conversation: Conversation) {
     setError(null);
     setSuccess(null);
-    setRenamingId(conversation.id);
+    setRenamingConversation(conversation);
     setRenameValue(conversation.title);
   }
 
-  async function handleRename(conversationId: string) {
+  async function handleRename() {
+    if (!renamingConversation) return;
+    const conversationId = renamingConversation.id;
     const title = renameValue.trim();
     if (!title) {
       setError("A conversation title is required.");
@@ -89,7 +93,7 @@ export function ConversationList({ initialConversations }: ConversationListProps
       setConversations((current) => sortedConversations(
         current.map((conversation) => conversation.id === conversationId ? updated : conversation),
       ));
-      setRenamingId(null);
+      setRenamingConversation(null);
       setSuccess("Conversation renamed.");
     } catch (cause) {
       handleApiError(cause);
@@ -98,8 +102,9 @@ export function ConversationList({ initialConversations }: ConversationListProps
     }
   }
 
-  async function handleDelete(conversationId: string) {
-    if (!window.confirm("Delete this conversation? This cannot be undone.")) return;
+  async function handleDelete() {
+    if (!deletingConversation) return;
+    const conversationId = deletingConversation.id;
 
     setBusyId(conversationId);
     setError(null);
@@ -107,6 +112,7 @@ export function ConversationList({ initialConversations }: ConversationListProps
     try {
       await deleteConversation(createClient(), conversationId);
       setConversations((current) => current.filter(({ id }) => id !== conversationId));
+      setDeletingConversation(null);
       setSuccess("Conversation deleted.");
     } catch (cause) {
       handleApiError(cause);
@@ -141,26 +147,7 @@ export function ConversationList({ initialConversations }: ConversationListProps
         <div className="conversation-list" aria-label="Your conversations">
           {conversations.map((conversation) => (
             <article className="conversation-row" key={conversation.id}>
-              {renamingId === conversation.id ? (
-                <div className="conversation-rename">
-                  <label htmlFor={`rename-${conversation.id}`}>Conversation title</label>
-                  <input
-                    id={`rename-${conversation.id}`}
-                    value={renameValue}
-                    maxLength={200}
-                    onChange={(event) => setRenameValue(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void handleRename(conversation.id);
-                    }}
-                    autoFocus
-                  />
-                  <div className="conversation-actions">
-                    <button type="button" onClick={() => void handleRename(conversation.id)} disabled={busyId === conversation.id}>Save</button>
-                    <button type="button" className="button-secondary" onClick={() => setRenamingId(null)}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <>
+              <>
                   <div>
                     <Link href={`/conversations/${conversation.id}`} className="conversation-title">
                       {conversation.title}
@@ -172,14 +159,23 @@ export function ConversationList({ initialConversations }: ConversationListProps
                   </div>
                   <div className="conversation-actions">
                     <button type="button" className="button-secondary" onClick={() => beginRename(conversation)}>Rename</button>
-                    <button type="button" className="button-danger" onClick={() => void handleDelete(conversation.id)} disabled={busyId === conversation.id}>Delete</button>
+                    <button type="button" className="button-danger" onClick={() => setDeletingConversation(conversation)} disabled={busyId === conversation.id}>Delete</button>
                   </div>
-                </>
-              )}
+              </>
             </article>
           ))}
         </div>
       )}
+      <Dialog open={renamingConversation !== null} title="Rename conversation" description="Choose a short title that will help you find this practice later." onClose={() => setRenamingConversation(null)}>
+        <form className="dialog-form" onSubmit={(event) => { event.preventDefault(); void handleRename(); }}>
+          <label htmlFor="conversation-title">Conversation title</label>
+          <input id="conversation-title" value={renameValue} maxLength={200} onChange={(event) => setRenameValue(event.target.value)} autoFocus />
+          <div className="dialog-actions"><button type="submit" disabled={busyId === renamingConversation?.id}>Save title</button><button type="button" className="button-secondary" onClick={() => setRenamingConversation(null)}>Cancel</button></div>
+        </form>
+      </Dialog>
+      <Dialog open={deletingConversation !== null} title="Delete conversation?" description="This removes the conversation and its messages. This cannot be undone." onClose={() => setDeletingConversation(null)}>
+        <div className="dialog-actions"><button type="button" className="button-danger" onClick={() => void handleDelete()} disabled={busyId === deletingConversation?.id}>Delete conversation</button><button type="button" className="button-secondary" onClick={() => setDeletingConversation(null)}>Cancel</button></div>
+      </Dialog>
     </section>
   );
 }

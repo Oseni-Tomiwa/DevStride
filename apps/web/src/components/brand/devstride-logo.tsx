@@ -3,6 +3,7 @@ import Image from "next/image";
 type DevStrideLogoProps = {
   className?: string;
   variant?: "header" | "auth" | "footer" | "landing";
+  decorative?: boolean;
 };
 
 const dimensions = {
@@ -12,12 +13,12 @@ const dimensions = {
   landing: { width: 96, height: 53 },
 } as const;
 
-export function DevStrideLogo({ className, variant = "header" }: DevStrideLogoProps) {
+export function DevStrideLogo({ className, variant = "header", decorative = false }: DevStrideLogoProps) {
   const size = dimensions[variant];
   return (
     <Image
       src="/brand/devstride-logo.png"
-      alt="DevStride"
+      alt={decorative ? "" : "DevStride"}
       width={size.width}
       height={size.height}
       className={className ? `devstride-logo devstride-logo-${variant} ${className}` : `devstride-logo devstride-logo-${variant}`}

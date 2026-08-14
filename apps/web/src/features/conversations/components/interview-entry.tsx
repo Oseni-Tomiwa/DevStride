@@ -54,7 +54,7 @@ export function InterviewEntry() {
   }
 
   if (!isOpen) {
-    return <button type="button" onClick={() => setIsOpen(true)}>Start Mock Interview</button>;
+    return <button type="button" onClick={() => setIsOpen(true)}>Start Interview Mode</button>;
   }
 
   return (

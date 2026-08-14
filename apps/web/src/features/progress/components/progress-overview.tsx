@@ -116,7 +116,7 @@ function recommendationHref(recommendation: ProgressRecommendation): string {
 function recommendationActionLabel(recommendation: ProgressRecommendation): string {
   if (recommendation.action.kind === "continue_conversation") return "Continue practice";
   if (recommendation.action.kind === "review_goal") return "Open Goal";
-  if (recommendation.action.mode === "interview") return "Start Mock Interview";
+  if (recommendation.action.mode === "interview") return "Start Interview Mode";
   if (recommendation.action.mode === "team") return "Start Team Practice";
   return "Start Mentor Mode";
 }
@@ -332,7 +332,7 @@ export function ProgressEmptyState() {
       <p className="muted">Your activity will appear after you send your first practice message. Strengths and areas to improve appear only after structured practice produces a summary.</p>
       <div className="progress-empty-actions">
         <Link href="/dashboard#mentor-practice" className="landing-button">Start Mentor Mode</Link>
-        <Link href="/dashboard#interview-practice" className="landing-button landing-button-secondary">Start Mock Interview</Link>
+        <Link href="/dashboard#interview-practice" className="landing-button landing-button-secondary">Start Interview Mode</Link>
       </div>
     </div>
   );

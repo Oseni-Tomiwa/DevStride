@@ -32,7 +32,6 @@ const secondConversation = { ...firstConversation, id: "second", title: "Latest 
 describe("ConversationList", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.confirm = vi.fn().mockReturnValue(true);
   });
 
   it("shows an empty state and creates a new conversation", async () => {
@@ -59,11 +58,12 @@ describe("ConversationList", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Rename" })[0]);
     fireEvent.change(screen.getByLabelText("Conversation title"), { target: { value: "Renamed" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save title" }));
     await waitFor(() => expect(renameConversation).toHaveBeenCalledWith({}, "second", { title: "Renamed" }));
     expect(await screen.findByText("Renamed")).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Delete conversation" }));
     await waitFor(() => expect(deleteConversation).toHaveBeenCalledWith({}, "second"));
     expect(screen.queryByText("Renamed")).not.toBeInTheDocument();
   });

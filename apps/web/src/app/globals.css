@@ -145,7 +145,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .app-footer-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-4); }
 .app-footer-nav a { color: var(--ink-600); text-decoration: none; }
 .app-footer-nav a:hover { color: var(--blue-700); }
-.app-footer-meta { text-align: right; white-space: nowrap; }
+.app-footer-meta { max-width: 100%; text-align: right; overflow-wrap: anywhere; }
 .muted { color: var(--ink-600); }
 .eyebrow { margin-bottom: 0.6rem; color: var(--blue-700); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
 .loading { padding: var(--space-12); color: var(--ink-600); text-align: center; }
@@ -204,7 +204,7 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .practice-card:hover { border-color: var(--line-strong); box-shadow: 0 12px 28px rgb(16 24 40 / 7%); translate: 0 -2px; }
 .practice-card > button { align-self: flex-start; margin-top: auto; }
 .practice-card > .form-error { margin-top: var(--space-3); }
-.text-link { white-space: nowrap; font-size: 0.9rem; }
+.text-link { font-size: 0.9rem; overflow-wrap: anywhere; }
 .dashboard-intelligence, .progress-intelligence { display: grid; gap: var(--space-6); }
 .dashboard-intelligence { margin-bottom: var(--space-8); }
 .progress-intelligence > section, .recommendation-card, .continue-card, .progress-snapshot, .progress-evidence, .rating-history, .progress-history { padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 94%); box-shadow: var(--shadow-sm); }
@@ -261,7 +261,7 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .progress-session-primary { min-width: 0; }
 .progress-session-primary strong { overflow-wrap: anywhere; }
 .progress-session-meta, .progress-session-side { display: block; color: var(--ink-500); font-size: 0.8rem; font-weight: 500; }
-.progress-session-side { display: grid; justify-items: end; gap: 0.35rem; text-align: right; white-space: nowrap; }
+.progress-session-side { display: grid; justify-items: end; gap: 0.35rem; max-width: 100%; text-align: right; overflow-wrap: anywhere; }
 .status-pill { display: inline-flex; align-items: center; min-height: 1.65rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-subtle); color: var(--ink-600); padding: 0.2rem 0.55rem; font-size: 0.7rem; font-weight: 750; }
 .status-pill-success { background: var(--mint-100); color: #176b4b; }
 .progress-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); margin-top: var(--space-5); }
@@ -273,6 +273,21 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .interview-setup fieldset, .team-setup fieldset { display: grid; gap: var(--space-2); border: 0; padding: 0; }
 .interview-setup legend, .team-setup legend { margin-bottom: var(--space-2); font-weight: 750; }
 .interview-setup .form-actions, .team-setup .form-actions { justify-content: flex-start; padding-top: var(--space-2); }
+
+/* Recovery and confirmation dialogs */
+.recovery-page { display: grid; min-height: 100vh; place-items: center; padding: clamp(1.25rem, 5vw, 4rem) 1rem; }
+.recovery-card { width: min(100%, 34rem); padding: clamp(1.5rem, 5vw, 2.5rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 96%); box-shadow: var(--shadow-md); }
+.recovery-card h1 { margin-bottom: 0.75rem; font-size: clamp(2rem, 6vw, 3rem); }
+.recovery-actions, .dialog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-6); }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 1rem; background: rgb(16 24 40 / 48%); }
+.dialog { width: min(100%, 32rem); max-height: min(90vh, 42rem); overflow-y: auto; padding: clamp(1.25rem, 4vw, 2rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 0 24px 64px rgb(16 24 40 / 22%); }
+.dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.dialog-heading h2 { margin-bottom: 0.35rem; }
+.dialog-heading p { margin-bottom: 0; }
+.dialog-close { min-height: 2.75rem; flex: 0 0 auto; }
+.dialog-form { margin-top: var(--space-5); }
+.dialog-form label { margin-top: 0; }
+.dialog-actions button { min-width: 9rem; }
 
 /* Profile / onboarding */
 .page-heading { max-width: 42rem; margin-bottom: var(--space-8); }
