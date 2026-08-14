@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.goals.context import GoalContext, format_goal_context
 from app.profiles.models import Profile
 
 TEAM_PROMPT_VERSION = "team-v1"
@@ -45,6 +46,7 @@ def build_team_instruction(
     profile: Profile,
     metadata: dict[str, Any],
     saved_memory: str = "",
+    goal_context: GoalContext | None = None,
 ) -> str:
     scenario = TEAM_SCENARIOS.get(str(metadata.get("team_scenario")), "Engineering discussion")
     difficulty = TEAM_DIFFICULTIES.get(str(metadata.get("team_difficulty")), "Realistic")
@@ -68,5 +70,6 @@ scenario, emphasize relevant communication and reasoning:
 - sprint planning: uncertainty, prioritization, blockers, and qualitative complexity
 - debugging: observations, hypotheses, diagnostic questions, uncertainty, and next actions
 - technical decision: comparisons, recommendations, trade-offs, disagreement, and revision
+{format_goal_context(goal_context)}
 {saved_memory}
 """

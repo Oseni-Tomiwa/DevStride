@@ -28,7 +28,7 @@ Supabase PostgreSQL + Auth       OpenAI
 ```
 
 Render applies Alembic migrations before serving a release. Repository head is
-`0007`. The deployment remains single-instance while AI rate limiting is stored
+`0008`. The deployment remains single-instance while AI rate limiting is stored
 in process memory.
 
 ## Application modules
@@ -55,8 +55,17 @@ FastAPI
   └── database (async engine, sessions, declarative models, Alembic)
 ```
 
-Goals, richer skill analytics, and recommended practice are planned product
-work, not implemented modules or API contracts.
+Goals and goal-linked practice launch are implemented modules and API
+contracts. Richer skill analytics and broader recommendation workflows remain
+planned product work.
+
+Goal-linked prompt context is resolved server-side from the authenticated
+conversation, its owned focus area, and its owned active goal. Mentor,
+Interview, Team, Live Mentor, and Live Interview receive only bounded active
+goal/focus text when the conversation is explicitly linked. Missing, archived,
+completed, stale, or cross-user context is omitted; unlinked conversations
+receive no goal context. The text is delimited as untrusted user-authored
+context and cannot override system behavior or the user's current request.
 
 ## Core request boundaries
 

@@ -25,6 +25,7 @@ from app.conversations.response_service import (
 from app.conversations.service import ConversationNotFoundError, get_conversation
 from app.core.config import settings
 from app.database.session import get_db_session
+from app.goals.context import resolve_conversation_goal_context
 from app.goals.repository import get_focus_by_id_owned
 from app.interviews.prompts import build_interview_instruction
 from app.memory.service import memory_context, retrieve_for_prompt
@@ -97,13 +98,18 @@ async def _live_instructions(
     session: AsyncSession, user_id: UUID, conversation: Conversation, mode: str
 ) -> str:
     profile = await get_profile(session, user_id)
+    goal_context = (
+        await resolve_conversation_goal_context(session, user_id, conversation.id)
+        if conversation.focus_area_id is not None
+        else None
+    )
     if mode == "mentor":
         try:
             memories = await retrieve_for_prompt(session, user_id)
         except Exception:
             memories = []
         return (
-            build_mentor_instruction(profile, memory_context(memories))
+            build_mentor_instruction(profile, memory_context(memories), goal_context)
             + """
 
 Live Mentor voice behavior:
@@ -118,7 +124,12 @@ Live Mentor voice behavior:
 """
         )
     return (
-        build_interview_instruction(profile, conversation.metadata_, saved_memory="")
+        build_interview_instruction(
+            profile,
+            conversation.metadata_,
+            saved_memory="",
+            goal_context=goal_context,
+        )
         + """
 
 Realtime voice behavior:
