@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.dependencies import get_ai_provider
+from app.ai.latency import PracticeLatencyTrace
 from app.ai.provider import AIProvider
 from app.ai.rate_limit import require_realtime_rate_limit
 from app.ai.realtime import (
@@ -15,6 +16,7 @@ from app.ai.realtime import (
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.conversations import repository as conversation_repository
+from app.conversations.evidence import is_meaningful_user_content
 from app.conversations.models import Conversation, Message
 from app.conversations.response_service import (
     AssistantGenerationDisabledError,
@@ -236,9 +238,12 @@ async def connect_session(
     current_user: AuthenticatedUser,
     _rate_limit: RealtimeRateLimit,
 ) -> Response:
+    trace = PracticeLatencyTrace("realtime", "connect")
+    trace.mark("request_received")
     conversation = await _owned_live_conversation(
         session, current_user.id, conversation_id, mode=None
     )
+    trace.mark("context_resolution_complete")
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     offer_sdp = await request.body()
     if content_type != "application/sdp" or len(offer_sdp) > 200_000:
@@ -266,6 +271,7 @@ async def connect_session(
             status_code=409, detail=f"Complete onboarding before using {mode.title()} Mode"
         ) from None
     try:
+        trace.mark("provider_request_started")
         answer = await create_realtime_call(
             settings.openai_api_key,
             offer,
@@ -276,11 +282,16 @@ async def connect_session(
         raise HTTPException(
             status_code=502, detail="Realtime Practice could not be connected"
         ) from None
+    trace.mark("provider_response_received")
     metadata = dict(conversation.metadata_ or {})
     if mode == "mentor" and not metadata.get("mentor_started"):
         metadata["mentor_started"] = True
         conversation.metadata_ = metadata
         await session.commit()
+        trace.mark("persistence_complete")
+    else:
+        trace.mark("persistence_complete")
+    trace.mark("response_returned")
     return Response(content=answer, status_code=201, media_type="application/sdp")
 
 
@@ -297,6 +308,11 @@ async def persist_transcript_turn(
     _rate_limit: TranscriptRateLimit,
 ) -> RealtimeTranscriptTurnResponse:
     await _owned_live_conversation(session, current_user.id, conversation_id, mode=None)
+    if data.role == "user" and not is_meaningful_user_content(data.content):
+        raise HTTPException(
+            status_code=422,
+            detail="A meaningful transcript turn is required",
+        )
     message = Message(
         conversation_id=conversation_id,
         role=data.role,

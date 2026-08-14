@@ -115,6 +115,12 @@ async def extract_and_persist_candidates(
 ) -> None:
     if provider is None:
         return
+    if summary.summary.startswith("No meaningful user response was recorded"):
+        logger.info(
+            "Memory extraction skipped: insufficient evidence",
+            extra={"mode": summary.session_mode},
+        )
+        return
     from app.memory.prompts import build_extraction_instruction
 
     try:

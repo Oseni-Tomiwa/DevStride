@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.latency import PracticeLatencyTrace
 from app.ai.prompts import SYSTEM_INSTRUCTION
 from app.ai.provider import (
     AIProvider,
@@ -13,6 +14,7 @@ from app.ai.provider import (
     ProviderMessage,
 )
 from app.conversations import repository
+from app.conversations.evidence import has_meaningful_user_evidence
 from app.conversations.models import Conversation, Message
 from app.conversations.schemas import RespondRequest
 from app.conversations.service import get_conversation, get_retry_message
@@ -255,6 +257,8 @@ async def complete_live_interview(
     provider: AIProvider | None,
 ) -> Message:
     """Run the existing Interview assessment without persisting a fake user turn."""
+    trace = PracticeLatencyTrace("interview", "live_interview_assessment")
+    trace.mark("request_received")
     conversation = await repository.get_by_id_and_user_id_for_update(
         session, conversation_id, user_id
     )
@@ -272,14 +276,32 @@ async def complete_live_interview(
             if existing is not None:
                 return existing
         raise InterviewStartNotAllowedError
-    if provider is None:
-        raise AssistantGenerationDisabledError
-
     messages = await repository.get_recent_by_conversation_id(
         session, conversation_id, limit=RECENT_MESSAGE_CONTEXT_LIMIT
     )
-    if not messages:
-        raise InterviewStartNotAllowedError
+    trace.mark("context_resolution_complete")
+    if not has_meaningful_user_evidence(messages):
+        assistant_message = Message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=(
+                "No substantive candidate response was recorded, so there is no "
+                "interview evidence to assess yet."
+            ),
+            metadata_={"evidence_status": "insufficient"},
+        )
+        await repository.create_message(session, assistant_message)
+        _mark_interview_completed(conversation, assistant_message)
+        repository.touch_conversation_activity(conversation)
+        await session.commit()
+        trace.mark("persistence_complete")
+        await _maybe_generate_session_summary(
+            session, user_id, conversation, FINAL_ASSESSMENT_REQUEST_PREFIX, provider
+        )
+        trace.mark("response_returned")
+        return assistant_message
+    if provider is None:
+        raise AssistantGenerationDisabledError
     assessment_request = (
         FINAL_ASSESSMENT_REQUEST_PREFIX
         + " with strengths, areas to improve, technical or communication gaps, and next "
@@ -287,11 +309,13 @@ async def complete_live_interview(
         "reasoning from 1 to 5. Clearly state that these are not hiring predictions."
     )
     try:
+        trace.mark("provider_request_started")
         result = await provider.generate(
             list(reversed(_provider_messages(messages)))
             + [ProviderMessage(role="user", content=assessment_request)],
             system_instruction=await system_instruction(session, user_id, conversation),
         )
+        trace.mark("provider_response_received")
     except Exception as exc:
         logger.warning(
             "Live interview assessment failed",
@@ -317,9 +341,11 @@ async def complete_live_interview(
     _mark_interview_completed(conversation, assistant_message)
     repository.touch_conversation_activity(conversation)
     await session.commit()
+    trace.mark("persistence_complete")
     await _maybe_generate_session_summary(
         session, user_id, conversation, assessment_request, provider
     )
+    trace.mark("response_returned")
     return assistant_message
 
 
@@ -464,7 +490,11 @@ async def generate_response(
     data: RespondRequest,
     provider: AIProvider | None,
 ) -> tuple[Message, Message]:
+    trace = PracticeLatencyTrace("general", "response")
+    trace.mark("request_received")
     conversation = await get_conversation(session, user_id, conversation_id)
+    trace.mode = conversation.mode
+    trace.mark("context_resolution_complete")
     if provider is None:
         raise AssistantGenerationDisabledError
     instruction = await system_instruction(session, user_id, conversation)
@@ -483,7 +513,9 @@ async def generate_response(
     )
     context = _provider_messages(list(reversed(recent_messages)))
     try:
+        trace.mark("provider_request_started")
         result = await provider.generate(context, system_instruction=instruction)
+        trace.mark("provider_response_received")
     except AIProviderError as exc:
         logger.warning(
             "AI generation failed",
@@ -516,7 +548,9 @@ async def generate_response(
         _mark_interview_completed(conversation, assistant_message)
     repository.touch_conversation_activity(conversation)
     await session.commit()
+    trace.mark("persistence_complete")
     await _maybe_generate_session_summary(session, user_id, conversation, data.content, provider)
+    trace.mark("response_returned")
     return user_message, assistant_message
 
 
@@ -528,7 +562,11 @@ async def stream_response(
     provider: AIProvider | None,
 ) -> AsyncIterator[StreamEvent]:
     """Persist the user turn, stream normalized deltas, then persist one assistant turn."""
+    trace = PracticeLatencyTrace("general", "stream_response")
+    trace.mark("request_received")
     conversation = await get_conversation(session, user_id, conversation_id)
+    trace.mode = conversation.mode
+    trace.mark("context_resolution_complete")
     instruction = await system_instruction(session, user_id, conversation)
 
     user_message = Message(
@@ -551,12 +589,14 @@ async def stream_response(
     chunks: list[str] = []
     final_result: GenerationResult | None = None
     try:
+        trace.mark("provider_request_started")
         async for chunk in provider.stream(context, system_instruction=instruction):
             if chunk.delta:
                 chunks.append(chunk.delta)
                 yield StreamAssistantDelta(chunk.delta)
             if chunk.result is not None:
                 final_result = chunk.result
+        trace.mark("provider_response_received")
     except AIProviderError as exc:
         logger.warning(
             "AI streaming failed",
@@ -596,7 +636,9 @@ async def stream_response(
         _mark_interview_completed(conversation, assistant_message)
     repository.touch_conversation_activity(conversation)
     await session.commit()
+    trace.mark("persistence_complete")
     await _maybe_generate_session_summary(session, user_id, conversation, data.content, provider)
+    trace.mark("response_returned")
     yield StreamAssistantComplete(assistant_message)
 
 
