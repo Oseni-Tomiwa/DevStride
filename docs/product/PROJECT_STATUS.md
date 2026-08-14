@@ -53,6 +53,8 @@ configuration and deployment checks.
 - Phase 6C smarter next-practice recommendations that rank active Goal focus
   areas from incomplete practice, repeated weaknesses, Interview ratings, and
   owned practice coverage with explainable reasons
+- Phase 6D unified next-practice presentation across Dashboard and Progress,
+  including shared mode, reason, Goal/Focus context, and action wording
 - Phase 6B Practice Intelligence & Response Quality safeguards: substantive
   response evidence gates, neutral no-response assessments, safe transcript
   handling, conservative Memory extraction, and content-free practice latency

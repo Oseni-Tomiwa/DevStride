@@ -125,7 +125,7 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Python, PostgreSQL")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Continue your API interview" })).toBeInTheDocument();
     expect(screen.getByText(progress.recommendation.reason)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Continue practice" })).toHaveAttribute("href", "/conversations/continue-id");
+    expect(screen.getByRole("link", { name: "Continue Interview" })).toHaveAttribute("href", "/conversations/continue-id");
     expect(screen.getByText("Practiced sessions")).toBeInTheDocument();
     expect(screen.getByText("Prepare concise backend explanations")).toBeInTheDocument();
     expect(screen.getByText("Clear API examples")).toBeInTheDocument();
@@ -178,6 +178,20 @@ describe("DashboardPage", () => {
   it("shows the active Goal summary when Goal progress is available", async () => {
     get.mockResolvedValueOnce(profile).mockResolvedValueOnce({
       ...progress,
+      recommendation: {
+        ...progress.recommendation,
+        activity: "mentor",
+        title: "Practice APIs",
+        reason: "This is your current focus.",
+        action: {
+          ...progress.recommendation.action,
+          kind: "start_practice",
+          mode: "mentor",
+          conversation_id: null,
+          goal_id: "goal-1",
+          focus_area_id: "focus-1",
+        },
+      },
       goal_progress: {
         goal_id: "goal-1",
         title: "Backend depth",
@@ -191,7 +205,18 @@ describe("DashboardPage", () => {
         linked_user_turns: 2,
         linked_practice_last_30_days: 1,
         current_focus: { basis: "goal_focus_area", label: "APIs", goal_id: "goal-1", focus_area_id: "focus-1" },
-        focus_areas: [],
+        focus_areas: [{
+          focus_area_id: "focus-1",
+          title: "APIs",
+          practice_mode: "mentor",
+          status: "active",
+          linked_practiced_sessions: 0,
+          linked_user_turns: 0,
+          latest_practice_at: null,
+          latest_summary_available: false,
+          recent_strength: null,
+          recent_weakness: null,
+        }],
         latest_linked_practice: null,
         recent_strength: null,
         recent_weakness: null,
@@ -212,6 +237,9 @@ describe("DashboardPage", () => {
     render(await DashboardPage());
 
     expect(screen.getByRole("heading", { name: "Backend depth" })).toBeInTheDocument();
+    expect(screen.getByText("Goal", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.getByText("Focus", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.getAllByText("APIs").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "View Goal" })).toHaveAttribute("href", "/goals");
   });
 

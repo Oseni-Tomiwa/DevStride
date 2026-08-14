@@ -170,6 +170,79 @@ describe("ProgressOverview", () => {
     expect(screen.getByRole("heading", { name: "Mentor Session" })).toBeInTheDocument();
   });
 
+  it("shows canonical Goal and active Focus context beside the recommendation", () => {
+    render(<ProgressOverview summary={summaryWith({
+      goal_progress: {
+        goal_id: "goal-1",
+        title: "Backend depth",
+        status: "active",
+        total_focus_areas: 1,
+        active_focus_areas: 1,
+        completed_focus_areas: 0,
+        archived_focus_areas: 0,
+        linked_practiced_sessions: 0,
+        linked_completed_structured_sessions: 0,
+        linked_user_turns: 0,
+        linked_practice_last_30_days: 0,
+        current_focus: null,
+        focus_areas: [{
+          focus_area_id: "focus-1",
+          title: "Database indexing",
+          practice_mode: "mentor",
+          status: "active",
+          linked_practiced_sessions: 0,
+          linked_user_turns: 0,
+          latest_practice_at: null,
+          latest_summary_available: false,
+          recent_strength: null,
+          recent_weakness: null,
+        }],
+        latest_linked_practice: null,
+        recent_strength: null,
+        recent_weakness: null,
+        recurring_strengths: [],
+        recurring_weaknesses: [],
+        rating_history: [],
+        next_action: {
+          activity: "mentor",
+          title: "Practice database indexing",
+          reason: "This focus has not been practiced yet.",
+          focus_area_id: "focus-1",
+          evidence: [],
+          action: {
+            kind: "start_practice",
+            mode: "mentor",
+            conversation_id: null,
+            goal_id: "goal-1",
+            focus_area_id: "focus-1",
+            interview_type: null,
+            interview_focus: null,
+            team_scenario: null,
+            team_difficulty: null,
+          },
+        },
+      },
+      recommendation: {
+        ...baseSummary.recommendation,
+        activity: "mentor",
+        title: "Practice database indexing",
+        reason: "This focus has not been practiced yet.",
+        action: {
+          ...baseSummary.recommendation.action,
+          kind: "start_practice",
+          mode: "mentor",
+          goal_id: "goal-1",
+          focus_area_id: "focus-1",
+          conversation_id: null,
+        },
+      },
+    })} />);
+
+    expect(screen.getAllByText("Backend depth")).toHaveLength(2);
+    expect(screen.getByText("Database indexing")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Goal" })).toHaveAttribute("href", "/goals");
+  });
+
   it("omits the continue card when the backend returns null", () => {
     render(<ProgressOverview summary={summaryWith({ continue_practice: null })} compact />);
 

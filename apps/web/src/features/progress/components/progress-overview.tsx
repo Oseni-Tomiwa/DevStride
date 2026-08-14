@@ -54,6 +54,13 @@ function modeLabel(session: ProgressSession): string {
   return "General conversation";
 }
 
+function recommendationModeLabel(recommendation: ProgressRecommendation): string {
+  if (recommendation.action.mode === "mentor") return "Mentor Mode";
+  if (recommendation.action.mode === "interview") return "Interview Mode";
+  if (recommendation.action.mode === "team") return "Team Practice";
+  return "Practice";
+}
+
 function sessionContext(session: ProgressSession): string | null {
   if (session.interview_focus) return focusLabels[session.interview_focus] ?? session.interview_focus;
   if (session.team_scenario) return teamScenarioLabels[session.team_scenario] ?? session.team_scenario;
@@ -114,31 +121,80 @@ function recommendationHref(recommendation: ProgressRecommendation): string {
 }
 
 function recommendationActionLabel(recommendation: ProgressRecommendation): string {
-  if (recommendation.action.kind === "continue_conversation") return "Continue practice";
+  if (recommendation.action.kind === "continue_conversation") {
+    return `Continue ${recommendationModeLabel(recommendation).replace(" Mode", "")}`;
+  }
   if (recommendation.action.kind === "review_goal") return "Open Goal";
+  if (recommendation.action.goal_id) return "Open Goal";
   if (recommendation.action.mode === "interview") return "Start Interview Mode";
   if (recommendation.action.mode === "team") return "Start Team Practice";
   return "Start Mentor Mode";
 }
 
-export function RecommendationCard({ recommendation }: { recommendation: ProgressRecommendation }) {
+export type RecommendationPresentation = {
+  modeLabel: string;
+  title: string;
+  reason: string;
+  goalTitle: string | null;
+  focusTitle: string | null;
+  actionLabel: string;
+  href: string;
+};
+
+export function getRecommendationPresentation(
+  recommendation: ProgressRecommendation,
+  goalProgress: GoalProgress | null | undefined,
+): RecommendationPresentation {
+  const goalMatches = goalProgress && recommendation.action.goal_id === goalProgress.goal_id;
+  const matchedGoal = goalMatches ? goalProgress : null;
+  const focus = goalMatches && recommendation.action.focus_area_id
+    ? matchedGoal?.focus_areas.find(
+        (item) => item.focus_area_id === recommendation.action.focus_area_id && item.status === "active",
+      )
+    : undefined;
+
+  return {
+    modeLabel: recommendationModeLabel(recommendation),
+    title: recommendation.title,
+    reason: recommendation.reason,
+    goalTitle: matchedGoal?.title ?? null,
+    focusTitle: focus?.title ?? null,
+    actionLabel: recommendationActionLabel(recommendation),
+    href: recommendationHref(recommendation),
+  };
+}
+
+export function RecommendationCard({
+  recommendation,
+  goalProgress,
+}: {
+  recommendation: ProgressRecommendation;
+  goalProgress?: GoalProgress | null;
+}) {
+  const presentation = getRecommendationPresentation(recommendation, goalProgress);
   return (
     <section className="recommendation-card" aria-labelledby="recommendation-title">
       <div className="recommendation-copy">
         <div className="recommendation-heading">
           <p className="eyebrow">Recommended next practice</p>
-          <span className="mode-pill">{recommendation.activity === "continue" ? "Continue" : modeLabels[recommendation.activity]}</span>
+          <span className="mode-pill">{presentation.modeLabel}</span>
         </div>
-        <h2 id="recommendation-title">{recommendation.title}</h2>
-        <p>{recommendation.reason}</p>
+        <h2 id="recommendation-title">{presentation.title}</h2>
+        <p>{presentation.reason}</p>
+        {(presentation.goalTitle || presentation.focusTitle) && (
+          <dl className="recommendation-context">
+            {presentation.goalTitle && <div><dt>Goal</dt><dd>{presentation.goalTitle}</dd></div>}
+            {presentation.focusTitle && <div><dt>Focus</dt><dd>{presentation.focusTitle}</dd></div>}
+          </dl>
+        )}
         {recommendation.evidence.length > 0 && (
           <ul className="recommendation-evidence" aria-label="Recommendation evidence">
             {recommendation.evidence.map((item) => <li key={item}>{item}</li>)}
           </ul>
         )}
       </div>
-      <Link href={recommendationHref(recommendation)} className="landing-button recommendation-action">
-        {recommendationActionLabel(recommendation)}
+      <Link href={presentation.href} className="landing-button recommendation-action">
+        {presentation.actionLabel}
       </Link>
     </section>
   );
@@ -349,7 +405,7 @@ export function ProgressOverview({ summary, compact = false }: ProgressOverviewP
     return (
       <div className="dashboard-intelligence">
         {summary.goal_progress && <GoalProgressCard progress={summary.goal_progress} compact />}
-        <RecommendationCard recommendation={summary.recommendation} />
+        <RecommendationCard recommendation={summary.recommendation} goalProgress={summary.goal_progress} />
         {summary.continue_practice && <ContinuePracticeCard practice={summary.continue_practice} />}
         <ProgressSnapshot summary={summary} showBreakdown={false} />
         <CurrentEvidence summary={summary} detailed={false} />
@@ -362,7 +418,7 @@ export function ProgressOverview({ summary, compact = false }: ProgressOverviewP
     <div className="progress-intelligence">
       {summary.goal_progress && <GoalProgressCard progress={summary.goal_progress} />}
       <ProgressSnapshot summary={summary} showBreakdown />
-      <RecommendationCard recommendation={summary.recommendation} />
+      <RecommendationCard recommendation={summary.recommendation} goalProgress={summary.goal_progress} />
       {summary.continue_practice && <ContinuePracticeCard practice={summary.continue_practice} />}
       <CurrentEvidence summary={summary} detailed />
       {!summary.recent_strength && !summary.recent_weakness && summary.recurring_strengths.length === 0 && summary.recurring_weaknesses.length === 0 && (
