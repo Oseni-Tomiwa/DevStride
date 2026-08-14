@@ -216,6 +216,10 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .recommendation-heading .eyebrow { margin: 0; }
 .recommendation-card h2 { margin-bottom: var(--space-3); font-size: clamp(1.45rem, 3vw, 2rem); }
 .recommendation-card p:not(.eyebrow) { margin-bottom: var(--space-3); color: var(--ink-800); }
+.recommendation-context { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: 0 0 var(--space-3); }
+.recommendation-context div { display: flex; flex-wrap: wrap; gap: 0.35rem; min-width: 0; }
+.recommendation-context dt { color: var(--ink-600); font-size: 0.82rem; font-weight: 700; }
+.recommendation-context dd { margin: 0; color: var(--ink-900); font-size: 0.88rem; overflow-wrap: anywhere; }
 .recommendation-evidence { margin: 0; padding-left: 1.2rem; color: var(--ink-600); font-size: 0.88rem; }
 .recommendation-evidence li + li { margin-top: 0.3rem; }
 .recommendation-action { min-width: 11rem; text-align: center; }
