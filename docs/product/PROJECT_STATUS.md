@@ -64,6 +64,9 @@ configuration and deployment checks.
 - Realtime Practice Phase 4A bounded voice analytics from normalized lifecycle
   events and finalized transcript timing, with explicit-end persistence and
   bounded reconnect hardening
+- Realtime Practice Phase 4B browser-level E2E coverage and resilience for
+  authentication expiry, reconnect failure, microphone denial/loss, stale
+  attempt cleanup, and explicit end behavior
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
 - production database migrations through repository head `0008`
@@ -144,15 +147,16 @@ that can feed Progress and bounded Memory. If proven useful, the same realtime
 foundation may later support Mentor and Team Practice.
 
 Phase 1 voice-session transport and security boundaries, Phase 2 finalized
-transcript persistence, the bounded Phase 3 live Interview experience, and the
-Phase 4A voice analytics/reliability slice are implemented in
+transcript persistence, the bounded Phase 3 live Interview experience, the
+Phase 4A voice analytics/reliability slice, and Phase 4B browser resilience are
+implemented in
 `docs/architecture/REALTIME.md`. Broader realtime product integration remains
 later work.
 
 ## Later
 
 - video, raw-audio analysis, emotion/personality inference, and richer voice
-  metrics beyond the bounded Phase 4A signals
+  metrics beyond the bounded Phase 4B signals
 - RAG or document learning only if separately approved
 - GitHub repository ingestion
 - distributed rate limiting when horizontal API scaling is needed

@@ -7,15 +7,31 @@ import { ApiError } from "../../../lib/api/client";
 import { createClient } from "../../../lib/supabase/client";
 import { connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent } from "../api";
 import { connectRealtime, parseLiveTranscriptEvent, RealtimeConnectionError, type LiveTranscriptEvent, type RealtimeConnection } from "../realtime-client";
+import type { RealtimeSdpAnswer } from "../realtime-client";
 
 type LiveState = "Ready" | "Connecting" | "Connected" | "Listening" | "Assistant speaking" | "Muted" | "Reconnecting" | "Ending" | "Ended" | "Error";
+
+export type LiveInterviewTestApi = {
+  connect: (conversationId: string, offerSdp: string) => Promise<RealtimeSdpAnswer>;
+  listMessages: (conversationId: string) => Promise<Array<{ id: string; role: string; content: string; created_at: string }>>;
+  persistTranscriptTurn: (conversationId: string, input: { event_id: string; role: "user" | "assistant"; content: string; final: true }) => Promise<unknown>;
+  recordAnalyticsEvent: (conversationId: string, input: { event_id: string; event_type: string; occurred_at: string }) => Promise<unknown>;
+  end: (conversationId: string) => Promise<unknown>;
+};
 
 function providerEvent(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
 }
 
-export function LiveInterviewSpike({ conversationId, interviewType, interviewFocus, initialMessages = [] }: { conversationId: string; interviewType: string; interviewFocus: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }> }) {
+function apiStatus(value: unknown): number | undefined {
+  if (value instanceof ApiError) return value.status;
+  if (typeof value !== "object" || value === null || !("status" in value)) return undefined;
+  const status = (value as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
+export function LiveInterviewSpike({ conversationId, interviewType, interviewFocus, initialMessages = [], testApi }: { conversationId: string; interviewType: string; interviewFocus: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi }) {
   const router = useRouter();
   const [state, setState] = useState<LiveState>("Ready");
   const stateRef = useRef<LiveState>("Ready");
@@ -58,17 +74,23 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
       reconnectScheduledRef.current = false;
-      void start();
+      void start(true);
     }, delay);
   }
 
   function recordAnalyticsEvent(eventType: string, providerEventId?: string) {
     const eventId = providerEventId ?? `client-${eventType}-${++lifecycleEventCounterRef.current}`;
-    const write = recordRealtimeAnalyticsEvent(createClient(), conversationId, {
-      event_id: eventId,
-      event_type: eventType,
-      occurred_at: new Date().toISOString(),
-    }).catch(() => undefined);
+    const write = (testApi
+      ? testApi.recordAnalyticsEvent(conversationId, {
+        event_id: eventId,
+        event_type: eventType,
+        occurred_at: new Date().toISOString(),
+      })
+      : recordRealtimeAnalyticsEvent(createClient(), conversationId, {
+        event_id: eventId,
+        event_type: eventType,
+        occurred_at: new Date().toISOString(),
+      })).catch(() => undefined);
     pendingAnalyticsWritesRef.current.add(write);
     void write.finally(() => pendingAnalyticsWritesRef.current.delete(write));
   }
@@ -152,12 +174,19 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
     }
     persistedEventIdsRef.current.add(caption.eventId);
     setSaveState("saving");
-    const write = persistRealtimeTranscriptTurn(createClient(), conversationId, {
-      event_id: caption.eventId,
-      role: caption.speaker,
-      content: caption.text,
-      final: true,
-    }).then(() => setSaveState("saved")).catch(() => {
+    const write = (testApi
+      ? testApi.persistTranscriptTurn(conversationId, {
+        event_id: caption.eventId,
+        role: caption.speaker,
+        content: caption.text,
+        final: true,
+      })
+      : persistRealtimeTranscriptTurn(createClient(), conversationId, {
+        event_id: caption.eventId,
+        role: caption.speaker,
+        content: caption.text,
+        final: true,
+      })).then(() => setSaveState("saved")).catch(() => {
       persistedEventIdsRef.current.delete(caption.eventId);
       setSaveState("error");
     });
@@ -167,7 +196,9 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
 
   async function refreshPersistedTranscript() {
     try {
-      const messages = await listMessages(createClient(), conversationId);
+      const messages = await (testApi
+        ? testApi.listMessages(conversationId)
+        : listMessages(createClient(), conversationId));
       if (!mountedRef.current) return;
       const persisted = messages
         .filter((message) => message.role === "user" || message.role === "assistant")
@@ -200,9 +231,10 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
     releaseAudio();
   }
 
-  async function start() {
+  async function start(isReconnect = false) {
     if (connectingRef.current || connectionRef.current) return;
     endingRef.current = false;
+    if (!isReconnect) reconnectAttemptsRef.current = 0;
     connectingRef.current = true;
     if (reconnectTimerRef.current !== null) {
       clearTimeout(reconnectTimerRef.current);
@@ -221,9 +253,11 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
       const connection = await connectRealtime({
         attemptId,
         signal: controller.signal,
-        isAttemptCurrent: () => activeAttemptRef.current?.id === attemptId,
+        isAttemptCurrent: () => activeAttemptRef.current?.id === attemptId || connectionAttemptRef.current === attemptId,
         kickoff: !hasStartedRef.current && initialMessages.length === 0,
-        connectSdp: (offerSdp) => connectRealtimeSession(createClient(), conversationId, offerSdp),
+        connectSdp: (offerSdp) => testApi
+          ? testApi.connect(conversationId, offerSdp)
+          : connectRealtimeSession(createClient(), conversationId, offerSdp),
         onDiagnostic: (diagnostic) => {
           if (process.env.NODE_ENV !== "production") console.info("[DevStride realtime]", diagnostic);
         },
@@ -245,17 +279,26 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
             setState(hasStartedRef.current ? "Reconnecting" : "Error");
             setConnectionError(new RealtimeConnectionError("remote_description_accepted_ice_failed", "Realtime peer connection failed after remote description"));
             if (hasStartedRef.current) markTransportDisconnected();
+            if (hasStartedRef.current) scheduleReconnect();
           }
           if (connectionState === "disconnected") {
             setState(hasStartedRef.current ? "Reconnecting" : "Error");
             setError(process.env.NODE_ENV === "production" ? "Realtime Practice could not connect. Please try again." : "Peer connection disconnected. Reconnect to continue the interview.");
             if (hasStartedRef.current) markTransportDisconnected();
+            if (hasStartedRef.current) scheduleReconnect();
           }
           if (connectionState === "closed") {
             setState(hasStartedRef.current ? "Reconnecting" : "Error");
             setError(process.env.NODE_ENV === "production" ? "Realtime Practice could not connect. Please try again." : "Peer connection closed. Reconnect to continue the interview.");
             if (hasStartedRef.current) markTransportDisconnected();
+            if (hasStartedRef.current) scheduleReconnect();
           }
+        },
+        onMicrophoneEnded: () => {
+          if (!isAttemptAlive(attemptId)) return;
+          markTransportDisconnected();
+          setState("Error");
+          setError("Your microphone became unavailable. Check the device and try again.");
         },
       });
       if (!mountedRef.current) {
@@ -269,19 +312,21 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
       recordAnalyticsEvent("session_connected");
       setState("Connected");
     } catch (cause) {
+      const status = apiStatus(cause);
       setState("Error");
       if (cause instanceof DOMException && (cause.name === "NotAllowedError" || cause.name === "PermissionDeniedError")) {
         setError("Microphone access was denied. Allow microphone access or use Text Interview instead.");
-      } else if (cause instanceof ApiError && cause.status === 401) {
+      } else if (status === 401) {
         setError("Authentication is required to start Realtime Practice.");
-      } else if (cause instanceof ApiError && [403, 404, 409].includes(cause.status)) {
+      } else if (status !== undefined && [403, 404, 409].includes(status)) {
         setError("This interview is not available for Realtime Practice.");
       } else if (cause instanceof RealtimeConnectionError) {
         setConnectionError(cause);
       } else {
         setError("Realtime Practice could not connect. Please try again.");
       }
-      if (hasStartedRef.current && !(cause instanceof ApiError && cause.status === 401)) {
+      const isNonRetryableApiError = status !== undefined && [401, 403, 404, 409].includes(status);
+      if (hasStartedRef.current && !isNonRetryableApiError) {
         scheduleReconnect();
       }
     } finally {
@@ -308,6 +353,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   }
 
   async function end() {
+    if (endingRef.current) return;
     endingRef.current = true;
     setState("Ending");
     closeConnection();
@@ -316,7 +362,7 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
       await Promise.all([...pendingAnalyticsWritesRef.current]);
       await Promise.all([...pendingWritesRef.current]);
       await Promise.all([...pendingAnalyticsWritesRef.current]);
-      await endRealtimeInterview(createClient(), conversationId);
+      await (testApi ? testApi.end(conversationId) : endRealtimeInterview(createClient(), conversationId));
       setState("Ended");
       router.push(`/conversations/${conversationId}`);
     } catch {
@@ -364,11 +410,13 @@ export function LiveInterviewSpike({ conversationId, interviewType, interviewFoc
   }, []);
 
   const active = ["Connecting", "Connected", "Listening", "Assistant speaking", "Muted"].includes(state);
+  const canEnd = active || state === "Reconnecting";
+  const reconnecting = state === "Reconnecting";
   return <section className="live-spike" aria-labelledby="live-spike-title">
     <header className="live-spike-header"><div><p className="eyebrow">Live Interview</p><h1 id="live-spike-title">Realtime practice</h1><p className="muted">{interviewType === "behavioral" ? "Behavioral" : "Technical"}{interviewFocus ? ` · ${interviewFocus.replaceAll("_", " ")}` : ""}</p></div><span className="status-pill" role="status">{state}</span></header>
     <p className="field-hint">Final transcript turns are saved to this Interview. Partial speech remains temporary until finalized.</p>
     <audio ref={audioRef} autoPlay aria-label="Live interviewer audio" />
-    <div className="live-spike-controls">{!active ? <button type="button" onClick={() => void start()}>{state === "Ready" ? "Start live interview" : state === "Reconnecting" ? "Reconnect" : "Try again"}</button> : <><button type="button" className="button-secondary" onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button><button type="button" className="button-danger" onClick={() => void end()}>End interview</button></>}</div>
+    <div className="live-spike-controls">{!active && !canEnd ? <button type="button" onClick={() => void start()}>{state === "Ready" ? "Start live interview" : "Try again"}</button> : <>{reconnecting && <button type="button" onClick={() => void start()}>{"Reconnect"}</button>}{active && <button type="button" className="button-secondary" onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>}<button type="button" className="button-danger" onClick={() => void end()}>End interview</button></>}</div>
     {audioBlocked && <button type="button" className="button-secondary" onClick={enableAudio}>Enable interviewer audio</button>}
     {error && <p className="form-error" role="alert">{error}</p>}
     {saveState === "saving" && <p className="field-hint" role="status">Saving final transcript turn…</p>}

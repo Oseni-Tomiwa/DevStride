@@ -10,6 +10,9 @@ out/
 coverage/
 *.tsbuildinfo
 pnpm-debug.log*
+test-results/
+playwright-report/
+blob-report/
 
 # Python
 .venv/

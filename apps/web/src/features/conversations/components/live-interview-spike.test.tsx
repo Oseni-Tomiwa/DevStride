@@ -3,13 +3,38 @@ import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LiveInterviewSpike } from "./live-interview-spike";
+import { ApiError } from "../../../lib/api/client";
 
 const { connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent } = vi.hoisted(() => ({ connectRealtimeSession: vi.fn(), endRealtimeInterview: vi.fn(), listMessages: vi.fn(), persistRealtimeTranscriptTurn: vi.fn(), recordRealtimeAnalyticsEvent: vi.fn() }));
 vi.mock("../api", () => ({ connectRealtimeSession, endRealtimeInterview, listMessages, persistRealtimeTranscriptTurn, recordRealtimeAnalyticsEvent }));
 vi.mock("../../../lib/supabase/client", () => ({ createClient: () => ({}) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-class FakeTrack { enabled = true; stop = vi.fn(); }
+class FakeTrack {
+  static latest: FakeTrack | null = null;
+  enabled = true;
+  readyState = "live";
+  stop = vi.fn(() => {
+    this.readyState = "ended";
+    this.listeners.get("ended")?.forEach((listener) => listener(new Event("ended")));
+  });
+  private listeners = new Map<string, Set<EventListener>>();
+  addEventListener = vi.fn((type: string, listener: EventListener) => {
+    const listeners = this.listeners.get(type) ?? new Set<EventListener>();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  });
+  removeEventListener = vi.fn((type: string, listener: EventListener) => {
+    this.listeners.get(type)?.delete(listener);
+  });
+  constructor() {
+    FakeTrack.latest = this;
+  }
+  end() {
+    this.readyState = "ended";
+    this.listeners.get("ended")?.forEach((listener) => listener(new Event("ended")));
+  }
+}
 let rejectRemoteDescription = false;
 let closeDataChannelBeforeOpen = false;
 let deferDataChannelOpen = false;
@@ -98,6 +123,7 @@ describe("LiveInterviewSpike", () => {
     failPeerAfterRemote = false;
     answerContentType = "application/sdp";
     FakePeerConnection.latest = null;
+    FakeTrack.latest = null;
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
     vi.stubGlobal("RTCPeerConnection", FakePeerConnection);
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: vi.fn(async () => { const track = new FakeTrack(); return { getTracks: () => [track], getAudioTracks: () => [track] }; }) } });
@@ -275,6 +301,29 @@ describe("LiveInterviewSpike", () => {
     render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Microphone access was denied");
+  });
+
+  it("reports microphone loss without finalizing and allows a retry", async () => {
+    render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
+    FakeTrack.latest?.end();
+    expect(await screen.findByRole("alert")).toHaveTextContent("microphone became unavailable");
+    expect(endRealtimeInterview).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("stops reconnecting after an authentication failure", async () => {
+    render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
+    connectRealtimeSession.mockRejectedValueOnce(new ApiError("Authentication required.", 401));
+    FakePeerConnection.latest?.transition("disconnected");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Reconnecting"));
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Authentication is required");
+    expect(connectRealtimeSession).toHaveBeenCalledTimes(2);
+    expect(endRealtimeInterview).not.toHaveBeenCalled();
   });
 
   it("does not finalize when connection establishment fails", async () => {
