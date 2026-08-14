@@ -95,6 +95,25 @@ export type SessionSummary = {
   updated_at: string;
 };
 
+export type PracticeReportContext = {
+  title: string;
+  status: "active" | "completed" | "archived";
+};
+
+export type PracticeReport = {
+  conversation_id: string;
+  mode: "mentor" | "interview" | "team";
+  transport: string | null;
+  completion_status: "completed" | "in_progress";
+  completed_at: string | null;
+  goal: PracticeReportContext | null;
+  focus: PracticeReportContext | null;
+  evidence_status: "available" | "insufficient" | "unavailable";
+  summary: SessionSummary | null;
+  analytics: LiveAnalytics | null;
+  recommendation: import("../progress/types").ProgressRecommendation | null;
+};
+
 export type LiveAnalytics = {
   conversation_id: string;
   candidate_speaking_ms: number | null;

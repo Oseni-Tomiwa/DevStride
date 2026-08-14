@@ -55,6 +55,9 @@ configuration and deployment checks.
   owned practice coverage with explainable reasons
 - Phase 6D unified next-practice presentation across Dashboard and Progress,
   including shared mode, reason, Goal/Focus context, and action wording
+- Phase 6E evidence-grounded practice reports reconstructed from persisted
+  summaries, optional Live Interview analytics, Goal/Focus attribution, and
+  the canonical next-practice recommendation
 - Phase 6B Practice Intelligence & Response Quality safeguards: substantive
   response evidence gates, neutral no-response assessments, safe transcript
   handling, conservative Memory extraction, and content-free practice latency

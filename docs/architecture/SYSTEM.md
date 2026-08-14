@@ -39,7 +39,7 @@ Next.js
   ├── onboarding, Profile, Account, and Dashboard
   ├── shared authenticated AppShell/header/footer
   ├── conversations and streamed message UI
-  ├── Progress/session history
+  ├── Progress/session history and evidence-grounded practice reports
   └── Memory management
 
 FastAPI
@@ -93,6 +93,10 @@ context and cannot override system behavior or the user's current request.
 - Practice feedback and structured summaries require substantive user-authored
   evidence. Empty, placeholder, control-only, or unusable turns produce neutral
   no-evidence outcomes rather than positive ratings or strengths.
+- Practice reports are reconstructed from owned persisted summaries, optional
+  Live Interview analytics, Goal/Focus attribution, and the canonical
+  deterministic Progress recommendation; they never trigger a second AI
+  evaluation or persist duplicate report data.
 - Practice request timing may be emitted at debug level as content-free stages
   with a correlation ID and elapsed milliseconds; prompts, transcripts,
   credentials, and provider payloads are never logged.

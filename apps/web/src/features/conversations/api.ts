@@ -7,6 +7,7 @@ import type {
   CreateUserMessageInput,
   Message,
   LiveAnalytics,
+  PracticeReport,
   RealtimeSession,
   RealtimeTranscriptTurn,
   RenameConversationInput,
@@ -204,6 +205,12 @@ export function startTeam(
 export function getConversationSummary(supabase: SupabaseClient, conversationId: string) {
   return createAuthenticatedApiClient(supabase).get<SessionSummary>(
     `/api/v1/conversations/${conversationId}/summary`,
+  );
+}
+
+export function getConversationReport(supabase: SupabaseClient, conversationId: string) {
+  return createAuthenticatedApiClient(supabase).get<PracticeReport>(
+    `/api/v1/conversations/${conversationId}/report`,
   );
 }
 

@@ -1,6 +1,6 @@
 import json
 from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -12,6 +12,8 @@ from app.ai.provider import AIProvider
 from app.ai.rate_limit import require_ai_rate_limit
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
+from app.conversations.report import PracticeReportNotFoundError, get_practice_report
+from app.conversations.report_schemas import PracticeReportResponse, ReportContextResponse
 from app.conversations.response_service import (
     AssistantGenerationDisabledError,
     AssistantGenerationError,
@@ -55,6 +57,7 @@ from app.conversations.service import (
     rename_conversation,
 )
 from app.database.session import get_db_session
+from app.progress.schemas import ProgressRecommendationResponse
 
 router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
@@ -106,6 +109,49 @@ async def get_one(
     response = ConversationResponse.model_validate(conversation)
     response.title = await conversation_display_title(session, conversation)
     return response
+
+
+@router.get("/{conversation_id}/report", response_model=PracticeReportResponse)
+async def get_report(
+    conversation_id: UUID,
+    session: Session,
+    current_user: AuthenticatedUser,
+) -> PracticeReportResponse:
+    try:
+        report = await get_practice_report(session, current_user.id, conversation_id)
+    except PracticeReportNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Practice report not found"
+        ) from None
+    return PracticeReportResponse(
+        conversation_id=report.conversation_id,
+        mode=cast(Literal["mentor", "interview", "team"], report.mode),
+        transport=report.transport,
+        completion_status=cast(Literal["completed", "in_progress"], report.completion_status),
+        completed_at=report.completed_at,
+        goal=(
+            ReportContextResponse(
+                title=report.goal.title,
+                status=cast(Literal["active", "completed", "archived"], report.goal.status),
+            )
+            if report.goal
+            else None
+        ),
+        focus=(
+            ReportContextResponse(
+                title=report.focus.title,
+                status=cast(Literal["active", "completed", "archived"], report.focus.status),
+            )
+            if report.focus
+            else None
+        ),
+        evidence_status=cast(
+            Literal["available", "insufficient", "unavailable"], report.evidence_status
+        ),
+        summary=report.summary,
+        analytics=report.analytics,
+        recommendation=cast(ProgressRecommendationResponse | None, report.recommendation),
+    )
 
 
 @router.patch("/{conversation_id}", response_model=ConversationResponse)

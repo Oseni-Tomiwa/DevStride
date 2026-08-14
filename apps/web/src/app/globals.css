@@ -428,6 +428,14 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .session-summary-section h3 { margin-bottom: var(--space-2); font-size: 0.98rem; }
 .session-summary-section ul { margin: 0; padding-left: 1.25rem; }
 .session-summary-section li + li { margin-top: 0.35rem; }
+.report-context { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: 0 0 var(--space-3); }
+.report-context div { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.report-context dt { color: var(--ink-600); font-size: 0.82rem; font-weight: 700; }
+.report-context dd { margin: 0; overflow-wrap: anywhere; }
+.report-evidence-state { margin-top: var(--space-5); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-subtle); }
+.report-evidence-state h3 { margin-bottom: 0.35rem; }
+.report-next-practice { margin-top: var(--space-6); }
+.report-next-practice > .recommendation-card { margin-top: var(--space-3); }
 .rating-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin: var(--space-3) 0 0; }
 .rating-grid div { padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-subtle); }
 .rating-grid dd { margin-top: 0.25rem; }
