@@ -91,6 +91,7 @@ type ConnectOptions = {
   isAttemptCurrent?: () => boolean;
   connectSdp: (offerSdp: string) => Promise<RealtimeSdpAnswer>;
   onRemoteStream: (stream: MediaStream) => void;
+  onMicrophoneEnded?: () => void;
   onEvent: (event: unknown) => void;
   onConnectionState: (state: RTCPeerConnectionState) => void;
   kickoff?: boolean;
@@ -179,64 +180,80 @@ function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
 export async function connectRealtime(options: ConnectOptions): Promise<RealtimeConnection> {
   assertCurrent(options);
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  assertCurrent(options);
-  const connection = new RTCPeerConnection();
+  let connection: RTCPeerConnection | null = null;
   let channel: RTCDataChannel | null = null;
   let closed = false;
-  const report = (stage: string, details: Omit<RealtimeDiagnostic, "stage" | "attemptId"> = {}) => {
-    if (!isCurrent(options)) return;
-    options.onDiagnostic?.({ stage, attemptId: options.attemptId, ...details });
-  };
+  const removeTrackListeners: Array<() => void> = [];
   try {
     assertCurrent(options);
+    connection = new RTCPeerConnection();
+    const peer = connection;
+    const report = (stage: string, details: Omit<RealtimeDiagnostic, "stage" | "attemptId"> = {}) => {
+      if (!isCurrent(options)) return;
+      options.onDiagnostic?.({ stage, attemptId: options.attemptId, ...details });
+    };
     const reportConnectionState = () => {
+      if (closed) return;
       report("connection_state", {
-        connectionState: connection.connectionState,
-        signalingState: connection.signalingState,
-        iceConnectionState: connection.iceConnectionState,
+        connectionState: peer.connectionState,
+        signalingState: peer.signalingState,
+        iceConnectionState: peer.iceConnectionState,
       });
-      options.onConnectionState(connection.connectionState);
+      options.onConnectionState(peer.connectionState);
     };
     const reportIceConnectionState = () => report("ice_connection_state", {
-      connectionState: connection.connectionState,
-      signalingState: connection.signalingState,
-      iceConnectionState: connection.iceConnectionState,
+      connectionState: peer.connectionState,
+      signalingState: peer.signalingState,
+      iceConnectionState: peer.iceConnectionState,
     });
     const reportSignalingState = () => report("signaling_state", {
-      signalingState: connection.signalingState,
-      connectionState: connection.connectionState,
-      iceConnectionState: connection.iceConnectionState,
-      iceGatheringState: connection.iceGatheringState,
+      signalingState: peer.signalingState,
+      connectionState: peer.connectionState,
+      iceConnectionState: peer.iceConnectionState,
+      iceGatheringState: peer.iceGatheringState,
     });
     const reportIceGatheringState = () => report("ice_gathering_state", {
-      connectionState: connection.connectionState,
-      iceConnectionState: connection.iceConnectionState,
-      iceGatheringState: connection.iceGatheringState,
+      connectionState: peer.connectionState,
+      iceConnectionState: peer.iceConnectionState,
+      iceGatheringState: peer.iceGatheringState,
     });
-    connection.addEventListener("signalingstatechange", reportSignalingState);
-    connection.addEventListener("connectionstatechange", reportConnectionState);
-    connection.addEventListener("iceconnectionstatechange", reportIceConnectionState);
-    connection.addEventListener("icegatheringstatechange", reportIceGatheringState);
+    peer.addEventListener("signalingstatechange", reportSignalingState);
+    peer.addEventListener("connectionstatechange", reportConnectionState);
+    peer.addEventListener("iceconnectionstatechange", reportIceConnectionState);
+    peer.addEventListener("icegatheringstatechange", reportIceGatheringState);
     report("initial_connection_state", {
-      signalingState: connection.signalingState,
-      connectionState: connection.connectionState,
-      iceConnectionState: connection.iceConnectionState,
-      iceGatheringState: connection.iceGatheringState,
+      signalingState: peer.signalingState,
+      connectionState: peer.connectionState,
+      iceConnectionState: peer.iceConnectionState,
+      iceGatheringState: peer.iceGatheringState,
     });
     const handleTrack = (event: Event) => {
       const trackEvent = event as RTCTrackEvent;
-      const audioReceiver = connection.getReceivers().some((receiver) => receiver.track?.kind === "audio");
-      const audioTransceiver = connection.getTransceivers().some((transceiver) => transceiver.receiver.track?.kind === "audio");
+      const audioReceiver = peer.getReceivers().some((receiver) => receiver.track?.kind === "audio");
+      const audioTransceiver = peer.getTransceivers().some((transceiver) => transceiver.receiver.track?.kind === "audio");
       report("remote_track", {
-        connectionState: connection.connectionState,
+        connectionState: peer.connectionState,
         audioReceiver,
         audioTransceiver,
         localAudioTrackLive: stream.getAudioTracks().some((track) => track.readyState === "live"),
       });
       if (trackEvent.streams[0]) options.onRemoteStream(trackEvent.streams[0]);
     };
-    connection.addEventListener("track", handleTrack);
-    channel = connection.createDataChannel("oai-events");
+    peer.addEventListener("track", handleTrack);
+    const handleMicrophoneEnded = () => {
+      if (!closed && isCurrent(options)) {
+        report("microphone_track_ended", {
+          connectionState: peer.connectionState,
+          localAudioTrackLive: false,
+        });
+        options.onMicrophoneEnded?.();
+      }
+    };
+    stream.getAudioTracks().forEach((track) => {
+      track.addEventListener("ended", handleMicrophoneEnded);
+      removeTrackListeners.push(() => track.removeEventListener("ended", handleMicrophoneEnded));
+    });
+    channel = peer.createDataChannel("oai-events");
     report("data_channel_created", {
       channelState: channel.readyState,
       localAudioTrackLive: stream.getAudioTracks().some((track) => track.readyState === "live"),
@@ -248,10 +265,10 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     channel.onmessage = (event) => {
       try { options.onEvent(JSON.parse(event.data as string) as unknown); } catch { /* Ignore malformed provider events. */ }
     };
-    stream.getTracks().forEach((track) => connection.addTrack(track, stream));
-    const offer = await connection.createOffer();
+    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+    const offer = await peer.createOffer();
     assertCurrent(options);
-    await connection.setLocalDescription(offer);
+    await peer.setLocalDescription(offer);
     assertCurrent(options);
     await waitForIceGathering(connection);
     const localDescription = connection.localDescription;
@@ -263,7 +280,7 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
       sdpChars: offerSdp.length,
       sdpBytes: byteLength(offerSdp),
       startsWithV0: offerSdp.startsWith("v=0"),
-      signalingState: connection.signalingState,
+      signalingState: peer.signalingState,
     });
     const answer = await options.connectSdp(offerSdp);
     assertCurrent(options);
@@ -293,7 +310,7 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
       iceConnectionState: connection.iceConnectionState,
     });
     try {
-      await connection.setRemoteDescription({ type: "answer", sdp: sdpAnswer });
+      await peer.setRemoteDescription({ type: "answer", sdp: sdpAnswer });
     } catch (error) {
       const safeError = safeBrowserError(error);
       report("set_remote_description_error", {
@@ -304,9 +321,9 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     }
     assertCurrent(options);
     report("remote_description_set", {
-      signalingState: connection.signalingState,
-      connectionState: connection.connectionState,
-      iceConnectionState: connection.iceConnectionState,
+      signalingState: peer.signalingState,
+      connectionState: peer.connectionState,
+      iceConnectionState: peer.iceConnectionState,
     });
     await waitForConnectionReady(channel, connection, options, report);
     assertCurrent(options);
@@ -325,15 +342,18 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
       close: () => {
         if (closed) return;
         closed = true;
+        removeTrackListeners.forEach((remove) => remove());
         channel?.close();
         stream.getTracks().forEach((track) => track.stop());
-        connection.close();
+        peer.close();
       },
     };
   } catch (error) {
+    closed = true;
+    removeTrackListeners.forEach((remove) => remove());
     channel?.close();
     stream.getTracks().forEach((track) => track.stop());
-    connection.close();
+    connection?.close();
     throw error;
   }
 }

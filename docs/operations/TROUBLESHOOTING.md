@@ -93,6 +93,22 @@ a pending event. `assistant_complete` is terminal success even if trailing
 `done` is lost. EOF before completion is interruption. See the
 [SSE protocol](../api/sse-protocol.md).
 
+## Live Interview reconnects or loses the microphone
+
+Phase 4B browser coverage runs with deterministic media/WebRTC/provider fakes
+across Chromium, WebKit, and Firefox; it does not require OpenAI credentials or
+a physical microphone. In the real browser, a microphone permission denial or
+an ended input track leaves the Interview incomplete and exposes a retry state.
+Temporary transport failures retry at most three times with 500ms, 1s, and 2s
+backoff. A 401/403/404/409 stops automatic reconnect so the user can recover
+without a logout or accidental finalization. Explicit End cancels pending
+reconnect timers and closes old media/peer resources before finalization.
+
+If the browser is connected but audio is silent, use the visible “Enable
+interviewer audio” action; autoplay policy may require a user gesture. Never
+collect or log SDP, tokens, raw audio, transcript text, or provider payloads
+while diagnosing a transport issue.
+
 ## Deployment container fails
 
 Build from repository root:

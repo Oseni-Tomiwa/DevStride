@@ -97,3 +97,26 @@ hiring, or readiness judgments. Reconnect retries are bounded to three
 attempts with 500ms, 1s, and 2s backoff; authentication expiry stops retries
 with a safe message. The live UI shows connection state only; analytics appear
 in the completed Interview assessment view.
+
+## Phase 4B browser resilience
+
+Phase 4B adds deterministic browser-level coverage around the existing live
+Interview component and transport boundary. The test harness fakes
+`getUserMedia`, `RTCPeerConnection`, the data channel, provider SDP responses,
+transcript events, reconnect failures, and authentication expiry without
+calling OpenAI or requiring a physical microphone.
+
+The supported E2E browser matrix is Chromium, WebKit, and Firefox. The live
+client observes microphone track termination, removes stale track listeners
+during idempotent cleanup, and keeps attempt IDs authoritative across delayed
+callbacks. Reconnect is bounded to three attempts with the existing backoff;
+401/403/404/409 responses stop automatic retries and expose a recoverable
+state without logging out or finalizing the Interview. Temporary transport
+failures retry, while explicit End cancels timers and in-flight attempts before
+running the existing finalization path.
+
+No raw audio, transcript text, SDP, tokens, credentials, or provider payloads
+are included in browser diagnostics. Browser autoplay policies may still
+require the existing user gesture to enable interviewer audio. Real provider
+connectivity and device-specific WebRTC behavior remain manual verification
+responsibilities.
