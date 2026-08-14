@@ -151,6 +151,38 @@ pace, talk-share, and assessment metrics are intentionally not applied to
 Mentor. Video, camera permissions, raw-audio storage, and Team Practice
 realtime remain out of scope.
 
+## Phase 7A realtime and coaching quality
+
+Realtime sessions use one explicit response-control strategy for Interview and
+Mentor: semantic VAD detects microphone activity, but does not create a
+provider response automatically. The browser requests `response.create` for
+the initial kickoff and only after a finalized candidate transcript passes the
+same bounded meaningful-content rule used by the API. Transcript persistence is
+started without waiting for the provider response, so unrelated database
+latency does not delay the next turn. Unusable finalized turns such as silence,
+inaudible markers, and punctuation-only content are ignored and cannot advance
+the conversation.
+
+Speech-start VAD events are treated as possible interruptions rather than proof
+of meaningful speech. If the assistant is speaking, cancellation waits for a
+meaningful finalized candidate turn and is sent at most once for that response.
+This prevents short noise bursts from cancelling output while preserving an
+intentional interruption. Reconnect, stale-attempt, transcript idempotency,
+ownership, and explicit-end behavior remain unchanged.
+
+Content-free latency diagnostics now include elapsed stages for provider event
+arrival, candidate transcript finalization, first assistant audio event, and
+response readiness in addition to the backend negotiation stages. They contain
+only stage names, mode/operation context, correlation or attempt IDs, and
+durations; no transcript, audio, prompt, SDP, or credential data is logged.
+
+Interview and Mentor instructions explicitly distinguish supportive coaching
+from agreement: weak, vague, partial, or incorrect answers require specific
+clarification or correction, while positive feedback must be grounded in what
+the learner actually demonstrated. Interview retains stricter evidence and
+practice-assessment behavior; Mentor remains exploratory and does not receive
+Interview ratings.
+
 Live assessment safety
 
 Realtime transcript persistence rejects unusable user turns such as silence or

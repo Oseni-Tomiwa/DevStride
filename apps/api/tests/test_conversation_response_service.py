@@ -659,6 +659,33 @@ def test_interview_prompt_contains_configuration_and_final_assessment_rules() ->
     assert str(profile.user_id) not in instruction
 
 
+def test_realtime_coaching_prompts_calibrate_feedback_without_over_agreeing() -> None:
+    profile = Profile(
+        user_id=uuid4(),
+        display_name="Private name",
+        current_level="junior",
+        target_role="backend_engineer",
+        preferred_stack=["Python"],
+        communication_goal="technical_interviews",
+        feedback_preference="balanced",
+        onboarding_completed=True,
+    )
+
+    interview = build_interview_instruction(
+        profile,
+        {"interview_type": "technical", "interview_focus": "apis"},
+    )
+    mentor = build_mentor_instruction(profile)
+
+    for instruction in (interview, mentor):
+        assert "partial" in instruction.lower()
+        assert "constructively" in instruction.lower()
+    assert "Never call an unanswered question correct" in interview
+    assert "Never say the learner is correct" in mentor
+    assert "not pretend the learner understands something" in mentor.lower()
+    assert "interview ratings" not in mentor.lower()
+
+
 @pytest.mark.parametrize("mode", ["mentor", "interview", "team"])
 def test_structured_prompts_include_bounded_untrusted_goal_context(mode: str) -> None:
     profile = Profile(

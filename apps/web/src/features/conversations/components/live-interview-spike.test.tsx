@@ -230,7 +230,7 @@ describe("LiveInterviewSpike", () => {
     expect(persistRealtimeTranscriptTurn).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels active assistant audio on a safe speech-start interruption", async () => {
+  it("waits for meaningful finalized speech before cancelling an active response", async () => {
     render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
@@ -238,7 +238,23 @@ describe("LiveInterviewSpike", () => {
     channel?.onmessage?.({ data: JSON.stringify({ id: "assistant-1", type: "response.audio.delta", delta: "Speaking" }) } as MessageEvent);
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Assistant speaking"));
     channel?.onmessage?.({ data: JSON.stringify({ type: "input_audio_buffer.speech_started" }) } as MessageEvent);
+    expect(channel?.send).not.toHaveBeenCalledWith(JSON.stringify({ type: "response.cancel" }));
+    channel?.onmessage?.({ data: JSON.stringify({ id: "user-1", type: "input_audio_transcription.completed", transcript: "I want to clarify the trade-off." }) } as MessageEvent);
     expect(channel?.send).toHaveBeenCalledWith(JSON.stringify({ type: "response.cancel" }));
+    expect(channel?.send).toHaveBeenCalledWith(JSON.stringify({ type: "response.create" }));
+  });
+
+  it("does not persist or advance on a meaningless finalized turn", async () => {
+    render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
+    const channel = FakePeerConnection.latest?.dataChannel;
+    channel?.onmessage?.({ data: JSON.stringify({ id: "assistant-1", type: "response.audio.delta", delta: "Speaking" }) } as MessageEvent);
+    channel?.onmessage?.({ data: JSON.stringify({ type: "input_audio_buffer.speech_started" }) } as MessageEvent);
+    channel?.onmessage?.({ data: JSON.stringify({ id: "noise-1", type: "input_audio_transcription.completed", transcript: "[silence]" }) } as MessageEvent);
+    expect(persistRealtimeTranscriptTurn).not.toHaveBeenCalled();
+    expect(channel?.send).not.toHaveBeenCalledWith(JSON.stringify({ type: "response.cancel" }));
+    expect(channel?.send).toHaveBeenCalledTimes(1);
   });
 
   it("reports an SDP answer failure without finalizing the interview", async () => {

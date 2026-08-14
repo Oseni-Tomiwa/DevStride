@@ -14,6 +14,26 @@ test("completes a deterministic live interview and finalizes once", async ({ pag
   await expect.poll(() => page.evaluate(() => localStorage.getItem("devstride-e2e-ended"))).toBe("true");
 });
 
+test("does not advance on background-noise-like finalized input", async ({ page }) => {
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole("button", { name: "Start live interview" }).click();
+  await expect(page.getByRole("status")).toHaveText("Connected");
+  await page.getByRole("button", { name: "Simulate background noise" }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("devstride-e2e-kickoff-count"))).toBe("1");
+  await expect(page.getByText("My answer")).not.toBeVisible();
+});
+
+test("requests the next response only after a meaningful finalized answer", async ({ page }) => {
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole("button", { name: "Start live interview" }).click();
+  await expect(page.getByRole("status")).toHaveText("Connected");
+  await page.getByRole("button", { name: "Emit meaningful answer" }).click();
+  await expect(page.getByText(/I would choose a queue/)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("devstride-e2e-kickoff-count"))).toBe("2");
+});
+
 test("reconnects after a temporary network failure", async ({ page }) => {
   await page.getByRole("button", { name: "Start live interview" }).click();
   await expect(page.getByRole("status")).toHaveText("Connected");

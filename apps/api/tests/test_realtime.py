@@ -583,7 +583,7 @@ async def test_realtime_call_uses_server_side_multipart_sdp_and_session(
                 "turn_detection": {
                     "type": "semantic_vad",
                     "eagerness": "low",
-                    "create_response": True,
+                    "create_response": False,
                     "interrupt_response": True,
                 },
                 "transcription": {"model": "gpt-4o-mini-transcribe"},

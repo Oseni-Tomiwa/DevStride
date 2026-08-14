@@ -31,6 +31,22 @@ function apiStatus(value: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
+const UNUSABLE_TRANSCRIPT_VALUES = new Set([
+  "...",
+  "…",
+  "[silence]",
+  "[no response]",
+  "[inaudible]",
+  "[unintelligible]",
+]);
+
+function isMeaningfulCandidateTurn(content: string): boolean {
+  const normalized = content.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+  return normalized.length > 0
+    && !UNUSABLE_TRANSCRIPT_VALUES.has(normalized)
+    && /[\p{L}\p{N}]/u.test(normalized);
+}
+
 export function LiveInterviewSpike({ conversationId, interviewType = "technical", interviewFocus = null, initialMessages = [], testApi, practiceMode = "interview", mentorStarted = false }: { conversationId: string; interviewType?: string; interviewFocus?: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi; practiceMode?: "interview" | "mentor"; mentorStarted?: boolean }) {
   const isMentor = practiceMode === "mentor";
   const experienceLabel = isMentor ? "Live Mentor" : "Live Interview";
@@ -57,6 +73,9 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   const audioAttachedRef = useRef(false);
   const interviewerSpeakingRef = useRef(false);
   const interviewerFinalizedRef = useRef(false);
+  const assistantResponseActiveRef = useRef(false);
+  const interruptionPendingRef = useRef(false);
+  const responseCancelRequestedRef = useRef(false);
   const lifecycleEventCounterRef = useRef(0);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,8 +149,9 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       );
     }
     if (event.type === "input_audio_buffer.speech_started" && (stateRef.current === "Assistant speaking" || stateRef.current === "Mentor speaking")) {
-      connectionRef.current?.cancelResponse();
-      recordAnalyticsEvent("interruption");
+      // VAD only proves microphone activity. Wait for a meaningful finalized
+      // transcript before cancelling an active response.
+      interruptionPendingRef.current = true;
       setState("Listening");
     }
     if (event.type.includes("audio") && event.type.includes("delta")) {
@@ -143,9 +163,12 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
           typeof event.id === "string" ? `interviewer-start-${event.id}` : undefined,
         );
       }
+      assistantResponseActiveRef.current = true;
+      responseCancelRequestedRef.current = false;
       setState(isMentor ? "Mentor speaking" : "Assistant speaking");
     }
     if (event.type === "response.done" || event.type.includes("audio.done")) {
+      assistantResponseActiveRef.current = false;
       if (interviewerSpeakingRef.current) {
         interviewerSpeakingRef.current = false;
         interviewerFinalizedRef.current = true;
@@ -169,6 +192,20 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       return [...current, caption];
     });
     if (!caption.final) return;
+    if (caption.speaker === "user" && !isMeaningfulCandidateTurn(caption.text)) {
+      persistedEventIdsRef.current.add(caption.eventId);
+      setTranscript((current) => current.filter((line) => line.eventId !== caption.eventId));
+      interruptionPendingRef.current = false;
+      return;
+    }
+    if (caption.speaker === "user") {
+      if (assistantResponseActiveRef.current && !responseCancelRequestedRef.current) {
+        connectionRef.current?.cancelResponse();
+        responseCancelRequestedRef.current = true;
+        recordAnalyticsEvent("interruption");
+      }
+      interruptionPendingRef.current = false;
+    }
     if (caption.speaker === "user" || !interviewerFinalizedRef.current) {
       recordAnalyticsEvent(
         caption.speaker === "user" ? "candidate_speech_finalized" : "interviewer_speech_finalized",
@@ -196,6 +233,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
     });
     pendingWritesRef.current.add(write);
     void write.finally(() => pendingWritesRef.current.delete(write));
+    if (caption.speaker === "user") connectionRef.current?.requestResponse();
   }
 
   async function refreshPersistedTranscript() {
@@ -354,6 +392,9 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
     releaseAudio();
     interviewerSpeakingRef.current = false;
     interviewerFinalizedRef.current = false;
+    assistantResponseActiveRef.current = false;
+    interruptionPendingRef.current = false;
+    responseCancelRequestedRef.current = false;
   }
 
   async function end() {
