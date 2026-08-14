@@ -32,7 +32,6 @@ const memory = {
 describe("MemoryManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.confirm = vi.fn().mockReturnValue(true);
   });
 
   it("shows a transparent empty state and adds a memory without ownership fields", async () => {
@@ -54,6 +53,7 @@ describe("MemoryManager", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(updateMemory).toHaveBeenCalledWith({}, "memory-1", { content: "Target backend engineering roles" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete memory" }));
     await waitFor(() => expect(deleteMemory).toHaveBeenCalledWith({}, "memory-1"));
     expect(screen.queryByText("Target backend engineering roles")).not.toBeInTheDocument();
   });

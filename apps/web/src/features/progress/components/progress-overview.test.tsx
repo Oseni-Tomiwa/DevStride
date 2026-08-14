@@ -179,7 +179,7 @@ describe("ProgressOverview", () => {
 
   it.each([
     ["mentor", "Start Mentor Mode", "/dashboard#mentor-practice"],
-    ["interview", "Start Mock Interview", "/dashboard#interview-practice"],
+    ["interview", "Start Interview Mode", "/dashboard#interview-practice"],
     ["team", "Start Team Practice", "/dashboard#team-practice"],
   ] as const)("routes a %s recommendation to its existing safe entry point", (mode, label, href) => {
     render(<ProgressOverview summary={summaryWith({

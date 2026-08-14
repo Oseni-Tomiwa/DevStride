@@ -106,12 +106,12 @@ export default async function DashboardPage() {
         </div>
         <div className="practice-grid">
           <article className="practice-card" id="mentor-practice">
-            <h3>Learn with Mentor</h3>
+            <h3>Mentor Mode</h3>
             <p className="muted">A profile-aware software-engineering learning space.</p>
             <MentorEntry />
           </article>
           <article className="practice-card" id="interview-practice">
-            <h3>Mock Interview</h3>
+            <h3>Interview Mode</h3>
             <p className="muted">Practice technical and behavioral engineering interviews.</p>
             <InterviewEntry />
           </article>

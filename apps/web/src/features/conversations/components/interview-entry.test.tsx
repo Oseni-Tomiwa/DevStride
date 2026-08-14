@@ -21,7 +21,7 @@ describe("InterviewEntry", () => {
     createConversation.mockResolvedValueOnce({ id: "interview-id" });
     render(<InterviewEntry />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Start Mock Interview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Interview Mode" }));
     fireEvent.change(screen.getByLabelText(/Technical focus/), { target: { value: "apis" } });
     fireEvent.click(screen.getByRole("button", { name: "Begin interview" }));
 
@@ -41,7 +41,7 @@ describe("InterviewEntry", () => {
     createConversation.mockResolvedValueOnce({ id: "behavioral-id" });
     render(<InterviewEntry />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Start Mock Interview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Interview Mode" }));
     fireEvent.change(screen.getByLabelText("Interview type"), { target: { value: "behavioral" } });
     fireEvent.click(screen.getByRole("button", { name: "Begin interview" }));
 
@@ -55,7 +55,7 @@ describe("InterviewEntry", () => {
     createConversation.mockResolvedValueOnce({ id: "live-id" });
     render(<InterviewEntry />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Start Mock Interview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Interview Mode" }));
     fireEvent.click(screen.getByLabelText(/Live voice/));
     fireEvent.click(screen.getByRole("button", { name: "Begin interview" }));
 

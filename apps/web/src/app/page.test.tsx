@@ -28,11 +28,10 @@ describe("HomePage", () => {
     render(await HomePage());
 
     expect(screen.getByRole("link", { name: "DevStride home" })).toBeInTheDocument();
-    expect(screen.getByAltText("DevStride")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Grow into the engineer/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Log in" })[0]).toHaveAttribute("href", "/login");
     expect(screen.getAllByRole("link", { name: "Create account" })).toHaveLength(2);
-    expect(screen.getByText(/AI-powered environment for software engineers/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI-powered practice environment for software engineers/i)).toBeInTheDocument();
   });
 
   it("redirects authenticated users to the dashboard", async () => {

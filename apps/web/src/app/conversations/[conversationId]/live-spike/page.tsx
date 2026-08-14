@@ -20,7 +20,7 @@ export default async function LiveInterviewSpikePage({ params }: { params: Promi
     const enabled = process.env.LIVE_INTERVIEW_ENABLED === "true";
     const interviewType = typeof conversation.metadata.interview_type === "string" ? conversation.metadata.interview_type : "technical";
     const interviewFocus = typeof conversation.metadata.interview_focus === "string" ? conversation.metadata.interview_focus : null;
-    return <AppShell current="conversations" contentClassName="page-content conversation-page">{enabled ? <LiveInterviewSpike conversationId={conversation.id} interviewType={interviewType} interviewFocus={interviewFocus} initialMessages={messages} /> : <section className="conversation-empty" role="status"><h1>Live Interview is disabled</h1><p className="muted">Realtime Practice is not enabled in this environment.</p></section>}</AppShell>;
+    return <AppShell current="conversations" contentClassName="page-content conversation-page">{enabled ? <LiveInterviewSpike conversationId={conversation.id} interviewType={interviewType} interviewFocus={interviewFocus} initialMessages={messages} /> : <section className="conversation-empty" role="status"><h1>Live Interview is disabled</h1><p className="muted">Live Interview is not enabled in this environment.</p></section>}</AppShell>;
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 401) redirect("/login");
     if (cause instanceof ApiError && cause.status === 404) notFound();

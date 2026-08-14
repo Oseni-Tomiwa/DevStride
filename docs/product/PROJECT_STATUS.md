@@ -29,6 +29,8 @@ configuration and deployment checks.
   audience, expiry, subject, signature, and ownership enforcement
 - onboarding and the editable coaching Profile
 - Account view for authenticated sign-in information
+- Goals / Development Plans experience with deterministic previews, editable
+  focus areas, archive/history behavior, and goal-linked practice launch
 - personalized Dashboard with evidence-based next-practice recommendations,
   continue-practice context, truthful activity metrics, and current evidence
 - authenticated AppShell with responsive navigation, skip link, and footer
@@ -113,8 +115,8 @@ configuration and deployment checks.
 - Goal-aware Progress backend integration is complete: explicitly linked
   practice, focus-area completion, bounded linked evidence, and deterministic
   Goal next actions are available without changing the Dashboard UI.
-- Preview acceptance/persistence, Dashboard integration, and the `/goals`
-  frontend remain intentionally unimplemented.
+- Preview acceptance/persistence and deeper Dashboard integration remain future
+  work; the `/goals` frontend is shipped.
 
 ## Planned
 

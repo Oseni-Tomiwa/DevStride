@@ -547,7 +547,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
       {summary && <SessionSummaryView summary={summary} liveAnalytics={liveAnalytics} />}
       <form className="message-composer" onSubmit={handleSubmit}>
         <label htmlFor="message-content">Your message</label>
-        <textarea id="message-content" value={content} maxLength={MESSAGE_MAX_LENGTH} placeholder="Ask a question or describe what you want to practise…" onChange={(event) => { setContent(event.target.value); setError(null); }} onKeyDown={handleComposerKeyDown} rows={4} disabled={isSending} />
+        <textarea id="message-content" value={content} maxLength={MESSAGE_MAX_LENGTH} placeholder="Ask a question or describe what you want to practice…" onChange={(event) => { setContent(event.target.value); setError(null); }} onKeyDown={handleComposerKeyDown} rows={4} disabled={isSending} />
         <p className="field-hint">Enter to send · Shift+Enter for a new line · {content.length.toLocaleString()} / {MESSAGE_MAX_LENGTH.toLocaleString()}</p>
         {error && <div className="generation-error" role="alert"><p>{error}</p>{retryMessageId && !isSending && <button type="button" className="button-secondary" onClick={() => void handleRetry()}>Retry</button>}</div>}
         {isSending ? <button type="button" className="button-secondary" onClick={stopGenerating}>Stop generating</button> : <button type="submit">Send message</button>}
