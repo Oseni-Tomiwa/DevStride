@@ -45,13 +45,23 @@ describe("VideoInterview", () => {
     replaceMicrophoneTrack.mockResolvedValue(undefined);
   });
 
-  it("requests camera and microphone only after explicit start, then attaches a muted inline preview", async () => {
+  async function startInterview() {
+    fireEvent.click(screen.getByRole("button", { name: "Set up camera and microphone" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Start Interview" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Start Interview" }));
+    await waitFor(() => expect(screen.getByTestId("live-interview-engine")).toBeInTheDocument());
+  }
+
+  it("keeps realtime idle during setup, then starts once after explicit Start Interview", async () => {
     const getUserMedia = vi.fn(async () => new FakeStream() as unknown as MediaStream);
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
     render(<VideoInterview conversationId="conversation-id" />);
     expect(getUserMedia).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start Video Interview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Set up camera and microphone" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Start Interview" })).toBeInTheDocument());
+    expect(screen.queryByTestId("live-interview-engine")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start Interview" }));
     await waitFor(() => expect(screen.getByTestId("live-interview-engine")).toBeInTheDocument());
     expect(getUserMedia).toHaveBeenCalledWith({ audio: true, video: true });
     const preview = screen.getByLabelText("Your local camera preview") as HTMLVideoElement;
@@ -66,8 +76,8 @@ describe("VideoInterview", () => {
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
     render(<VideoInterview conversationId="conversation-id" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Start Video Interview" }));
-    await waitFor(() => expect(screen.getByText(/Camera is off/)).toBeInTheDocument());
+    await startInterview();
+    await waitFor(() => expect(screen.getByText(/Interview can continue with audio/i)).toBeInTheDocument());
     expect(getUserMedia).toHaveBeenNthCalledWith(2, { audio: true });
     expect(screen.getByRole("button", { name: "Turn camera on" })).toBeInTheDocument();
   });
@@ -77,12 +87,12 @@ describe("VideoInterview", () => {
     const getUserMedia = vi.fn(async () => stream);
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
     render(<VideoInterview conversationId="conversation-id" />);
-    fireEvent.click(screen.getByRole("button", { name: "Start Video Interview" }));
+    await startInterview();
     await waitFor(() => expect(screen.getByRole("button", { name: "Turn camera off" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Turn camera off" }));
     expect(screen.getByRole("status")).toHaveTextContent("Camera off");
     fireEvent.click(screen.getByRole("button", { name: "Turn camera on" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Camera on");
+    expect(screen.getByRole("status")).toHaveTextContent("Camera ready");
     expect(screen.getByTestId("live-interview-engine")).toBeInTheDocument();
   });
 
@@ -97,8 +107,9 @@ describe("VideoInterview", () => {
       { kind: "audioinput", deviceId: "mic-a", label: "Built-in microphone" },
     ]) } });
     render(<VideoInterview conversationId="conversation-id" />);
-    fireEvent.click(screen.getByRole("button", { name: "Start Video Interview" }));
+    await startInterview();
     await waitFor(() => expect(screen.getByLabelText("Camera")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Device settings", { exact: true }));
     fireEvent.change(screen.getByLabelText("Camera"), { target: { value: "camera-b" } });
     await waitFor(() => expect(getUserMedia).toHaveBeenNthCalledWith(2, { video: { deviceId: { exact: "camera-b" } } }));
     expect(initial.getAudioTracks()[0].readyState).toBe("live");
@@ -113,8 +124,9 @@ describe("VideoInterview", () => {
     const getUserMedia = vi.fn().mockResolvedValueOnce(initial).mockResolvedValueOnce(replacement);
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia, enumerateDevices: vi.fn(async () => [{ kind: "audioinput", deviceId: "mic-a", label: "Built-in microphone" }, { kind: "audioinput", deviceId: "mic-b", label: "USB microphone" }]) } });
     render(<VideoInterview conversationId="conversation-id" />);
-    fireEvent.click(screen.getByRole("button", { name: "Start Video Interview" }));
+    await startInterview();
     await waitFor(() => expect(screen.getByLabelText("Microphone")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Device settings", { exact: true }));
     fireEvent.change(screen.getByLabelText("Microphone"), { target: { value: "mic-b" } });
     await waitFor(() => expect(replaceMicrophoneTrack).toHaveBeenCalledWith(replacement.getAudioTracks()[0]));
     expect(oldMicrophone.readyState).toBe("ended");
@@ -128,7 +140,7 @@ describe("VideoInterview", () => {
     const getUserMedia = vi.fn().mockResolvedValueOnce(initial).mockResolvedValueOnce(replacement);
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia, enumerateDevices: vi.fn(async () => [{ kind: "audioinput", deviceId: "mic-a", label: "Built-in microphone" }, { kind: "audioinput", deviceId: "mic-b", label: "USB microphone" }]) } });
     render(<VideoInterview conversationId="conversation-id" />);
-    fireEvent.click(screen.getByRole("button", { name: "Start Video Interview" }));
+    await startInterview();
     await waitFor(() => expect(screen.getByLabelText("Microphone")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Microphone"), { target: { value: "mic-b" } });
     await waitFor(() => expect(replaceMicrophoneTrack).toHaveBeenCalled());
@@ -141,7 +153,7 @@ describe("VideoInterview", () => {
     const getUserMedia = vi.fn(async () => stream);
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
     const view = render(<VideoInterview conversationId="conversation-id" />);
-    fireEvent.click(screen.getByRole("button", { name: "Start Video Interview" }));
+    await startInterview();
     await waitFor(() => expect(screen.getByTestId("live-interview-engine")).toBeInTheDocument());
     view.unmount();
     expect(stream.getTracks().every((track) => track.readyState === "ended")).toBe(true);

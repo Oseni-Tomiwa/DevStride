@@ -47,6 +47,16 @@ function isMeaningfulCandidateTurn(content: string): boolean {
     && /[\p{L}\p{N}]/u.test(normalized);
 }
 
+function stateDescription(state: LiveState, isMentor: boolean): string {
+  if (state === "Listening" || state === "Muted") return "Your turn — speak when you are ready.";
+  if (state === "Processing") return "Preparing the next response.";
+  if (state === "Assistant speaking" || state === "Mentor speaking") return `${isMentor ? "Your mentor" : "Your interviewer"} is speaking.`;
+  if (state === "Reconnecting") return "Connection interrupted. Reconnecting…";
+  if (state === "Ending") return "Ending this session and preparing your results.";
+  if (state === "Ended") return "The session has ended.";
+  return isMentor ? "Live Mentor is getting ready." : "Your interviewer is getting ready.";
+}
+
 export function LiveInterviewSpike({ conversationId, interviewType = "technical", interviewFocus = null, initialMessages = [], testApi, practiceMode = "interview", mentorStarted = false, mediaStream, startOnMount = false, onConnectionChange }: { conversationId: string; interviewType?: string; interviewFocus?: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi; practiceMode?: "interview" | "mentor"; mentorStarted?: boolean; mediaStream?: MediaStream; startOnMount?: boolean; onConnectionChange?: (connection: RealtimeConnection | null) => void }) {
   const isMentor = practiceMode === "mentor";
   const experienceLabel = isMentor ? "Live Mentor" : "Live Interview";
@@ -532,7 +542,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   const canEnd = active || state === "Reconnecting";
   const reconnecting = state === "Reconnecting";
   return <section className="live-spike" aria-labelledby="live-spike-title">
-    <header className="live-spike-header"><div><p className="eyebrow">{experienceLabel}</p><h1 id="live-spike-title">{experienceLabel}</h1><p className="muted">{isMentor ? "Conversational coaching with your profile and approved memory context." : `${interviewType === "behavioral" ? "Behavioral" : "Technical"}${interviewFocus ? ` · ${interviewFocus.replaceAll("_", " ")}` : ""}`}</p></div><span className="status-pill" role="status">{state}</span></header>
+    <header className="live-spike-header"><div><p className="eyebrow">{experienceLabel}</p><h1 id="live-spike-title">{experienceLabel}</h1><p className="muted">{isMentor ? "Conversational coaching with your profile and approved memory context." : `${interviewType === "behavioral" ? "Behavioral" : "Technical"}${interviewFocus ? ` · ${interviewFocus.replaceAll("_", " ")}` : ""}`}</p></div><div className="live-interviewer-presence"><span className="live-interviewer-presence-name">DevStride {isMentor ? "Mentor" : "interviewer"}</span><span className="status-pill" role="status">{state}</span><p>{stateDescription(state, isMentor)}</p></div></header>
     <p className="field-hint">Final transcript turns are saved to this {isMentor ? "Mentor session" : "Interview"}. Partial speech remains temporary until finalized.</p>
     <audio ref={audioRef} autoPlay aria-label={`${experienceLabel} audio`} />
     <div className="live-spike-controls">{!active && !canEnd ? <button type="button" onClick={() => void start()}>{state === "Ready" ? (isMentor ? "Start Live Mentor" : "Start live interview") : "Try again"}</button> : <>{reconnecting && <button type="button" onClick={() => void start()}>Reconnect</button>}{active && <button type="button" className="button-secondary" onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>}<button type="button" className="button-danger" onClick={() => void end()}>End {isMentor ? "session" : "interview"}</button></>}</div>

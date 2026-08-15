@@ -133,6 +133,15 @@ keep the page in portrait or rotate after connection, and use the visible End
 Interview control before navigating away. Safari may require another gesture
 after returning from the background to resume audio.
 
+## Video Interview room setup
+
+If the Video Interview route opens without a provider connection, this is
+intentional: choose Set up camera and microphone, review readiness, then choose
+Start Interview. Camera denial or an unavailable camera can continue audio-only
+when microphone access succeeds. A working microphone is required to start or
+continue the Interview. The preview is local-only; camera video is not sent,
+recorded, or stored.
+
 ## Live Mentor does not start or reconnect
 
 Live Mentor requires an owned Mentor conversation created with
