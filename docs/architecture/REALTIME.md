@@ -259,3 +259,25 @@ background/foreground, and orientation behavior remains manual verification.
 Camera media remains local-only: it is never uploaded, stored, recorded, sent
 to OpenAI, or analyzed for appearance, emotion, confidence, eye contact,
 posture, personality, or body language.
+
+## Phase 7D Video Interview room UX
+
+Video Interview now separates local device setup from the active Interview
+room. Opening the route does not request media or start realtime. The user
+first explicitly prepares camera and microphone devices, reviews readiness and
+the local-only camera boundary, then chooses Start Interview. Only that action
+mounts the existing Live Interview engine with `startOnMount`; no second
+conversation, stream owner, provider path, or kickoff mechanism is created.
+
+The setup and room surfaces retain the existing caller-owned `MediaStream`. The
+active room presents the local preview, a restrained DevStride interviewer
+presence treatment, realtime status explanations, essential camera controls,
+and secondary device settings. Live captions remain the existing finalized-turn
+surface and are distinct from persisted conversation history and Practice
+Reports. Camera loss keeps the audio Interview available; microphone loss is
+recoverable and never finalizes the session.
+
+Ending continues through the existing Live Interview completion path. Reconnect,
+transcript persistence, assessment, summary, analytics, and Practice Report
+behavior are unchanged. The UI uses no fake interviewer video and does not send,
+record, store, or analyze camera media.

@@ -42,6 +42,9 @@ The implemented product includes:
 - technical/behavioral Interview and scenario/difficulty Team configuration;
 - Text, Live, and local-preview Video Interview formats; Video Interview keeps
   camera media in the browser and uses the existing realtime audio flow;
+- Video Interview setup and room UX with explicit device readiness, local-only
+  camera privacy communication, audio-only fallback, and deliberate interview
+  start behavior;
 - automatic Interview and Team kickoff without fake user messages;
 - structured Mentor, Interview, and Team session summaries;
 - a simple Progress overview and session history;

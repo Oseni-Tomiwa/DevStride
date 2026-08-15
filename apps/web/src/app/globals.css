@@ -457,6 +457,9 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .live-spike { display: grid; gap: var(--space-5); }
 .live-spike-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-5); }
 .live-spike-header h1 { margin-bottom: 0.4rem; font-size: clamp(2rem, 5vw, 3.2rem); }
+.live-interviewer-presence { display: grid; min-width: 12rem; gap: 0.35rem; justify-items: end; padding: var(--space-4); border: 1px solid #cbd8ff; border-radius: var(--radius-md); background: var(--blue-50); text-align: right; }
+.live-interviewer-presence-name { color: var(--ink-900); font-size: 0.82rem; font-weight: 800; }
+.live-interviewer-presence p { margin: 0; color: var(--ink-600); font-size: 0.8rem; }
 .live-spike-controls { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .live-spike-controls button { min-width: 10rem; }
 .live-spike-transcript { min-height: 14rem; padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 96%); box-shadow: var(--shadow-sm); }
@@ -465,6 +468,10 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .live-spike-transcript p:first-of-type { border-top: 0; }
 .live-spike audio { width: 100%; }
 .video-interview-shell { display: grid; gap: var(--space-6); padding-bottom: env(safe-area-inset-bottom); }
+.video-interview-setup-heading { max-width: 44rem; }
+.video-interview-setup-heading h1 { margin-bottom: 0.55rem; font-size: clamp(2rem, 5vw, 3.2rem); }
+.video-interview-privacy { display: grid; gap: 0.25rem; max-width: 48rem; padding: var(--space-4); border: 1px solid #cbd8ff; border-radius: var(--radius-md); background: var(--blue-50); color: var(--ink-800); }
+.video-interview-privacy span { color: var(--ink-600); font-size: 0.88rem; }
 .video-interview-preview-card { display: grid; gap: var(--space-4); padding: clamp(1rem, 3vw, 1.5rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 96%); box-shadow: var(--shadow-sm); }
 .video-interview-preview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
 .video-interview-preview-heading h1 { margin-bottom: 0; font-size: clamp(1.8rem, 4vw, 2.6rem); }
@@ -473,6 +480,15 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .video-interview-camera-off { position: absolute; margin: 0; color: #fff; font-weight: 750; }
 .video-interview-controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); }
 .video-interview-controls .field-hint { margin: 0; }
+.video-interview-readiness, .video-interview-setup-actions, .video-interview-active-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.video-interview-setup-actions { padding-top: var(--space-2); border-top: 1px solid var(--line); }
+.video-interview-active-tools { justify-content: space-between; }
+.video-interview-active-tools > button { min-width: 10rem; }
+.video-device-settings { min-width: min(100%, 14rem); }
+.video-device-settings summary { display: inline-flex; min-height: 2.75rem; align-items: center; padding: 0.65rem 0.85rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--blue-700); cursor: pointer; font-weight: 750; }
+.video-device-settings[open] summary { border-color: var(--blue-600); box-shadow: var(--shadow-focus); }
+.video-device-settings .video-interview-controls { margin-top: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-subtle); }
+.status-pill-error { border-color: #f4c5ce; background: var(--red-100); color: var(--red-700); }
 .video-device-select { display: grid; min-width: min(100%, 14rem); gap: 0.35rem; color: var(--ink-700); font-size: 0.82rem; font-weight: 750; }
 .video-device-select select { min-height: 2.75rem; }
 
@@ -582,6 +598,9 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
   .video-interview-preview-heading { flex-direction: column; }
   .video-interview-controls { align-items: stretch; }
   .video-interview-controls > button, .video-device-select { width: 100%; }
+  .live-interviewer-presence { width: 100%; justify-items: start; text-align: left; }
+  .video-interview-active-tools { align-items: stretch; }
+  .video-interview-active-tools > button, .video-device-settings { width: 100%; }
 }
 @media (max-width: 430px) {
   .landing-shell { padding-inline: 1rem; }

@@ -95,6 +95,9 @@ configuration and deployment checks.
 - Phase 7C Video Interview hardening with session-scoped device selection,
   camera/microphone replacement, permission recovery, device-loss states,
   responsive controls, and idempotent media cleanup
+- Phase 7D Video Interview Room UX with explicit device setup, local-only privacy
+  communication, deliberate Start Interview gating, interviewer presence,
+  secondary device settings, audio-only room states, and mobile-safe controls
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
 - production database migrations through repository head `0008`
