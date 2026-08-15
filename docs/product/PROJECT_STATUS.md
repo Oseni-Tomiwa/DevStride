@@ -58,6 +58,10 @@ configuration and deployment checks.
 - Phase 6E evidence-grounded practice reports reconstructed from persisted
   summaries, optional Live Interview analytics, Goal/Focus attribution, and
   the canonical next-practice recommendation
+- Phase 7A Realtime & Coaching Quality controls: explicit response creation
+  after meaningful finalized turns, noise-resistant interruption handling,
+  content-free realtime latency stages, and calibrated Interview/Mentor
+  feedback guidance
 - Phase 6B Practice Intelligence & Response Quality safeguards: substantive
   response evidence gates, neutral no-response assessments, safe transcript
   handling, conservative Memory extraction, and content-free practice latency

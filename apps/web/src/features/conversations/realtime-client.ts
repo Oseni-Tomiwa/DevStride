@@ -1,5 +1,6 @@
 export type RealtimeConnection = {
   mute: (muted: boolean) => void;
+  requestResponse: () => void;
   cancelResponse: () => void;
   close: () => void;
 };
@@ -32,6 +33,7 @@ export type RealtimeDiagnostic = {
   audioReceiver?: boolean;
   audioTransceiver?: boolean;
   localAudioTrackLive?: boolean;
+  elapsedMs?: number;
 };
 
 export class RealtimeAttemptCancelledError extends Error {
@@ -179,6 +181,7 @@ function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
 
 export async function connectRealtime(options: ConnectOptions): Promise<RealtimeConnection> {
   assertCurrent(options);
+  const attemptStartedAt = typeof performance === "undefined" ? 0 : performance.now();
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   let connection: RTCPeerConnection | null = null;
   let channel: RTCDataChannel | null = null;
@@ -190,7 +193,12 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     const peer = connection;
     const report = (stage: string, details: Omit<RealtimeDiagnostic, "stage" | "attemptId"> = {}) => {
       if (!isCurrent(options)) return;
-      options.onDiagnostic?.({ stage, attemptId: options.attemptId, ...details });
+      options.onDiagnostic?.({
+        stage,
+        attemptId: options.attemptId,
+        elapsedMs: attemptStartedAt === 0 ? undefined : Math.round(performance.now() - attemptStartedAt),
+        ...details,
+      });
     };
     const reportConnectionState = () => {
       if (closed) return;
@@ -262,8 +270,44 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     channel.onclosing = () => report("data_channel_closing", { channelState: channel?.readyState });
     channel.onclose = () => report("data_channel_close", { channelState: channel?.readyState });
     channel.onerror = () => report("data_channel_error", { channelState: channel?.readyState });
+    let firstProviderEvent = false;
+    let firstAssistantAudioEvent = false;
+    let responseOutputStarted = false;
     channel.onmessage = (event) => {
-      try { options.onEvent(JSON.parse(event.data as string) as unknown); } catch { /* Ignore malformed provider events. */ }
+      try {
+        const parsed = JSON.parse(event.data as string) as unknown;
+        const type = typeof parsed === "object" && parsed !== null && "type" in parsed
+          && typeof parsed.type === "string" ? parsed.type : "";
+        if (!firstProviderEvent) {
+          firstProviderEvent = true;
+          report("provider_event_first");
+        }
+        if (!firstAssistantAudioEvent && type.includes("audio") && type.includes("delta")) {
+          firstAssistantAudioEvent = true;
+          report("assistant_audio_first_event");
+        }
+        if (type === "response.created") {
+          responseOutputStarted = false;
+          report("response_created");
+        }
+        if (!responseOutputStarted && (type === "response.audio.delta" || type === "response.output_audio.delta")) {
+          responseOutputStarted = true;
+          report("response_output_started");
+        }
+        if (type === "response.done") report("response_done");
+        if (type === "response.error" || type === "error") {
+          const error = typeof parsed === "object" && parsed !== null && "error" in parsed
+            && typeof parsed.error === "object" && parsed.error !== null ? parsed.error as Record<string, unknown> : {};
+          report("response_error", {
+            errorName: typeof error.type === "string" ? error.type.slice(0, 80) : undefined,
+          });
+        }
+        if (type === "input_audio_buffer.speech_started") report("candidate_speech_started");
+        if (type.includes("input_audio_transcription") && (type.endsWith(".completed") || type.endsWith(".done"))) {
+          report("candidate_transcript_finalized");
+        }
+        options.onEvent(parsed);
+      } catch { /* Ignore malformed provider events. */ }
     };
     stream.getTracks().forEach((track) => peer.addTrack(track, stream));
     const offer = await peer.createOffer();
@@ -328,7 +372,10 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     await waitForConnectionReady(channel, connection, options, report);
     assertCurrent(options);
     const sendResponseCreate = () => {
-      if (channel?.readyState === "open") channel.send(JSON.stringify({ type: "response.create" }));
+      if (channel?.readyState === "open") {
+        channel.send(JSON.stringify({ type: "response.create" }));
+        report("response_create_sent", { channelState: channel.readyState });
+      }
     };
     if (options.kickoff !== false) {
       if (channel.readyState === "open") sendResponseCreate();
@@ -336,6 +383,7 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     }
     return {
       mute: (muted) => stream.getAudioTracks().forEach((track) => { track.enabled = !muted; }),
+      requestResponse: sendResponseCreate,
       cancelResponse: () => {
         if (channel?.readyState === "open") channel.send(JSON.stringify({ type: "response.cancel" }));
       },

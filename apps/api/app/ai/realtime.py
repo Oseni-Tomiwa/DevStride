@@ -32,7 +32,9 @@ def build_realtime_session(instructions: str, model: str) -> dict[str, object]:
                 "turn_detection": {
                     "type": "semantic_vad",
                     "eagerness": "low",
-                    "create_response": True,
+                    # DevStride validates finalized transcript evidence before
+                    # asking the provider to advance the conversation.
+                    "create_response": False,
                     "interrupt_response": True,
                 },
                 "transcription": {"model": "gpt-4o-mini-transcribe"},

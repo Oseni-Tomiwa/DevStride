@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -230,7 +230,7 @@ describe("LiveInterviewSpike", () => {
     expect(persistRealtimeTranscriptTurn).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels active assistant audio on a safe speech-start interruption", async () => {
+  it("waits for meaningful finalized speech before cancelling an active response", async () => {
     render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
@@ -238,7 +238,23 @@ describe("LiveInterviewSpike", () => {
     channel?.onmessage?.({ data: JSON.stringify({ id: "assistant-1", type: "response.audio.delta", delta: "Speaking" }) } as MessageEvent);
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Assistant speaking"));
     channel?.onmessage?.({ data: JSON.stringify({ type: "input_audio_buffer.speech_started" }) } as MessageEvent);
+    expect(channel?.send).not.toHaveBeenCalledWith(JSON.stringify({ type: "response.cancel" }));
+    channel?.onmessage?.({ data: JSON.stringify({ id: "user-1", type: "input_audio_transcription.completed", transcript: "I want to clarify the trade-off." }) } as MessageEvent);
     expect(channel?.send).toHaveBeenCalledWith(JSON.stringify({ type: "response.cancel" }));
+    expect(channel?.send).toHaveBeenCalledWith(JSON.stringify({ type: "response.create" }));
+  });
+
+  it("does not persist or advance on a meaningless finalized turn", async () => {
+    render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
+    const channel = FakePeerConnection.latest?.dataChannel;
+    channel?.onmessage?.({ data: JSON.stringify({ id: "assistant-1", type: "response.audio.delta", delta: "Speaking" }) } as MessageEvent);
+    channel?.onmessage?.({ data: JSON.stringify({ type: "input_audio_buffer.speech_started" }) } as MessageEvent);
+    channel?.onmessage?.({ data: JSON.stringify({ id: "noise-1", type: "input_audio_transcription.completed", transcript: "[silence]" }) } as MessageEvent);
+    expect(persistRealtimeTranscriptTurn).not.toHaveBeenCalled();
+    expect(channel?.send).not.toHaveBeenCalledWith(JSON.stringify({ type: "response.cancel" }));
+    expect(channel?.send).toHaveBeenCalledTimes(1);
   });
 
   it("reports an SDP answer failure without finalizing the interview", async () => {
@@ -263,6 +279,83 @@ describe("LiveInterviewSpike", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
     expect(FakePeerConnection.latest?.setRemoteDescription).toHaveBeenCalledWith({ type: "answer", sdp: ANSWER_SDP });
+  });
+
+  it("keeps processing separate from speaking and completes one explicit response", async () => {
+    render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
+    const channel = FakePeerConnection.latest?.dataChannel;
+    channel?.onmessage?.({ data: JSON.stringify({ id: "kickoff-done", type: "response.done" }) } as MessageEvent);
+    channel?.send.mockClear();
+
+    channel?.onmessage?.({ data: JSON.stringify({ type: "input_audio_buffer.speech_started" }) } as MessageEvent);
+    channel?.onmessage?.({ data: JSON.stringify({ id: "candidate-1", type: "input_audio_transcription.completed", transcript: "Explain the trade-off." }) } as MessageEvent);
+    expect(channel?.send).toHaveBeenCalledTimes(1);
+    expect(channel?.send).toHaveBeenCalledWith(JSON.stringify({ type: "response.create" }));
+
+    channel?.onmessage?.({ data: JSON.stringify({ id: "response-1", type: "response.created" }) } as MessageEvent);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Processing"));
+    channel?.onmessage?.({ data: JSON.stringify({ id: "caption-1", type: "response.audio_transcript.delta", delta: "Here is the answer." }) } as MessageEvent);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Processing"));
+    expect(screen.queryByText("Assistant speaking")).not.toBeInTheDocument();
+    channel?.onmessage?.({ data: JSON.stringify({ id: "audio-1", type: "response.audio.delta", delta: "audio" }) } as MessageEvent);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Assistant speaking"));
+    channel?.onmessage?.({ data: JSON.stringify({ id: "response-1", type: "response.done" }) } as MessageEvent);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Listening"));
+  });
+
+  it("clears pending state when the provider returns an error", async () => {
+    render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
+    const channel = FakePeerConnection.latest?.dataChannel;
+    channel?.onmessage?.({ data: JSON.stringify({ id: "response-1", type: "response.created" }) } as MessageEvent);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Processing"));
+    channel?.onmessage?.({ data: JSON.stringify({ type: "error", error: { type: "invalid_request_error" } }) } as MessageEvent);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Listening"));
+    expect(screen.getByRole("alert")).toHaveTextContent("could not respond");
+  });
+
+  it("recovers when a response is created but produces no output", async () => {
+    render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
+    const channel = FakePeerConnection.latest?.dataChannel;
+    vi.useFakeTimers();
+    try {
+      channel?.onmessage?.({ data: JSON.stringify({ id: "response-1", type: "response.created" }) } as MessageEvent);
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.getByRole("status")).toHaveTextContent("Processing");
+      await act(async () => { vi.advanceTimersByTime(15_000); });
+      expect(screen.getByRole("status")).toHaveTextContent("Listening");
+      expect(screen.getByRole("alert")).toHaveTextContent("did not respond");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("allows later interview turns and one Live Mentor follow-up at a time", async () => {
+    const first = render(<LiveInterviewSpike conversationId="conversation-id" interviewType="technical" interviewFocus={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start live interview" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"));
+    const channel = FakePeerConnection.latest?.dataChannel;
+    channel?.send.mockClear();
+    channel?.onmessage?.({ data: JSON.stringify({ id: "candidate-1", type: "input_audio_transcription.completed", transcript: "First answer" }) } as MessageEvent);
+    expect(channel?.send).toHaveBeenCalledTimes(1);
+    channel?.onmessage?.({ data: JSON.stringify({ id: "response-1", type: "response.done" }) } as MessageEvent);
+    channel?.onmessage?.({ data: JSON.stringify({ id: "candidate-2", type: "input_audio_transcription.completed", transcript: "Second answer" }) } as MessageEvent);
+    expect(channel?.send).toHaveBeenCalledTimes(2);
+
+    first.unmount();
+    render(<LiveInterviewSpike conversationId="mentor-conversation-id" practiceMode="mentor" />);
+    fireEvent.click(screen.getByRole("button", { name: "Start Live Mentor" }));
+    await waitFor(() => expect(screen.getAllByRole("status").some((status) => status.textContent === "Connected")).toBe(true));
+    const mentorChannel = FakePeerConnection.latest?.dataChannel;
+    mentorChannel?.send.mockClear();
+    mentorChannel?.onmessage?.({ data: JSON.stringify({ id: "mentor-candidate-1", type: "input_audio_transcription.completed", transcript: "Help me practice this topic" }) } as MessageEvent);
+    expect(mentorChannel?.send).toHaveBeenCalledTimes(1);
+    expect(mentorChannel?.send).toHaveBeenCalledWith(JSON.stringify({ type: "response.create" }));
   });
 
   it("reports a data channel that closes before opening", async () => {
