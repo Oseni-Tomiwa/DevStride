@@ -9,7 +9,7 @@ import { connectRealtimeSession, endLiveMentor, endRealtimeInterview, listMessag
 import { connectRealtime, parseLiveTranscriptEvent, RealtimeConnectionError, type LiveTranscriptEvent, type RealtimeConnection } from "../realtime-client";
 import type { RealtimeSdpAnswer } from "../realtime-client";
 
-type LiveState = "Ready" | "Connecting" | "Connected" | "Listening" | "Assistant speaking" | "Mentor speaking" | "Muted" | "Reconnecting" | "Ending" | "Ended" | "Error";
+type LiveState = "Ready" | "Connecting" | "Connected" | "Processing" | "Listening" | "Assistant speaking" | "Mentor speaking" | "Muted" | "Reconnecting" | "Ending" | "Ended" | "Error";
 
 export type LiveInterviewTestApi = {
   connect: (conversationId: string, offerSdp: string) => Promise<RealtimeSdpAnswer>;
@@ -76,6 +76,8 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   const assistantResponseActiveRef = useRef(false);
   const interruptionPendingRef = useRef(false);
   const responseCancelRequestedRef = useRef(false);
+  const responsePendingRef = useRef(false);
+  const responseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lifecycleEventCounterRef = useRef(0);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,6 +135,28 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
     setError(process.env.NODE_ENV === "production" ? `${experienceLabel} could not connect. Please try again.` : connectionErrorMessage(error));
   }
 
+  function clearResponseTimeout() {
+    if (responseTimeoutRef.current !== null) clearTimeout(responseTimeoutRef.current);
+    responseTimeoutRef.current = null;
+  }
+
+  function requestAssistantResponse() {
+    const connection = connectionRef.current;
+    if (!connection || responsePendingRef.current) return;
+    responsePendingRef.current = true;
+    clearResponseTimeout();
+    setError(null);
+    setState("Processing");
+    connection.requestResponse();
+    responseTimeoutRef.current = setTimeout(() => {
+      responseTimeoutRef.current = null;
+      if (!responsePendingRef.current || !mountedRef.current) return;
+      responsePendingRef.current = false;
+      setState("Listening");
+      setError(`The ${isMentor ? "Mentor" : "interviewer"} did not respond. You can try again.`);
+    }, 15_000);
+  }
+
   function isAttemptAlive(attemptId: string) {
     return mountedRef.current && (
       activeAttemptRef.current?.id === attemptId || connectionAttemptRef.current === attemptId
@@ -142,6 +166,25 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   function handleEvent(value: unknown) {
     const event = providerEvent(value);
     if (!event || typeof event.type !== "string") return;
+    if (event.type === "response.created") {
+      responsePendingRef.current = true;
+      clearResponseTimeout();
+      responseTimeoutRef.current = setTimeout(() => {
+        responseTimeoutRef.current = null;
+        if (!responsePendingRef.current || !mountedRef.current) return;
+        responsePendingRef.current = false;
+        setState("Listening");
+        setError(`The ${isMentor ? "Mentor" : "interviewer"} did not respond. You can try again.`);
+      }, 15_000);
+      if (stateRef.current !== "Assistant speaking" && stateRef.current !== "Mentor speaking") setState("Processing");
+    }
+    if (event.type === "response.error" || event.type === "error") {
+      responsePendingRef.current = false;
+      clearResponseTimeout();
+      setState("Listening");
+      setError(`The ${isMentor ? "Mentor" : "interviewer"} could not respond. You can try again.`);
+      return;
+    }
     if (event.type === "input_audio_buffer.speech_started") {
       recordAnalyticsEvent(
         "candidate_speech_started",
@@ -154,7 +197,10 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       interruptionPendingRef.current = true;
       setState("Listening");
     }
-    if (event.type.includes("audio") && event.type.includes("delta")) {
+    const assistantAudioStarted = event.type === "response.audio.delta" || event.type === "response.output_audio.delta";
+    if (assistantAudioStarted) {
+      responsePendingRef.current = false;
+      clearResponseTimeout();
       if (!interviewerSpeakingRef.current) {
         interviewerSpeakingRef.current = true;
         interviewerFinalizedRef.current = false;
@@ -167,7 +213,13 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       responseCancelRequestedRef.current = false;
       setState(isMentor ? "Mentor speaking" : "Assistant speaking");
     }
+    if (event.type === "response.audio_transcript.delta" && !assistantAudioStarted) {
+      if (!responsePendingRef.current) responsePendingRef.current = true;
+      if (stateRef.current !== "Assistant speaking" && stateRef.current !== "Mentor speaking") setState("Processing");
+    }
     if (event.type === "response.done" || event.type.includes("audio.done")) {
+      responsePendingRef.current = false;
+      clearResponseTimeout();
       assistantResponseActiveRef.current = false;
       if (interviewerSpeakingRef.current) {
         interviewerSpeakingRef.current = false;
@@ -233,7 +285,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
     });
     pendingWritesRef.current.add(write);
     void write.finally(() => pendingWritesRef.current.delete(write));
-    if (caption.speaker === "user") connectionRef.current?.requestResponse();
+    if (caption.speaker === "user") requestAssistantResponse();
   }
 
   async function refreshPersistedTranscript() {
@@ -395,6 +447,8 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
     assistantResponseActiveRef.current = false;
     interruptionPendingRef.current = false;
     responseCancelRequestedRef.current = false;
+    responsePendingRef.current = false;
+    clearResponseTimeout();
   }
 
   async function end() {
@@ -443,6 +497,8 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       activeAttemptRef.current?.controller.abort();
       activeAttemptRef.current = null;
       connectingRef.current = false;
+      responsePendingRef.current = false;
+      clearResponseTimeout();
       connectionRef.current?.close();
       connectionRef.current = null;
       connectionAttemptRef.current = null;
@@ -454,7 +510,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
     };
   }, []);
 
-  const active = ["Connecting", "Connected", "Listening", "Assistant speaking", "Mentor speaking", "Muted"].includes(state);
+  const active = ["Connecting", "Connected", "Processing", "Listening", "Assistant speaking", "Mentor speaking", "Muted"].includes(state);
   const canEnd = active || state === "Reconnecting";
   const reconnecting = state === "Reconnecting";
   return <section className="live-spike" aria-labelledby="live-spike-title">

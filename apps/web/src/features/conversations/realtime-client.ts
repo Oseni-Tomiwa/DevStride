@@ -272,6 +272,7 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     channel.onerror = () => report("data_channel_error", { channelState: channel?.readyState });
     let firstProviderEvent = false;
     let firstAssistantAudioEvent = false;
+    let responseOutputStarted = false;
     channel.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data as string) as unknown;
@@ -284,6 +285,22 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
         if (!firstAssistantAudioEvent && type.includes("audio") && type.includes("delta")) {
           firstAssistantAudioEvent = true;
           report("assistant_audio_first_event");
+        }
+        if (type === "response.created") {
+          responseOutputStarted = false;
+          report("response_created");
+        }
+        if (!responseOutputStarted && (type === "response.audio.delta" || type === "response.output_audio.delta")) {
+          responseOutputStarted = true;
+          report("response_output_started");
+        }
+        if (type === "response.done") report("response_done");
+        if (type === "response.error" || type === "error") {
+          const error = typeof parsed === "object" && parsed !== null && "error" in parsed
+            && typeof parsed.error === "object" && parsed.error !== null ? parsed.error as Record<string, unknown> : {};
+          report("response_error", {
+            errorName: typeof error.type === "string" ? error.type.slice(0, 80) : undefined,
+          });
         }
         if (type === "input_audio_buffer.speech_started") report("candidate_speech_started");
         if (type.includes("input_audio_transcription") && (type.endsWith(".completed") || type.endsWith(".done"))) {
@@ -355,7 +372,10 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     await waitForConnectionReady(channel, connection, options, report);
     assertCurrent(options);
     const sendResponseCreate = () => {
-      if (channel?.readyState === "open") channel.send(JSON.stringify({ type: "response.create" }));
+      if (channel?.readyState === "open") {
+        channel.send(JSON.stringify({ type: "response.create" }));
+        report("response_create_sent", { channelState: channel.readyState });
+      }
     };
     if (options.kickoff !== false) {
       if (channel.readyState === "open") sendResponseCreate();
