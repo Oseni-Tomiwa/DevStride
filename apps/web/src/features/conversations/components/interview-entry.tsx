@@ -36,9 +36,9 @@ export function InterviewEntry() {
         mode: "interview",
         interview_type: interviewType,
         ...(interviewType === "technical" && interviewFocus ? { interview_focus: interviewFocus } : {}),
-        ...(transport === "live_voice" ? { interview_transport: transport } : {}),
+        ...(transport !== "text" ? { interview_transport: transport } : {}),
       });
-      router.push(transport === "live_voice" ? `/conversations/${conversation.id}/live-spike` : `/conversations/${conversation.id}`);
+      router.push(transport === "live_voice" ? `/conversations/${conversation.id}/live-spike` : transport === "video" ? `/conversations/${conversation.id}/live-video` : `/conversations/${conversation.id}`);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
         router.push("/login");
@@ -95,6 +95,15 @@ export function InterviewEntry() {
               note="Microphone required."
               checked={transport === "live_voice"}
               onChange={() => setTransport("live_voice")}
+            />
+            <FormatOptionCard
+              name="interview-transport"
+              value="video"
+              title="Video Interview"
+              description="Practice with camera and voice."
+              note="Camera and microphone required for the full experience. Camera stays local."
+              checked={transport === "video"}
+              onChange={() => setTransport("video")}
             />
           </div>
         </fieldset>

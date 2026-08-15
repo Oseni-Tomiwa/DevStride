@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 MESSAGE_CONTENT_MAX_LENGTH = 20_000
 ConversationMode = Literal["general", "mentor", "interview", "team"]
 InterviewType = Literal["technical", "behavioral"]
-InterviewTransport = Literal["text", "live_voice"]
+InterviewTransport = Literal["text", "live_voice", "video"]
 MentorTransport = Literal["text", "live_voice"]
 InterviewFocus = Literal[
     "general_backend",

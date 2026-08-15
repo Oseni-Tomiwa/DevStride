@@ -97,6 +97,7 @@ type ConnectOptions = {
   onEvent: (event: unknown) => void;
   onConnectionState: (state: RTCPeerConnectionState) => void;
   kickoff?: boolean;
+  mediaStream?: MediaStream;
   onDiagnostic?: (diagnostic: RealtimeDiagnostic) => void;
 };
 
@@ -182,7 +183,7 @@ function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
 export async function connectRealtime(options: ConnectOptions): Promise<RealtimeConnection> {
   assertCurrent(options);
   const attemptStartedAt = typeof performance === "undefined" ? 0 : performance.now();
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const stream = options.mediaStream ?? await navigator.mediaDevices.getUserMedia({ audio: true });
   let connection: RTCPeerConnection | null = null;
   let channel: RTCDataChannel | null = null;
   let closed = false;
@@ -309,7 +310,9 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
         options.onEvent(parsed);
       } catch { /* Ignore malformed provider events. */ }
     };
-    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+    // The provider peer intentionally carries microphone audio only. Video
+    // Interview owns its camera stream locally and never adds video tracks here.
+    stream.getAudioTracks().forEach((track) => peer.addTrack(track, stream));
     const offer = await peer.createOffer();
     assertCurrent(options);
     await peer.setLocalDescription(offer);

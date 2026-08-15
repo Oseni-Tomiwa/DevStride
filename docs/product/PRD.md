@@ -40,6 +40,8 @@ The implemented product includes:
 - persistent General, Mentor, Interview, and Team conversations;
 - complete and SSE-streamed assistant generation with cancellation and retry;
 - technical/behavioral Interview and scenario/difficulty Team configuration;
+- Text, Live, and local-preview Video Interview formats; Video Interview keeps
+  camera media in the browser and uses the existing realtime audio flow;
 - automatic Interview and Team kickoff without fake user messages;
 - structured Mentor, Interview, and Team session summaries;
 - a simple Progress overview and session history;

@@ -109,6 +109,17 @@ interviewer audio” action; autoplay policy may require a user gesture. Never
 collect or log SDP, tokens, raw audio, transcript text, or provider payloads
 while diagnosing a transport issue.
 
+## Video Interview camera issues
+
+Video Interview requires `LIVE_INTERVIEW_ENABLED=true`,
+`VIDEO_INTERVIEW_ENABLED=true`, and the backend-only OpenAI configuration. The
+browser requests camera and microphone permission only after the user starts.
+Camera denial or an unavailable camera can continue as an explicit audio-only
+session; this does not upload or store camera media. A camera track ending
+mid-session should show a retry state while microphone audio and the Interview
+continue where possible. End the session or navigate away to stop all local
+tracks and turn off the camera indicator.
+
 ## Live Mentor does not start or reconnect
 
 Live Mentor requires an owned Mentor conversation created with

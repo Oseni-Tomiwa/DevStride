@@ -89,6 +89,9 @@ configuration and deployment checks.
   WebRTC transport, finalized transcript persistence, reconnect/device/auth
   hardening, and existing Mentor summary/Memory pipeline without Interview
   analytics
+- Phase 7B Video Interview v1 with a local-only camera preview, existing
+  realtime Interview audio, audio-only fallback, camera controls, and safe
+  media cleanup; camera video is never sent to OpenAI or stored
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
 - production database migrations through repository head `0008`
@@ -179,8 +182,8 @@ later work.
 
 ## Later
 
-- video, raw-audio analysis, emotion/personality inference, and richer voice
-  metrics beyond the bounded Phase 4B signals
+- raw-video analysis, emotion/personality inference, and richer voice metrics
+  beyond the bounded Phase 4B signals
 - RAG or document learning only if separately approved
 - GitHub repository ingestion
 - distributed rate limiting when horizontal API scaling is needed

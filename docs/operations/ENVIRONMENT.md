@@ -21,6 +21,7 @@ private signing keys, service-role credentials, or OpenAI keys.
 | `AI_GENERATION_ENABLED` | Optional | Defaults false. Enables provider-backed generation only when a key is present. |
 | `LIVE_INTERVIEW_ENABLED` | Optional | Defaults false. Enables Realtime Practice Phase 1 for owned Interview conversations. No transcripts or messages are persisted. |
 | `LIVE_INTERVIEW_MODEL` | Optional | Backend-selected Realtime model, default `gpt-realtime`; never accepted from clients. |
+| `VIDEO_INTERVIEW_ENABLED` | Optional | Defaults false. Enables Video Interview, which uses local camera preview plus the existing Live Interview audio transport. |
 | `LIVE_MENTOR_ENABLED` | Optional | Defaults false. Enables Live Mentor for owned Mentor conversations configured with `live_voice`. |
 | `LIVE_MENTOR_MODEL` | Optional | Backend-selected Live Mentor model, default `gpt-realtime`; never accepted from clients. |
 | `OPENAI_API_KEY` | Required only when AI generation is enabled | Backend-only provider credential. |

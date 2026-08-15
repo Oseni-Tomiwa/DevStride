@@ -39,6 +39,7 @@ Next.js
   ├── onboarding, Profile, Account, and Dashboard
   ├── shared authenticated AppShell/header/footer
   ├── conversations and streamed message UI
+  ├── local-only Video Interview camera preview
   ├── Progress/session history and evidence-grounded practice reports
   └── Memory management
 
@@ -79,6 +80,12 @@ context and cannot override system behavior or the user's current request.
   summaries, and memory records.
 - OpenAI credentials, model selection, system prompts, and provider metadata
   remain backend-only.
+
+Video Interview is a local camera preview layered over the existing Live
+Interview audio/data-channel transport. The camera MediaStream is not added to
+the provider RTCPeerConnection, is not sent to OpenAI, and is not persisted or
+analyzed. Only microphone audio follows the existing authenticated realtime
+path.
 
 ## Conversation and AI boundaries
 

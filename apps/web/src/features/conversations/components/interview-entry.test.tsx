@@ -66,6 +66,21 @@ describe("InterviewEntry", () => {
     expect(push).toHaveBeenCalledWith("/conversations/live-id/live-spike");
   });
 
+  it("creates a Video Interview and opens the local-preview route", async () => {
+    createConversation.mockResolvedValueOnce({ id: "video-id" });
+    render(<InterviewEntry />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Interview Mode" }));
+    fireEvent.click(screen.getByLabelText(/Video Interview/));
+    fireEvent.click(screen.getByRole("button", { name: "Begin interview" }));
+
+    await waitFor(() => expect(createConversation).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ interview_transport: "video" }),
+    ));
+    expect(push).toHaveBeenCalledWith("/conversations/video-id/live-video");
+  });
+
   it("keeps Text Interview selected by default with native radio semantics", () => {
     render(<InterviewEntry />);
 

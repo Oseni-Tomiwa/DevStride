@@ -47,7 +47,7 @@ function isMeaningfulCandidateTurn(content: string): boolean {
     && /[\p{L}\p{N}]/u.test(normalized);
 }
 
-export function LiveInterviewSpike({ conversationId, interviewType = "technical", interviewFocus = null, initialMessages = [], testApi, practiceMode = "interview", mentorStarted = false }: { conversationId: string; interviewType?: string; interviewFocus?: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi; practiceMode?: "interview" | "mentor"; mentorStarted?: boolean }) {
+export function LiveInterviewSpike({ conversationId, interviewType = "technical", interviewFocus = null, initialMessages = [], testApi, practiceMode = "interview", mentorStarted = false, mediaStream, startOnMount = false }: { conversationId: string; interviewType?: string; interviewFocus?: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi; practiceMode?: "interview" | "mentor"; mentorStarted?: boolean; mediaStream?: MediaStream; startOnMount?: boolean }) {
   const isMentor = practiceMode === "mentor";
   const experienceLabel = isMentor ? "Live Mentor" : "Live Interview";
   const speakerLabel = isMentor ? "Mentor" : "Interviewer";
@@ -83,6 +83,8 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectScheduledRef = useRef(false);
   const endingRef = useRef(false);
+  const autoStartedRef = useRef(false);
+  const startRef = useRef<((isReconnect?: boolean) => Promise<void>) | null>(null);
 
   function scheduleReconnect() {
     if (!hasStartedRef.current || endingRef.current || reconnectScheduledRef.current) return;
@@ -349,6 +351,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
         signal: controller.signal,
         isAttemptCurrent: () => activeAttemptRef.current?.id === attemptId || connectionAttemptRef.current === attemptId,
         kickoff: !hasStartedRef.current && !mentorStarted && initialMessages.length === 0,
+        mediaStream,
         connectSdp: (offerSdp) => testApi
           ? testApi.connect(conversationId, offerSdp)
           : connectRealtimeSession(createClient(), conversationId, offerSdp),
@@ -481,6 +484,15 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   function enableAudio() {
     void audioRef.current?.play().then(() => setAudioBlocked(false)).catch(() => setAudioBlocked(true));
   }
+
+  startRef.current = start;
+
+  useEffect(() => {
+    if (startOnMount && mediaStream && !autoStartedRef.current) {
+      autoStartedRef.current = true;
+      void startRef.current?.();
+    }
+  }, [mediaStream, startOnMount]);
 
   useEffect(() => {
     stateRef.current = state;

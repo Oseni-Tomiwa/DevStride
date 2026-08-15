@@ -207,3 +207,20 @@ delimited, untrusted user-authored context. Prompts retain server-controlled
 mode behavior and state that the user's current request takes priority. No goal
 context is injected into General conversations, and no IDs, ownership data,
 timestamps, or other persistence metadata are sent to the provider.
+
+## Phase 7B Video Interview
+
+Video Interview reuses the Phase 7A Live Interview audio and data-channel
+engine. The browser acquires microphone and optional camera media only after
+the user starts the experience. Microphone audio tracks use the existing
+provider peer connection; camera tracks remain in a separate local preview and
+are never added to that peer connection. Camera media is not uploaded, stored,
+recorded, or analyzed for facial expression, emotion, confidence, eye contact,
+posture, appearance, or other human traits.
+
+The Video Interview transport is represented by conversation metadata
+`interview_transport: "video"` and is gated by `VIDEO_INTERVIEW_ENABLED` in
+addition to the existing Live Interview provider configuration. Camera denial
+or device loss offers a visible audio-only fallback and does not finalize the
+Interview. Camera toggles disable/reacquire local tracks, while end, route
+navigation, refresh, reconnect, and unmount use idempotent media cleanup.
