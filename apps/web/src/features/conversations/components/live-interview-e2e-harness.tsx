@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../../../lib/api/client";
 import { LiveInterviewSpike, type LiveInterviewTestApi } from "./live-interview-spike";
+import { VideoInterview } from "./video-interview";
 
 const conversationId = "e2e-live-interview";
 const answerSdp = "v=0\r\no=- answer\r\na=ice-ufrag:abc123\r\na=ice-pwd:def456\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=application 9 DTLS/SCTP 5000\r\n";
@@ -12,11 +13,12 @@ type E2EMode = "healthy" | "fail-once" | "permanent" | "auth";
 
 class FakeTrack extends EventTarget {
   static latest: FakeTrack | null = null;
-  kind = "audio";
+  kind: "audio" | "video";
   enabled = true;
   readyState: MediaStreamTrackState = "live";
-  constructor() {
+  constructor(kind: "audio" | "video" = "audio") {
     super();
+    this.kind = kind;
     FakeTrack.latest = this;
   }
   stop() {
@@ -90,7 +92,7 @@ class FakePeerConnection extends EventTarget {
   }
 }
 
-export function LiveInterviewE2EHarness({ practiceMode = "interview" }: { practiceMode?: "interview" | "mentor" }) {
+export function LiveInterviewE2EHarness({ practiceMode = "interview", video = false }: { practiceMode?: "interview" | "mentor"; video?: boolean }) {
   const isMentor = practiceMode === "mentor";
   const [ready, setReady] = useState(false);
   const [, setMode] = useState<E2EMode>("healthy");
@@ -102,19 +104,26 @@ export function LiveInterviewE2EHarness({ practiceMode = "interview" }: { practi
   });
 
   useEffect(() => {
-    const tracks = [new FakeTrack()];
+    const tracks = [new FakeTrack("audio"), ...(video ? [new FakeTrack("video")] : [])];
     tracksRef.current = tracks;
     const denyMicrophone = (window as unknown as { __devstrideDenyMicrophone?: boolean }).__devstrideDenyMicrophone;
+    const denyCamera = (window as unknown as { __devstrideDenyCamera?: boolean }).__devstrideDenyCamera;
+    const makeStream = (includeVideo: boolean) => {
+      const selected = tracks.filter((track) => track.kind === "audio" || includeVideo && track.kind === "video");
+      return { getTracks: () => selected, getAudioTracks: () => selected.filter((track) => track.kind === "audio"), getVideoTracks: () => selected.filter((track) => track.kind === "video"), addTrack: (track: FakeTrack) => selected.push(track) };
+    };
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: denyMicrophone
       ? async () => { throw new DOMException("denied", "NotAllowedError"); }
-      : async () => ({ getTracks: () => tracks, getAudioTracks: () => tracks }) } });
+      : async (constraints: MediaStreamConstraints) => { if (denyCamera && constraints.video) throw new DOMException("camera unavailable", "NotFoundError");
+        return makeStream(Boolean(constraints.video)); }
+      } });
     window.RTCPeerConnection = FakePeerConnection as unknown as typeof RTCPeerConnection;
     const readyTimer = window.setTimeout(() => setReady(true), 0);
     return () => {
       window.clearTimeout(readyTimer);
       tracks.forEach((track) => track.stop());
     };
-  }, []);
+  }, [video]);
 
   const api: LiveInterviewTestApi = {
     connect: async () => {
@@ -162,6 +171,6 @@ export function LiveInterviewE2EHarness({ practiceMode = "interview" }: { practi
       <button type="button" onClick={() => (FakePeerConnection.latest?.dataChannel.emit({ type: "input_audio_buffer.speech_started" }), FakePeerConnection.latest?.dataChannel.emit({ id: "meaningful-1", type: "input_audio_transcription.completed", transcript: "I would choose a queue because it decouples the producer and consumer." }))}>Emit meaningful answer</button>
       <button type="button" onClick={() => FakeTrack.latest?.stop()}>Simulate microphone loss</button>
     </div>
-    <LiveInterviewSpike conversationId={conversationId} practiceMode={practiceMode} mentorStarted={isMentor && messages.length > 0} interviewType="technical" interviewFocus="apis" initialMessages={messages} testApi={api} />
+    {video ? <VideoInterview conversationId={conversationId} interviewType="technical" interviewFocus="apis" initialMessages={messages} testApi={api} /> : <LiveInterviewSpike conversationId={conversationId} practiceMode={practiceMode} mentorStarted={isMentor && messages.length > 0} interviewType="technical" interviewFocus="apis" initialMessages={messages} testApi={api} />}
   </main>;
 }

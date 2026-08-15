@@ -75,7 +75,7 @@ async def _owned_live_conversation(
         raise HTTPException(status_code=400, detail=f"Live {label} requires {label}")
     metadata = conversation.metadata_ or {}
     transport_key = "interview_transport" if resolved_mode == "interview" else "mentor_transport"
-    if metadata.get(transport_key, "text") != "live_voice":
+    if metadata.get(transport_key, "text") not in {"live_voice", "video"}:
         raise HTTPException(
             status_code=409,
             detail=f"This {resolved_mode} conversation is configured for text practice",
@@ -146,6 +146,11 @@ Realtime voice behavior:
     )
 
 
+def _require_video_enabled() -> None:
+    if not settings.video_interview_enabled:
+        raise HTTPException(status_code=503, detail="Video Interview is currently disabled")
+
+
 def _require_realtime_enabled() -> None:
     if not settings.live_interview_enabled:
         raise HTTPException(status_code=503, detail="Realtime Practice is currently disabled")
@@ -171,7 +176,8 @@ async def create_session(
     transport_key = (
         "interview_transport" if conversation.mode == "interview" else "mentor_transport"
     )
-    if metadata.get(transport_key, "text") != "live_voice":
+    transport = metadata.get(transport_key, "text")
+    if transport not in {"live_voice", "video"}:
         raise HTTPException(
             status_code=409,
             detail=f"This {conversation.mode} conversation is configured for text practice",
@@ -196,6 +202,8 @@ async def create_session(
         model = settings.live_mentor_model
     else:
         _require_realtime_enabled()
+        if transport == "video":
+            _require_video_enabled()
         model = settings.live_interview_model
     if settings.openai_api_key is None:
         raise HTTPException(
@@ -261,6 +269,8 @@ async def connect_session(
         model = settings.live_mentor_model
     else:
         _require_realtime_enabled()
+        if conversation.metadata_.get("interview_transport", "text") == "video":
+            _require_video_enabled()
         model = settings.live_interview_model
     if settings.openai_api_key is None:
         raise HTTPException(status_code=503, detail=f"Live {mode.title()} is currently unavailable")

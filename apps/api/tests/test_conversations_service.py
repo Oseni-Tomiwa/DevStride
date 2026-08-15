@@ -44,6 +44,33 @@ async def test_interview_configuration_is_persisted_in_conversation_metadata(
 
 
 @pytest.mark.asyncio
+async def test_video_interview_transport_is_persisted_without_new_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[Conversation] = []
+
+    async def fake_create(_session: AsyncSession, conversation: Conversation) -> Conversation:
+        created.append(conversation)
+        return conversation
+
+    monkeypatch.setattr(repository, "create_conversation", fake_create)
+    session = cast(AsyncSession, type("Session", (), {"commit": _commit})())
+
+    await create_conversation(
+        session,
+        uuid4(),
+        ConversationCreateRequest(
+            title="Video interview",
+            mode="interview",
+            interview_type="technical",
+            interview_transport="video",
+        ),
+    )
+
+    assert created[0].metadata_["interview_transport"] == "video"
+
+
+@pytest.mark.asyncio
 async def test_internal_conversation_creation_can_link_a_focus_area(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

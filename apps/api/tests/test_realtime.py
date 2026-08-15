@@ -157,6 +157,19 @@ def test_realtime_session_rejects_text_interview(
     assert response.status_code == 409
 
 
+def test_video_interview_requires_its_feature_flag(
+    authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del authenticated_client
+    conversation = make_interview()
+    conversation.metadata_["interview_transport"] = "video"
+    monkeypatch.setattr("app.realtime.routes.settings.live_interview_enabled", True)
+    monkeypatch.setattr("app.realtime.routes.settings.video_interview_enabled", False)
+    monkeypatch.setattr("app.realtime.routes.get_conversation", _returning(conversation))
+    response = post_session({"conversation_id": str(conversation.id)})
+    assert response.status_code == 503
+
+
 def test_realtime_session_rejects_completed_interview(
     authenticated_client: CurrentUser, monkeypatch: pytest.MonkeyPatch
 ) -> None:

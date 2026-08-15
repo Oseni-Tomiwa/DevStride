@@ -265,7 +265,7 @@ async def complete_live_interview(
     if conversation is None or conversation.mode != "interview":
         raise InterviewStartNotAllowedError
     metadata = conversation.metadata_ or {}
-    if metadata.get("interview_transport", "text") != "live_voice":
+    if metadata.get("interview_transport", "text") not in {"live_voice", "video"}:
         raise InterviewStartNotAllowedError
     if metadata.get("interview_completed"):
         final_id = metadata.get("final_assessment_message_id")

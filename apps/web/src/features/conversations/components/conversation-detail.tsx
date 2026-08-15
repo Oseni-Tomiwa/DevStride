@@ -466,7 +466,7 @@ export function ConversationDetail({ conversation, initialMessages, initialSumma
           </p>
         )}
         {conversation.mode === "interview" && liveInterviewEnabled && (
-          <p><Link href={`/conversations/${conversation.id}/live-spike`} className="landing-button landing-button-secondary">Open Live Interview</Link></p>
+          <p><Link href={`/conversations/${conversation.id}/${conversation.metadata.interview_transport === "video" ? "live-video" : "live-spike"}`} className="landing-button landing-button-secondary">Open {conversation.metadata.interview_transport === "video" ? "Video Interview" : "Live Interview"}</Link></p>
         )}
         {conversation.mode === "mentor" && conversation.metadata.mentor_transport === "live_voice" && liveMentorEnabled && (
           <p><Link href={`/conversations/${conversation.id}/live-mentor`} className="landing-button landing-button-secondary">Open Live Mentor</Link></p>

@@ -107,6 +107,10 @@ state live in backend-controlled metadata.
 Migration `0006` does not attach historical conversations; their
 `focus_area_id` remains null.
 
+Interview transport metadata may be `text`, `live_voice`, or `video`. Video is
+only a product-format marker; camera media, frames, screenshots, and device
+payloads are not stored in the conversation model.
+
 ## `messages`
 
 | Column | Type/constraints |

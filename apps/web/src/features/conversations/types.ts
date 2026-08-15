@@ -1,6 +1,6 @@
 export type ConversationMode = "general" | "mentor" | "interview" | "team";
 export type InterviewType = "technical" | "behavioral";
-export type InterviewTransport = "text" | "live_voice";
+export type InterviewTransport = "text" | "live_voice" | "video";
 export type MentorTransport = "text" | "live_voice";
 export type InterviewFocus =
   | "general_backend"

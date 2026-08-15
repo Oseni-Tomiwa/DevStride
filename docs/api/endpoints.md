@@ -39,8 +39,8 @@ the same fields optionally. `id`, `user_id`, timestamps, and
 | POST | `/api/v1/conversations/{conversation_id}/messages/{message_id}/retry` | 200 SSE | Retries an eligible user message without creating a duplicate user row. |
 | POST | `/api/v1/conversations/{conversation_id}/interview-start` | 200 SSE | Idempotent automatic first Interview message for an owned Interview conversation. |
 | POST | `/api/v1/conversations/{conversation_id}/team-start` | 200 SSE | Idempotent automatic first Team Practice message for an owned Team conversation. |
-| POST | `/api/v1/realtime/sessions` | 200 | Authorizes an owned active Interview or Live Mentor conversation and retains the ephemeral-credential bootstrap contract. |
-| POST | `/api/v1/realtime/sessions/{conversation_id}/connect` | 201 | Accepts an authenticated raw SDP offer for an owned live Interview or Mentor conversation and returns the OpenAI SDP answer after server-side negotiation. |
+| POST | `/api/v1/realtime/sessions` | 200 | Authorizes an owned active Interview or Live Mentor conversation, including Video Interview, and retains the ephemeral-credential bootstrap contract. |
+| POST | `/api/v1/realtime/sessions/{conversation_id}/connect` | 201 | Accepts an authenticated raw SDP offer for an owned live Interview, Video Interview, or Mentor conversation and returns the OpenAI SDP answer after server-side negotiation. |
 | POST | `/api/v1/realtime/sessions/{conversation_id}/transcript-turns` | 201 | Persists one finalized owned Live Interview or Live Mentor transcript turn idempotently. |
 | POST | `/api/v1/realtime/sessions/{conversation_id}/analytics-events` | 201 | Records one bounded, deduplicated lifecycle event for an owned Live Interview. |
 | GET | `/api/v1/realtime/sessions/{conversation_id}/analytics` | 200 | Returns completed owned Live Interview communication analytics; 404 before explicit End Interview. |
@@ -199,7 +199,9 @@ are delivered as `error` events after the HTTP stream has opened. AI rate limits
 return 429 with `Retry-After` before the operation begins.
 
 See [Errors](errors.md) for shared behavior.
-Interview conversations may be created with `interview_transport: "text"` or
-`"live_voice"`; text is the default and existing conversations remain text.
+Interview conversations may be created with `interview_transport: "text"`,
+`"live_voice"`, or `"video"`; text is the default and existing conversations
+remain text. Video uses local camera preview only; camera media is never sent
+to the API or provider.
 Live voice sessions use `POST /api/v1/realtime/sessions` only after an owned
 live-voice interview has been created.
