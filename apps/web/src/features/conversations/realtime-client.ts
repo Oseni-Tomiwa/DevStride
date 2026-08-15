@@ -1,5 +1,6 @@
 export type RealtimeConnection = {
   mute: (muted: boolean) => void;
+  replaceMicrophoneTrack: (track: MediaStreamTrack) => Promise<void>;
   requestResponse: () => void;
   cancelResponse: () => void;
   close: () => void;
@@ -183,6 +184,7 @@ function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
 export async function connectRealtime(options: ConnectOptions): Promise<RealtimeConnection> {
   assertCurrent(options);
   const attemptStartedAt = typeof performance === "undefined" ? 0 : performance.now();
+  const ownsMediaStream = !options.mediaStream;
   const stream = options.mediaStream ?? await navigator.mediaDevices.getUserMedia({ audio: true });
   let connection: RTCPeerConnection | null = null;
   let channel: RTCDataChannel | null = null;
@@ -258,10 +260,15 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
         options.onMicrophoneEnded?.();
       }
     };
-    stream.getAudioTracks().forEach((track) => {
+    let microphoneTrack = stream.getAudioTracks()[0] ?? null;
+    let removeMicrophoneTrackListener: (() => void) | null = null;
+    const watchMicrophoneTrack = (track: MediaStreamTrack) => {
+      const remove = () => track.removeEventListener("ended", handleMicrophoneEnded);
       track.addEventListener("ended", handleMicrophoneEnded);
-      removeTrackListeners.push(() => track.removeEventListener("ended", handleMicrophoneEnded));
-    });
+      removeMicrophoneTrackListener = remove;
+      removeTrackListeners.push(remove);
+    };
+    if (microphoneTrack) watchMicrophoneTrack(microphoneTrack);
     channel = peer.createDataChannel("oai-events");
     report("data_channel_created", {
       channelState: channel.readyState,
@@ -386,6 +393,15 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     }
     return {
       mute: (muted) => stream.getAudioTracks().forEach((track) => { track.enabled = !muted; }),
+      replaceMicrophoneTrack: async (track) => {
+        if (!microphoneTrack || track.kind !== "audio") throw new Error("microphone_track_unavailable");
+        const sender = peer.getSenders().find((candidate) => candidate.track?.kind === "audio");
+        if (!sender?.replaceTrack) throw new Error("microphone_replacement_unsupported");
+        await sender.replaceTrack(track);
+        removeMicrophoneTrackListener?.();
+        microphoneTrack = track;
+        watchMicrophoneTrack(track);
+      },
       requestResponse: sendResponseCreate,
       cancelResponse: () => {
         if (channel?.readyState === "open") channel.send(JSON.stringify({ type: "response.cancel" }));
@@ -395,7 +411,7 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
         closed = true;
         removeTrackListeners.forEach((remove) => remove());
         channel?.close();
-        stream.getTracks().forEach((track) => track.stop());
+        if (ownsMediaStream) stream.getTracks().forEach((track) => track.stop());
         peer.close();
       },
     };
@@ -403,7 +419,7 @@ export async function connectRealtime(options: ConnectOptions): Promise<Realtime
     closed = true;
     removeTrackListeners.forEach((remove) => remove());
     channel?.close();
-    stream.getTracks().forEach((track) => track.stop());
+    if (ownsMediaStream) stream.getTracks().forEach((track) => track.stop());
     connection?.close();
     throw error;
   }

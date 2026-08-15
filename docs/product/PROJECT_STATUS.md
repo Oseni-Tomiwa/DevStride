@@ -92,6 +92,9 @@ configuration and deployment checks.
 - Phase 7B Video Interview v1 with a local-only camera preview, existing
   realtime Interview audio, audio-only fallback, camera controls, and safe
   media cleanup; camera video is never sent to OpenAI or stored
+- Phase 7C Video Interview hardening with session-scoped device selection,
+  camera/microphone replacement, permission recovery, device-loss states,
+  responsive controls, and idempotent media cleanup
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
 - production database migrations through repository head `0008`
