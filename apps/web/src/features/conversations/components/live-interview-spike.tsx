@@ -47,7 +47,7 @@ function isMeaningfulCandidateTurn(content: string): boolean {
     && /[\p{L}\p{N}]/u.test(normalized);
 }
 
-export function LiveInterviewSpike({ conversationId, interviewType = "technical", interviewFocus = null, initialMessages = [], testApi, practiceMode = "interview", mentorStarted = false, mediaStream, startOnMount = false }: { conversationId: string; interviewType?: string; interviewFocus?: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi; practiceMode?: "interview" | "mentor"; mentorStarted?: boolean; mediaStream?: MediaStream; startOnMount?: boolean }) {
+export function LiveInterviewSpike({ conversationId, interviewType = "technical", interviewFocus = null, initialMessages = [], testApi, practiceMode = "interview", mentorStarted = false, mediaStream, startOnMount = false, onConnectionChange }: { conversationId: string; interviewType?: string; interviewFocus?: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi; practiceMode?: "interview" | "mentor"; mentorStarted?: boolean; mediaStream?: MediaStream; startOnMount?: boolean; onConnectionChange?: (connection: RealtimeConnection | null) => void }) {
   const isMentor = practiceMode === "mentor";
   const experienceLabel = isMentor ? "Live Mentor" : "Live Interview";
   const speakerLabel = isMentor ? "Mentor" : "Interviewer";
@@ -85,6 +85,8 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   const endingRef = useRef(false);
   const autoStartedRef = useRef(false);
   const startRef = useRef<((isReconnect?: boolean) => Promise<void>) | null>(null);
+  const onConnectionChangeRef = useRef(onConnectionChange);
+  onConnectionChangeRef.current = onConnectionChange;
 
   function scheduleReconnect() {
     if (!hasStartedRef.current || endingRef.current || reconnectScheduledRef.current) return;
@@ -323,6 +325,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
     const connection = connectionRef.current;
     connectionRef.current = null;
     connectionAttemptRef.current = null;
+    onConnectionChangeRef.current?.(null);
     connection?.close();
     releaseAudio();
   }
@@ -404,6 +407,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       }
       connectionRef.current = connection;
       connectionAttemptRef.current = attemptId;
+      onConnectionChangeRef.current?.(connection);
       hasStartedRef.current = true;
       reconnectAttemptsRef.current = 0;
       recordAnalyticsEvent("session_connected");
@@ -442,6 +446,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
     activeAttemptRef.current = null;
     connectingRef.current = false;
     connectionRef.current?.close();
+    onConnectionChangeRef.current?.(null);
     connectionRef.current = null;
     connectionAttemptRef.current = null;
     releaseAudio();
@@ -514,6 +519,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       connectionRef.current?.close();
       connectionRef.current = null;
       connectionAttemptRef.current = null;
+      onConnectionChangeRef.current?.(null);
       if (audioElement) {
         audioElement.pause();
         audioElement.srcObject = null;

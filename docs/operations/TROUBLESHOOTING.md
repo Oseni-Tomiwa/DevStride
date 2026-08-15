@@ -120,6 +120,19 @@ mid-session should show a retry state while microphone audio and the Interview
 continue where possible. End the session or navigate away to stop all local
 tracks and turn off the camera indicator.
 
+After permission is granted, Video Interview may show session-scoped camera and
+microphone selectors. Device labels are browser-provided and may be generic on
+Safari; no device ID is persisted or sent to DevStride. Camera changes affect
+only the local preview. Microphone changes use WebRTC sender replacement when
+the browser supports it, and a failed replacement keeps the previous working
+microphone active. If a microphone ends unexpectedly, choose another device or
+retry; the Interview is not finalized automatically.
+
+On iPhone Safari, verify camera and microphone access from an explicit tap,
+keep the page in portrait or rotate after connection, and use the visible End
+Interview control before navigating away. Safari may require another gesture
+after returning from the background to resume audio.
+
 ## Live Mentor does not start or reconnect
 
 Live Mentor requires an owned Mentor conversation created with

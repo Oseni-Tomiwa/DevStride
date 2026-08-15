@@ -13,6 +13,7 @@ type E2EMode = "healthy" | "fail-once" | "permanent" | "auth";
 
 class FakeTrack extends EventTarget {
   static latest: FakeTrack | null = null;
+  static latestByKind: Partial<Record<"audio" | "video", FakeTrack>> = {};
   kind: "audio" | "video";
   enabled = true;
   readyState: MediaStreamTrackState = "live";
@@ -20,6 +21,7 @@ class FakeTrack extends EventTarget {
     super();
     this.kind = kind;
     FakeTrack.latest = this;
+    FakeTrack.latestByKind[kind] = this;
   }
   stop() {
     this.readyState = "ended";
@@ -67,6 +69,7 @@ class FakePeerConnection extends EventTarget {
   signalingState: RTCSignalingState = "stable";
   localDescription: RTCSessionDescriptionInit | null = { type: "offer", sdp: "v=0\r\no=- offer\r\n" };
   dataChannel = new FakeDataChannel();
+  senders: Array<{ track: FakeTrack; replaceTrack: (track: FakeTrack) => Promise<void> }> = [];
   createOffer = async () => ({ type: "offer" as const, sdp: "v=0\r\no=- offer\r\n" });
   setLocalDescription = async () => undefined;
   setRemoteDescription = async () => {
@@ -74,7 +77,8 @@ class FakePeerConnection extends EventTarget {
     this.transition("connected");
   };
   createDataChannel = () => this.dataChannel;
-  addTrack = () => undefined;
+  addTrack = (track: FakeTrack) => { this.senders.push({ track, replaceTrack: async (nextTrack) => { const sender = this.senders.find((candidate) => candidate.track === track); if (!sender) throw new Error("sender unavailable"); sender.track = nextTrack; } }); };
+  getSenders = () => this.senders as unknown as RTCRtpSender[];
   getReceivers = () => [] as RTCRtpReceiver[];
   getTransceivers = () => [] as RTCRtpTransceiver[];
   close = () => {
@@ -104,24 +108,32 @@ export function LiveInterviewE2EHarness({ practiceMode = "interview", video = fa
   });
 
   useEffect(() => {
-    const tracks = [new FakeTrack("audio"), ...(video ? [new FakeTrack("video")] : [])];
+    const tracks: FakeTrack[] = [];
     tracksRef.current = tracks;
     const denyMicrophone = (window as unknown as { __devstrideDenyMicrophone?: boolean }).__devstrideDenyMicrophone;
     const denyCamera = (window as unknown as { __devstrideDenyCamera?: boolean }).__devstrideDenyCamera;
     const makeStream = (includeVideo: boolean) => {
-      const selected = tracks.filter((track) => track.kind === "audio" || includeVideo && track.kind === "video");
-      return { getTracks: () => selected, getAudioTracks: () => selected.filter((track) => track.kind === "audio"), getVideoTracks: () => selected.filter((track) => track.kind === "video"), addTrack: (track: FakeTrack) => selected.push(track) };
+      const selected = [new FakeTrack("audio"), ...(includeVideo ? [new FakeTrack("video")] : [])];
+      tracks.push(...selected);
+      return { getTracks: () => selected, getAudioTracks: () => selected.filter((track) => track.kind === "audio"), getVideoTracks: () => selected.filter((track) => track.kind === "video"), addTrack: (track: FakeTrack) => selected.push(track), removeTrack: (track: FakeTrack) => { const index = selected.indexOf(track); if (index >= 0) selected.splice(index, 1); } };
     };
+    const enumerateDevices = async () => [
+      { kind: "videoinput", deviceId: "camera-front", label: "Front camera" },
+      { kind: "videoinput", deviceId: "camera-rear", label: "Rear camera" },
+      { kind: "audioinput", deviceId: "microphone-built-in", label: "Built-in microphone" },
+      { kind: "audioinput", deviceId: "microphone-usb", label: "USB microphone" },
+    ] as MediaDeviceInfo[];
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: denyMicrophone
       ? async () => { throw new DOMException("denied", "NotAllowedError"); }
-      : async (constraints: MediaStreamConstraints) => { if (denyCamera && constraints.video) throw new DOMException("camera unavailable", "NotFoundError");
+      : async (constraints: MediaStreamConstraints) => { if (denyMicrophone && constraints.audio) throw new DOMException("microphone unavailable", "NotAllowedError"); if (denyCamera && constraints.video) throw new DOMException("camera unavailable", "NotFoundError");
         return makeStream(Boolean(constraints.video)); }
-      } });
+      , enumerateDevices } });
     window.RTCPeerConnection = FakePeerConnection as unknown as typeof RTCPeerConnection;
     const readyTimer = window.setTimeout(() => setReady(true), 0);
     return () => {
       window.clearTimeout(readyTimer);
       tracks.forEach((track) => track.stop());
+      FakeTrack.latestByKind = {};
     };
   }, [video]);
 
@@ -170,6 +182,10 @@ export function LiveInterviewE2EHarness({ practiceMode = "interview", video = fa
       <button type="button" onClick={() => (FakePeerConnection.latest?.dataChannel.emit({ type: "response.audio.delta", delta: "Speaking" }), FakePeerConnection.latest?.dataChannel.emit({ type: "input_audio_buffer.speech_started" }), FakePeerConnection.latest?.dataChannel.emit({ id: "noise-1", type: "input_audio_transcription.completed", transcript: "[silence]" }))}>Simulate background noise</button>
       <button type="button" onClick={() => (FakePeerConnection.latest?.dataChannel.emit({ type: "input_audio_buffer.speech_started" }), FakePeerConnection.latest?.dataChannel.emit({ id: "meaningful-1", type: "input_audio_transcription.completed", transcript: "I would choose a queue because it decouples the producer and consumer." }))}>Emit meaningful answer</button>
       <button type="button" onClick={() => FakeTrack.latest?.stop()}>Simulate microphone loss</button>
+      {video && <>
+        <button type="button" onClick={() => FakeTrack.latestByKind.video?.stop()}>Simulate camera loss</button>
+        <button type="button" onClick={() => FakeTrack.latestByKind.audio?.stop()}>Simulate audio device loss</button>
+      </>}
     </div>
     {video ? <VideoInterview conversationId={conversationId} interviewType="technical" interviewFocus="apis" initialMessages={messages} testApi={api} /> : <LiveInterviewSpike conversationId={conversationId} practiceMode={practiceMode} mentorStarted={isMentor && messages.length > 0} interviewType="technical" interviewFocus="apis" initialMessages={messages} testApi={api} />}
   </main>;

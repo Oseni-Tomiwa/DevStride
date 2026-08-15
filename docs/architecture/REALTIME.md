@@ -224,3 +224,38 @@ addition to the existing Live Interview provider configuration. Camera denial
 or device loss offers a visible audio-only fallback and does not finalize the
 Interview. Camera toggles disable/reacquire local tracks, while end, route
 navigation, refresh, reconnect, and unmount use idempotent media cleanup.
+
+## Phase 7C Video Interview hardening
+
+Video Interview keeps one local `MediaStream` as the media owner. The preview
+component owns camera and microphone acquisition, device enumeration, local
+track replacement, and final track cleanup; the existing Live Interview
+component owns the provider `RTCPeerConnection`, data channel, reconnect logic,
+transcript persistence, and explicit completion. Cleanup is idempotent across
+component unmount, route navigation, failed connection, retry, and End
+Interview.
+
+Device enumeration occurs only after the user grants media permission and is
+held in session-scoped UI state. Device IDs and labels are never sent to the
+API or persisted. Browsers that omit labels or do not support enumeration fall
+back to generic names and default constraints. Camera switching replaces the
+local preview track without reconnecting the provider. A replacement is
+installed before the old track is stopped; a failed replacement leaves the
+working camera in place.
+
+Microphone switching uses the existing provider sender's `replaceTrack()` when
+available. The current microphone is stopped only after the provider accepts
+the replacement. If replacement is unsupported or fails, the current track is
+preserved and the user receives a recoverable error. An ended microphone track
+is reported as unavailable and never finalizes the Interview automatically.
+
+Camera loss remains audio-only where possible. Permission recovery is explicit
+and does not loop prompts. Safari and Firefox may expose fewer device labels,
+restrict exact `deviceId` constraints, or differ in `replaceTrack()` support;
+the implementation feature-detects these APIs and retains default device
+behavior when selection is unavailable. Physical iPhone camera, permission,
+background/foreground, and orientation behavior remains manual verification.
+
+Camera media remains local-only: it is never uploaded, stored, recorded, sent
+to OpenAI, or analyzed for appearance, emotion, confidence, eye contact,
+posture, personality, or body language.
