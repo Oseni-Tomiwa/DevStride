@@ -44,11 +44,15 @@ export function PracticeReportView({ report }: { report: PracticeReport }) {
       {(report.goal || report.focus) && <dl className="report-context">{report.goal && <div><dt>Goal</dt><dd>{report.goal.title}{report.goal.status !== "active" ? " · Historical" : ""}</dd></div>}{report.focus && <div><dt>Focus</dt><dd>{report.focus.title}{report.focus.status !== "active" ? " · Historical" : ""}</dd></div>}</dl>}
       {insufficient ? <div className="report-evidence-state" role="status"><h3>Not enough evidence to assess this session.</h3><p className="muted">A substantive user response is needed before strengths, improvement areas, or ratings can be reported.</p></div> : summary ? <>
         <p className="session-summary-lede">{summary.summary}</p>
-        <SummaryList title="What you practiced" items={summary.topics_covered} />
-        <SummaryList title="What you demonstrated" items={summary.strengths} />
-        <SummaryList title="What to work on" items={summary.weaknesses} />
-        {report.mode === "mentor" && <><SummaryList title="Concepts practiced" items={summary.concepts_practiced ?? []} /><SummaryList title="Exercises completed" items={summary.exercises_completed ?? []} /></>}
-        {report.mode === "interview" && ratings.length > 0 && <div className="session-summary-section"><h3>Practice ratings</h3><p className="field-hint">Practice observations only, not hiring predictions.</p><dl className="rating-grid">{ratings.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value} / 5</dd></div>)}</dl></div>}
+        <div className="report-primary-feedback">
+          <SummaryList title="What you demonstrated" items={summary.strengths} />
+          <SummaryList title="What to work on" items={summary.weaknesses} />
+          {report.mode === "interview" && ratings.length > 0 && <div className="session-summary-section"><h3>Practice ratings</h3><p className="field-hint">Practice observations only, not hiring predictions.</p><dl className="rating-grid">{ratings.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value} / 5</dd></div>)}</dl></div>}
+        </div>
+        <div className="report-supporting-detail">
+          <SummaryList title="What you practiced" items={summary.topics_covered} />
+          {report.mode === "mentor" && <><SummaryList title="Concepts practiced" items={summary.concepts_practiced ?? []} /><SummaryList title="Exercises completed" items={summary.exercises_completed ?? []} /></>}
+        </div>
       </> : <div className="report-evidence-state" role="status"><h3>Report evidence is not available yet.</h3><p className="muted">Complete more practice before reviewing a grounded report.</p></div>}
       <Analytics report={report} />
       {report.recommendation && <div className="report-next-practice"><p className="eyebrow">Next practice</p><RecommendationCard recommendation={report.recommendation} /></div>}

@@ -388,7 +388,7 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .conversation-rename input { margin-top: 0.35rem; }
 .back-link { display: inline-flex; min-height: 2.5rem; align-items: center; margin-bottom: var(--space-5); font-size: 0.9rem; }
 .conversation-context { display: inline-flex; margin: var(--space-3) 0 0; padding: 0.42rem 0.7rem; border: 1px solid #cbd8ff; border-radius: 999px; background: var(--blue-100); color: var(--blue-700); font-size: 0.8rem; font-weight: 750; }
-.message-history { display: grid; gap: var(--space-4); min-height: 22rem; max-height: 60vh; overflow-y: auto; overscroll-behavior: contain; padding: clamp(1rem, 3vw, 1.6rem); background: linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(248 250 253 / 96%)); }
+.message-history { display: grid; gap: var(--space-4); min-height: 22rem; padding: clamp(1rem, 3vw, 1.6rem); background: linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(248 250 253 / 96%)); }
 .message-empty { align-self: center; max-width: 26rem; margin: auto; padding: var(--space-6); text-align: center; }
 .message-bubble { max-width: min(78%, 48rem); padding: 1rem 1.15rem; border: 1px solid var(--line); border-radius: 1rem 1rem 1rem 0.35rem; background: var(--surface-subtle); box-shadow: 0 1px 2px rgb(26 42 74 / 5%); line-height: 1.6; }
 .message-user { justify-self: end; border-color: #cbd8ff; border-radius: 1rem 1rem 0.35rem 1rem; background: var(--blue-100); }
@@ -424,6 +424,7 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .session-summary-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
 .session-summary-heading h2 { margin-bottom: var(--space-4); }
 .session-summary-lede { max-width: 60rem; color: var(--ink-800); }
+.report-primary-feedback, .report-supporting-detail { display: grid; gap: var(--space-4); }
 .session-summary-section { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--line); }
 .session-summary-section h3 { margin-bottom: var(--space-2); font-size: 0.98rem; }
 .session-summary-section ul { margin: 0; padding-left: 1.25rem; }
@@ -530,14 +531,6 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .goal-empty { min-height: 20rem; }
 
 @media (max-width: 900px) {
-  .profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .practice-grid { grid-template-columns: 1fr 1fr; }
-  .practice-card:last-child { grid-column: 1 / -1; }
-  .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .focus-card { grid-column: 1 / -1; }
-}
-@media (max-width: 768px) {
-  .page-shell { padding: 1rem 0.85rem 2.5rem; }
   .app-header { align-items: center; flex-direction: row; gap: var(--space-3); margin-bottom: var(--space-6); padding: 0.55rem; }
   .app-brand { align-self: flex-start; }
   .app-nav-wrap { position: relative; }
@@ -548,6 +541,16 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
   .nav-link { justify-content: flex-start; min-width: 0; min-height: 2.75rem; padding-inline: var(--space-3); font-size: 0.9rem; text-align: left; }
   .app-nav-logout { margin: var(--space-2) 0 0; padding-top: var(--space-2); border-top: 1px solid var(--line); }
   .app-nav button { width: 100%; min-height: 2.75rem; margin: 0; padding-inline: var(--space-3); font-size: 0.9rem; text-align: left; }
+  .app-nav .form-error { grid-column: 1 / -1; }
+  .profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .practice-grid { grid-template-columns: 1fr 1fr; }
+  .practice-card:last-child { grid-column: 1 / -1; }
+  .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .focus-card { grid-column: 1 / -1; }
+  .rating-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+  .page-shell { padding: 1rem 0.85rem 2.5rem; }
   .app-nav .form-error { grid-column: 1 / -1; }
   .landing-nav-actions a:not(.landing-button) { display: none; }
   .landing-content { margin-top: 5rem; }
@@ -615,6 +618,7 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
   .video-interview-preview-card { padding: var(--space-4); }
   .video-interview-preview-wrap { min-height: 11rem; }
   .video-interview-controls > button, .video-device-select { min-width: 0; }
+  .live-spike-controls button { width: 100%; min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }

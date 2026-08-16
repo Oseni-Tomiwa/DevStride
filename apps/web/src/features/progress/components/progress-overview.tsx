@@ -416,10 +416,10 @@ export function ProgressOverview({ summary, compact = false }: ProgressOverviewP
 
   return (
     <div className="progress-intelligence">
-      {summary.goal_progress && <GoalProgressCard progress={summary.goal_progress} />}
-      <ProgressSnapshot summary={summary} showBreakdown />
       <RecommendationCard recommendation={summary.recommendation} goalProgress={summary.goal_progress} />
+      {summary.goal_progress && <GoalProgressCard progress={summary.goal_progress} />}
       {summary.continue_practice && <ContinuePracticeCard practice={summary.continue_practice} />}
+      <ProgressSnapshot summary={summary} showBreakdown />
       <CurrentEvidence summary={summary} detailed />
       {!summary.recent_strength && !summary.recent_weakness && summary.recurring_strengths.length === 0 && summary.recurring_weaknesses.length === 0 && (
         <p className="progress-evidence-empty">Evidence will appear after completed structured practice has a session summary.</p>
