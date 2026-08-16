@@ -12,6 +12,11 @@ const categories: MemoryCategory[] = ["goal", "preference", "project", "skill", 
 const labels: Record<string, string> = { goal: "Goal", preference: "Preference", project: "Project", skill: "Skill", weakness: "Weakness", achievement: "Achievement" };
 const sources: Record<string, string> = { manual: "Added by you", mentor_summary: "Learned from Mentor session", interview_summary: "Learned from Interview practice" };
 
+function memoryAccessibleName(content: string): string {
+  const normalized = content.trim().replace(/\s+/g, " ").slice(0, 70);
+  return normalized || "saved memory";
+}
+
 export function MemoryManager({ initialMemories }: { initialMemories: Memory[] }) {
   const [memories, setMemories] = useState(initialMemories);
   const [category, setCategory] = useState<MemoryCategory>("goal");
@@ -61,7 +66,7 @@ export function MemoryManager({ initialMemories }: { initialMemories: Memory[] }
     {error && <p className="form-error" role="alert">{error}</p>}
     {memories.length === 0 ? <div className="conversation-empty memory-empty"><h2>Nothing saved yet</h2><p className="muted">Add a goal, preference, project, skill, weakness, or achievement you want to carry into relevant practice.</p></div> : <ul className="memory-list">{memories.map((memory) => <li className="memory-card" key={memory.id}>
       <div className="memory-card-heading"><span className="status-pill">{labels[memory.category]}</span><span className="muted">{sources[memory.source_type] ?? "Saved context"}</span></div>
-      {editingId === memory.id ? <div className="memory-edit"><label htmlFor={`edit-${memory.id}`}>Edit memory</label><textarea id={`edit-${memory.id}`} value={editingContent} onChange={(event) => setEditingContent(event.target.value)} maxLength={1000} /><div className="memory-actions"><button type="button" onClick={() => void saveEdit(memory)} disabled={busy}>Save</button><button type="button" className="button-secondary" onClick={() => setEditingId(null)}>Cancel</button></div></div> : <><p>{memory.content}</p><div className="memory-actions"><button type="button" className="button-secondary" onClick={() => { setEditingId(memory.id); setEditingContent(memory.content); }}>Edit</button><button type="button" className="button-secondary" onClick={() => setDeletingMemory(memory)} disabled={busy}>Delete</button></div></>}
+      {editingId === memory.id ? <div className="memory-edit"><label htmlFor={`edit-${memory.id}`}>Edit memory</label><textarea id={`edit-${memory.id}`} value={editingContent} onChange={(event) => setEditingContent(event.target.value)} maxLength={1000} /><div className="memory-actions"><button type="button" onClick={() => void saveEdit(memory)} disabled={busy}>Save</button><button type="button" className="button-secondary" onClick={() => setEditingId(null)}>Cancel</button></div></div> : <><p>{memory.content}</p><div className="memory-actions"><button type="button" className="button-secondary" onClick={() => { setEditingId(memory.id); setEditingContent(memory.content); }} aria-label={`Edit memory: ${memoryAccessibleName(memory.content)}`}>Edit</button><button type="button" className="button-secondary" onClick={() => setDeletingMemory(memory)} disabled={busy} aria-label={`Delete memory: ${memoryAccessibleName(memory.content)}`}>Delete</button></div></>}
     </li>)}</ul>}
     <Dialog open={deletingMemory !== null} title="Delete saved memory?" description="This removes the saved coaching context from your active Memory." onClose={() => setDeletingMemory(null)}>
       <div className="dialog-actions"><button type="button" className="button-danger" onClick={() => void remove()} disabled={busy}>Delete memory</button><button type="button" className="button-secondary" onClick={() => setDeletingMemory(null)}>Cancel</button></div>

@@ -31,6 +31,24 @@ describe("GoalManager", () => {
     expect(screen.getByText("Saved API context")).toBeInTheDocument();
   });
 
+  it("supports keyboard-friendly back navigation without losing draft values", async () => {
+    previewPlan.mockResolvedValue({ heading: "Suggested focus areas", basis: "Based on your Goal and Profile", goal_draft: { title: "API growth", description: null, goal_type: "technical_growth" }, template_suggestions: [{ title: "APIs", description: "Practice API design", suggested_position: 0, source: "template", reason: "Aligned to your goal.", practice_mode: "mentor", practice_config: {} }], memory_suggestions: [] });
+    render(<GoalManager initialGoals={[]} initialProgress={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create a goal" }));
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.change(screen.getByLabelText("Goal title"), { target: { value: "API growth" } });
+    fireEvent.change(screen.getByLabelText(/Description/), { target: { value: "Build API confidence" } });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("1. Intent");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByDisplayValue("API growth")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Build API confidence")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Suggest a plan" }));
+    await waitFor(() => expect(screen.getByText("Suggested by DevStride")).toBeInTheDocument());
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("3. Suggestions");
+  });
+
   it("moves an archived goal to history and removes its active practice action", async () => {
     const focus = { id: "focus-1", goal_id: "goal-1", title: "APIs", description: "Practice APIs", practice_mode: "mentor" as const, practice_config: {}, position: 0, status: "active" as const, completed_at: null, created_at: "", updated_at: "" };
     const activeGoal = { id: "goal-1", title: "Backend depth", description: "Build confidence", goal_type: "technical_growth" as const, status: "active" as const, completed_at: null, created_at: "", updated_at: "", focus_areas: [focus], evidence: ["You saved this focus area."], action: { kind: "start_practice" as const, mode: "mentor" as const, conversation_id: null, goal_id: "goal-1", focus_area_id: "focus-1", interview_type: null, interview_focus: null, team_scenario: null, team_difficulty: null } };
@@ -38,8 +56,8 @@ describe("GoalManager", () => {
     listGoals.mockResolvedValue([archivedGoal]);
     archiveGoal.mockResolvedValue(undefined);
     render(<GoalManager initialGoals={[activeGoal]} initialProgress={null} />);
-    fireEvent.click(screen.getAllByRole("button", { name: "Archive" })[0]);
     fireEvent.click(screen.getByRole("button", { name: "Archive goal" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Archive goal" })[1]);
 
     await waitFor(() => expect(screen.getByText("Archived · read-only · 1 focus areas")).toBeInTheDocument());
     expect(screen.queryByText("Active goal · Technical growth")).not.toBeInTheDocument();

@@ -514,8 +514,9 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .goal-type { display: grid; min-height: 7rem; gap: 0.45rem; padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-subtle); color: var(--ink-950); text-align: left; }
 .goal-type:hover, .goal-type.selected { border-color: var(--blue-600); background: var(--blue-50); box-shadow: var(--shadow-focus); transform: none; }
 .goal-type span { color: var(--ink-600); font-size: 0.88rem; font-weight: 500; }
-.goal-stepper { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--ink-500); font-size: 0.78rem; font-weight: 750; }
+.goal-stepper ol { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; list-style: none; color: var(--ink-500); font-size: 0.78rem; font-weight: 750; }
 .goal-stepper .active { color: var(--blue-700); }
+.goal-back-button { margin-top: var(--space-3); }
 .goal-form, .goal-focus-editor { display: grid; gap: var(--space-4); }
 .goal-focus-draft { display: grid; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-subtle); }
 .goal-focus-draft-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }

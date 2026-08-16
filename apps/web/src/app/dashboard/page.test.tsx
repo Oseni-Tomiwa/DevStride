@@ -121,6 +121,9 @@ describe("DashboardPage", () => {
     render(await DashboardPage());
 
     expect(screen.getByRole("heading", { name: "Welcome back, Ada" })).toBeInTheDocument();
+    const recommendation = screen.getByRole("heading", { name: "Continue your API interview" });
+    const profileHeading = screen.getByRole("heading", { name: "Your current direction" });
+    expect(recommendation.compareDocumentPosition(profileHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText("Senior")).toBeInTheDocument();
     expect(screen.getByText("Python, PostgreSQL")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Continue your API interview" })).toBeInTheDocument();

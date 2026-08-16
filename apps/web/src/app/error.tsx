@@ -1,10 +1,12 @@
 "use client";
 
+import { DevStrideLogo } from "../components/brand/devstride-logo";
+
 export default function Error({ reset }: { reset: () => void }) {
   return (
     <main className="recovery-page" aria-labelledby="error-title">
       <section className="recovery-card">
-        <p className="eyebrow">DevStride</p>
+        <DevStrideLogo variant="auth" />
         <h1 id="error-title">Something went off track.</h1>
         <p className="muted">We could not finish loading this page. Try again, or return to your dashboard.</p>
         <div className="recovery-actions">
