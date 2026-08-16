@@ -127,3 +127,15 @@ test("does not create a second provider peer during device selection", async ({ 
   await expect(page.locator(".live-spike .status-pill")).toHaveText("Connected");
   await expect(page.getByRole("button", { name: "End interview" })).toBeVisible();
 });
+
+test.describe("narrow video room", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("keeps captions and the end control reachable on mobile", async ({ page }) => {
+    await startVideoInterview(page);
+    await expect(page.getByRole("heading", { name: "Live captions" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "End interview" })).toBeVisible();
+    await page.getByRole("button", { name: "End interview" }).click();
+    await expect.poll(() => page.evaluate(() => window.localStorage.getItem("devstride-e2e-ended"))).toBe("true");
+  });
+});
