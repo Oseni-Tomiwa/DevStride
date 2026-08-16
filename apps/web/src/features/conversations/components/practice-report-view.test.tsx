@@ -73,6 +73,14 @@ describe("PracticeReportView", () => {
     expect(screen.getByText("Reinforce API trade-offs")).toBeInTheDocument();
   });
 
+  it("puts strengths and improvement areas ahead of supporting topic detail", () => {
+    render(<PracticeReportView report={report()} />);
+
+    const strengths = screen.getByRole("heading", { name: "What you demonstrated" });
+    const topics = screen.getByRole("heading", { name: "What you practiced" });
+    expect(strengths.compareDocumentPosition(topics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("renders an honest insufficient-evidence state without strengths or ratings", () => {
     render(<PracticeReportView report={report({ evidence_status: "insufficient", summary: null })} />);
 

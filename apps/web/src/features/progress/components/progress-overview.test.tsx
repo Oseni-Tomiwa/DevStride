@@ -160,6 +160,14 @@ describe("ProgressOverview", () => {
     expect(screen.getByText("Completed structured sessions")).toBeInTheDocument();
   });
 
+  it("places the next-practice recommendation before secondary activity detail", () => {
+    render(<ProgressOverview summary={baseSummary} />);
+
+    const recommendation = screen.getByRole("heading", { name: baseSummary.recommendation.title });
+    const activity = screen.getByRole("heading", { name: "Practice activity" });
+    expect(recommendation.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("renders recommendation reason, safe evidence, action, and continue practice", () => {
     render(<ProgressOverview summary={baseSummary} compact />);
 

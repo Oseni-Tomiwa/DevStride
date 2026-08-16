@@ -101,6 +101,9 @@ configuration and deployment checks.
 - Phase 8B Core UX hierarchy and accessibility improvements across Dashboard,
   Goals, Memory, and Live Practice, including contextual action names, goal
   creation back navigation, live-caption terminology, and branded recovery pages
+- Phase 8C responsive and information-density polish for authenticated
+  navigation, Progress, Practice Reports, conversations, and narrow live/video
+  controls without changing product or transport behavior
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
 - production database migrations through repository head `0008`
