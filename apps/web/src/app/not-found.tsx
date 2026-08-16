@@ -1,10 +1,12 @@
 import Link from "next/link";
 
+import { DevStrideLogo } from "../components/brand/devstride-logo";
+
 export default function NotFound() {
   return (
     <main className="recovery-page" aria-labelledby="not-found-title">
       <section className="recovery-card">
-        <p className="eyebrow">DevStride</p>
+        <DevStrideLogo variant="auth" />
         <h1 id="not-found-title">That page is not here.</h1>
         <p className="muted">The link may be outdated, or the page may have moved.</p>
         <div className="recovery-actions">

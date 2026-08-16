@@ -72,31 +72,6 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      <section className="profile-summary" aria-labelledby="profile-summary-title">
-        <div className="summary-heading">
-          <p className="eyebrow">Your profile</p>
-          <h2 id="profile-summary-title">Your current direction</h2>
-        </div>
-        <dl className="profile-grid">
-          <div>
-            <dt>Current level</dt>
-            <dd>{displayLabels[profile.current_level]}</dd>
-          </div>
-          <div>
-            <dt>Target role</dt>
-            <dd>{displayLabels[profile.target_role]}</dd>
-          </div>
-          <div>
-            <dt>Preferred stack</dt>
-            <dd>{profile.preferred_stack.join(", ")}</dd>
-          </div>
-          <div>
-            <dt>Communication goal</dt>
-            <dd>{displayLabels[profile.communication_goal]}</dd>
-          </div>
-        </dl>
-      </section>
-
       {progress && <ProgressOverview summary={progress} compact />}
 
       <section aria-labelledby="practice-title">
@@ -121,6 +96,19 @@ export default async function DashboardPage() {
             <TeamEntry />
           </article>
         </div>
+      </section>
+
+      <section className="profile-summary" aria-labelledby="profile-summary-title">
+        <div className="summary-heading">
+          <p className="eyebrow">Your profile</p>
+          <h2 id="profile-summary-title">Your current direction</h2>
+        </div>
+        <dl className="profile-grid">
+          <div><dt>Current level</dt><dd>{displayLabels[profile.current_level]}</dd></div>
+          <div><dt>Target role</dt><dd>{displayLabels[profile.target_role]}</dd></div>
+          <div><dt>Preferred stack</dt><dd>{profile.preferred_stack.join(", ")}</dd></div>
+          <div><dt>Communication goal</dt><dd>{displayLabels[profile.communication_goal]}</dd></div>
+        </dl>
       </section>
     </AppShell>
   );

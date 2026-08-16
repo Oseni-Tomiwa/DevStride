@@ -48,11 +48,13 @@ describe("MemoryManager", () => {
     updateMemory.mockResolvedValue({ ...memory, content: "Target backend engineering roles" });
     deleteMemory.mockResolvedValue(undefined);
     render(<MemoryManager initialMemories={[memory]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("button", { name: "Edit memory: Target backend roles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete memory: Target backend roles" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit memory: Target backend roles" }));
     fireEvent.change(screen.getByLabelText("Edit memory"), { target: { value: "Target backend engineering roles" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(updateMemory).toHaveBeenCalledWith({}, "memory-1", { content: "Target backend engineering roles" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete memory: Target backend engineering roles" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete memory" }));
     await waitFor(() => expect(deleteMemory).toHaveBeenCalledWith({}, "memory-1"));
     expect(screen.queryByText("Target backend engineering roles")).not.toBeInTheDocument();

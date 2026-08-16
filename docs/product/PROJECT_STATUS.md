@@ -98,6 +98,9 @@ configuration and deployment checks.
 - Phase 7D Video Interview Room UX with explicit device setup, local-only privacy
   communication, deliberate Start Interview gating, interviewer presence,
   secondary device settings, audio-only room states, and mobile-safe controls
+- Phase 8B Core UX hierarchy and accessibility improvements across Dashboard,
+  Goals, Memory, and Live Practice, including contextual action names, goal
+  creation back navigation, live-caption terminology, and branded recovery pages
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
 - production database migrations through repository head `0008`
@@ -111,9 +114,6 @@ configuration and deployment checks.
 - complete this documentation reconciliation and keep status documents current
 - change CI web installation from `--no-frozen-lockfile` to the same frozen
   lockfile policy used for production after confirming the lockfile is stable
-- add global Next.js `error.tsx` and `not-found.tsx` experiences
-- add browser end-to-end coverage for critical authenticated flows
-- add automated accessibility testing
 - add production request correlation and structured observability
 - verify production backup and restore procedures against a separate database
 - distinguish liveness from database/provider readiness where operations need it

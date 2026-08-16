@@ -49,9 +49,9 @@ function isMeaningfulCandidateTurn(content: string): boolean {
 
 function stateDescription(state: LiveState, isMentor: boolean): string {
   if (state === "Listening" || state === "Muted") return "Your turn — speak when you are ready.";
-  if (state === "Processing") return "Preparing the next response.";
-  if (state === "Assistant speaking" || state === "Mentor speaking") return `${isMentor ? "Your mentor" : "Your interviewer"} is speaking.`;
-  if (state === "Reconnecting") return "Connection interrupted. Reconnecting…";
+  if (state === "Processing") return "Got it. Preparing the next response.";
+  if (state === "Assistant speaking" || state === "Mentor speaking") return isMentor ? "Listen to your mentor." : "Listen to the interviewer.";
+  if (state === "Reconnecting") return "Connection interrupted. Trying to reconnect…";
   if (state === "Ending") return "Ending this session and preparing your results.";
   if (state === "Ended") return "The session has ended.";
   return isMentor ? "Live Mentor is getting ready." : "Your interviewer is getting ready.";
@@ -543,12 +543,12 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   const reconnecting = state === "Reconnecting";
   return <section className="live-spike" aria-labelledby="live-spike-title">
     <header className="live-spike-header"><div><p className="eyebrow">{experienceLabel}</p><h1 id="live-spike-title">{experienceLabel}</h1><p className="muted">{isMentor ? "Conversational coaching with your profile and approved memory context." : `${interviewType === "behavioral" ? "Behavioral" : "Technical"}${interviewFocus ? ` · ${interviewFocus.replaceAll("_", " ")}` : ""}`}</p></div><div className="live-interviewer-presence"><span className="live-interviewer-presence-name">DevStride {isMentor ? "Mentor" : "interviewer"}</span><span className="status-pill" role="status">{state}</span><p>{stateDescription(state, isMentor)}</p></div></header>
-    <p className="field-hint">Final transcript turns are saved to this {isMentor ? "Mentor session" : "Interview"}. Partial speech remains temporary until finalized.</p>
+    <p className="field-hint">Finalized turns are saved to this {isMentor ? "Mentor session" : "Interview"}; live captions may include speech still in progress.</p>
     <audio ref={audioRef} autoPlay aria-label={`${experienceLabel} audio`} />
     <div className="live-spike-controls">{!active && !canEnd ? <button type="button" onClick={() => void start()}>{state === "Ready" ? (isMentor ? "Start Live Mentor" : "Start live interview") : "Try again"}</button> : <>{reconnecting && <button type="button" onClick={() => void start()}>Reconnect</button>}{active && <button type="button" className="button-secondary" onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>}<button type="button" className="button-danger" onClick={() => void end()}>End {isMentor ? "session" : "interview"}</button></>}</div>
     {audioBlocked && <button type="button" className="button-secondary" onClick={enableAudio}>Enable {isMentor ? "Mentor" : "interviewer"} audio</button>}
     {error && <p className="form-error" role="alert">{error}</p>}
     {saveState === "saving" && <p className="field-hint" role="status">Saving final transcript turn…</p>}
-    <section className="live-spike-transcript" aria-labelledby="live-captions-title"><h2 id="live-captions-title">Temporary transcript</h2>{transcript.length === 0 ? <p className="muted">Transcript lines will appear here when available.</p> : transcript.map((line, index) => <p key={`${index}-${line.text}`}><strong>{line.speaker === "user" ? "You" : speakerLabel}:</strong> {line.text}{!line.final && <em> (in progress)</em>}</p>)}</section>
+    <section className="live-spike-transcript" aria-labelledby="live-captions-title"><h2 id="live-captions-title">Live captions</h2>{transcript.length === 0 ? <p className="muted">Live speech will appear here when available.</p> : transcript.map((line, index) => <p key={`${index}-${line.text}`}><strong>{line.speaker === "user" ? "You" : speakerLabel}:</strong> {line.text}{!line.final && <em> (in progress)</em>}</p>)}</section>
   </section>;
 }
