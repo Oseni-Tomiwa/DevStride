@@ -104,6 +104,10 @@ configuration and deployment checks.
 - Phase 8C responsive and information-density polish for authenticated
   navigation, Progress, Practice Reports, conversations, and narrow live/video
   controls without changing product or transport behavior
+- Phase 8D UX regression coverage across populated accessibility states,
+  compact/narrow realtime and video browser flows, and the existing
+  deterministic cross-browser resilience harness; physical-device checks
+  remain manual
 - responsive/mobile UI and accessibility basics
 - production deployment preparation and deployment to Vercel/Render/Supabase
 - production database migrations through repository head `0008`

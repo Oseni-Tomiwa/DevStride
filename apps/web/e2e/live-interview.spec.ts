@@ -115,3 +115,13 @@ test("reports microphone/device loss without finalizing", async ({ page }) => {
   await expect(page.locator("p[role=alert]")).toHaveText("Your microphone became unavailable. Check the device and try again.");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("devstride-e2e-ended"))).not.toBe("true");
 });
+
+test.describe("narrow live interview", () => {
+  test.use({ viewport: { width: 320, height: 700 } });
+
+  test("keeps live captions and the end action available at narrow width", async ({ page }) => {
+    await page.getByRole("button", { name: "Start live interview" }).click();
+    await expect(page.getByRole("heading", { name: "Live captions" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "End interview" })).toBeVisible();
+  });
+});
