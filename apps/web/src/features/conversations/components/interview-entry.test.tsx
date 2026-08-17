@@ -88,4 +88,15 @@ describe("InterviewEntry", () => {
     expect(screen.getByRole("radio", { name: /Text Interview/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Live Interview/ })).not.toBeChecked();
   });
+
+  it("keeps all interview formats available with concise accessible descriptions", () => {
+    render(<InterviewEntry />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Interview Mode" }));
+
+    expect(screen.getByRole("radio", { name: /Text Interview.*Practice through chat/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Live Interview.*Practice by voice.*Microphone required/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Video Interview.*Practice with camera and voice\. Camera and microphone required\. Camera stays local/ })).toBeInTheDocument();
+    expect(document.querySelectorAll(".interview-setup .format-option")).toHaveLength(3);
+  });
 });
