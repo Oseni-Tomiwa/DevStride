@@ -58,6 +58,8 @@ function stateDescription(state: LiveState, isMentor: boolean): string {
 }
 
 export function LiveInterviewSpike({ conversationId, interviewType = "technical", interviewFocus = null, initialMessages = [], testApi, practiceMode = "interview", mentorStarted = false, mediaStream, startOnMount = false, onConnectionChange }: { conversationId: string; interviewType?: string; interviewFocus?: string | null; initialMessages?: Array<{ id: string; role: string; content: string; created_at: string }>; testApi?: LiveInterviewTestApi; practiceMode?: "interview" | "mentor"; mentorStarted?: boolean; mediaStream?: MediaStream; startOnMount?: boolean; onConnectionChange?: (connection: RealtimeConnection | null) => void }) {
+  const maxDurationSeconds = Math.max(60, Number(process.env.NEXT_PUBLIC_REALTIME_MAX_DURATION_SECONDS ?? 3600) || 3600);
+  const maxDurationKey = `devstride-realtime-started:${conversationId}`;
   const isMentor = practiceMode === "mentor";
   const experienceLabel = isMentor ? "Live Mentor" : "Live Interview";
   const speakerLabel = isMentor ? "Mentor" : "Interviewer";
@@ -88,6 +90,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   const responseCancelRequestedRef = useRef(false);
   const responsePendingRef = useRef(false);
   const responseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lifecycleEventCounterRef = useRef(0);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -152,6 +155,19 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
   function clearResponseTimeout() {
     if (responseTimeoutRef.current !== null) clearTimeout(responseTimeoutRef.current);
     responseTimeoutRef.current = null;
+  }
+
+  function scheduleMaximumDuration() {
+    if (maxDurationTimerRef.current !== null) clearTimeout(maxDurationTimerRef.current);
+    const stored = window.sessionStorage.getItem(maxDurationKey);
+    const startedAt = stored ? Number(stored) : Date.now();
+    if (!stored) window.sessionStorage.setItem(maxDurationKey, String(startedAt));
+    const remaining = Math.max(0, startedAt + maxDurationSeconds * 1000 - Date.now());
+    maxDurationTimerRef.current = setTimeout(() => {
+      if (!mountedRef.current || endingRef.current) return;
+      setError("This practice session reached its maximum duration and is being ended safely.");
+      void end();
+    }, remaining);
   }
 
   function requestAssistantResponse() {
@@ -419,6 +435,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       connectionAttemptRef.current = attemptId;
       onConnectionChangeRef.current?.(connection);
       hasStartedRef.current = true;
+      scheduleMaximumDuration();
       reconnectAttemptsRef.current = 0;
       recordAnalyticsEvent("session_connected");
       setState("Connected");
@@ -467,6 +484,8 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
     responseCancelRequestedRef.current = false;
     responsePendingRef.current = false;
     clearResponseTimeout();
+    if (maxDurationTimerRef.current !== null) clearTimeout(maxDurationTimerRef.current);
+    maxDurationTimerRef.current = null;
   }
 
   async function end() {
@@ -481,6 +500,7 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       await Promise.all([...pendingAnalyticsWritesRef.current]);
       await (testApi ? testApi.end(conversationId) : isMentor ? endLiveMentor(createClient(), conversationId) : endRealtimeInterview(createClient(), conversationId));
       setState("Ended");
+      window.sessionStorage.removeItem(maxDurationKey);
       router.push(`/conversations/${conversationId}`);
     } catch {
       setState("Error");
@@ -526,6 +546,8 @@ export function LiveInterviewSpike({ conversationId, interviewType = "technical"
       connectingRef.current = false;
       responsePendingRef.current = false;
       clearResponseTimeout();
+      if (maxDurationTimerRef.current !== null) clearTimeout(maxDurationTimerRef.current);
+      maxDurationTimerRef.current = null;
       connectionRef.current?.close();
       connectionRef.current = null;
       connectionAttemptRef.current = null;

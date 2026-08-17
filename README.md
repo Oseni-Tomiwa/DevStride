@@ -78,6 +78,16 @@ Expected response:
 {"status":"ok","service":"devstride-api"}
 ```
 
+Database readiness check:
+
+```bash
+curl http://localhost:8000/ready
+```
+
+`/health` is process liveness. `/ready` performs a bounded database check and
+returns 503 when PostgreSQL is unavailable; OpenAI availability is not part of
+readiness.
+
 ## Quality checks
 
 ```bash
@@ -226,6 +236,9 @@ following without committing values:
   Exceeded limits return HTTP 429 with `Retry-After`. The current limiter is
   in-process and per API process; install a distributed limiter before running
   multiple API instances or scaling horizontally.
+  `AI_CONCURRENCY_GLOBAL_LIMIT` and `AI_CONCURRENCY_USER_LIMIT` additionally
+  bound expensive provider operations to 10 per API process and 2 per user by
+  default. These are process-local protections, not distributed quotas.
 - Web: `NEXT_PUBLIC_API_BASE_URL`,
   `NEXT_PUBLIC_SUPABASE_URL`, and
   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.

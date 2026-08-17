@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     ai_rate_limit_window_seconds: int = 60
     ai_rate_limit_kickoff_requests: int = 5
     ai_rate_limit_summary_requests: int = 5
+    ai_concurrency_global_limit: int = 10
+    ai_concurrency_user_limit: int = 2
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -111,6 +113,8 @@ class Settings(BaseSettings):
             raise ValueError("AI rate-limit requests and window must be positive")
         if self.ai_rate_limit_kickoff_requests <= 0 or self.ai_rate_limit_summary_requests <= 0:
             raise ValueError("AI rate-limit operation limits must be positive")
+        if self.ai_concurrency_global_limit <= 0 or self.ai_concurrency_user_limit <= 0:
+            raise ValueError("AI concurrency limits must be positive")
         return self
 
     def ai_rate_limit_policy(self, operation: str) -> tuple[int, int]:

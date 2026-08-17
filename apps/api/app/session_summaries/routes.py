@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.concurrency import require_ai_concurrency
 from app.ai.dependencies import get_ai_provider
 from app.ai.provider import AIProvider
 from app.ai.rate_limit import require_ai_rate_limit
@@ -24,6 +25,7 @@ Session = Annotated[AsyncSession, Depends(get_db_session)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 Provider = Annotated[AIProvider | None, Depends(get_ai_provider)]
 SummaryRateLimit = Annotated[None, Depends(require_ai_rate_limit("summary"))]
+SummaryConcurrency = Annotated[None, Depends(require_ai_concurrency("summary"))]
 
 
 @router.get("/{conversation_id}/summary", response_model=SessionSummaryResponse)
@@ -50,6 +52,7 @@ async def create(
     current_user: AuthenticatedUser,
     provider: Provider,
     _rate_limit: SummaryRateLimit,
+    _concurrency: SummaryConcurrency,
 ) -> SessionSummaryResponse:
     try:
         summary = await generate_summary(session, current_user.id, conversation_id, provider)

@@ -31,9 +31,20 @@ private signing keys, service-role credentials, or OpenAI keys.
 | `AI_RATE_LIMIT_WINDOW_SECONDS` | Optional | Shared rate-limit window; default 60. |
 | `AI_RATE_LIMIT_KICKOFF_REQUESTS` | Optional | Interview/Team kickoff limit; default 5. |
 | `AI_RATE_LIMIT_SUMMARY_REQUESTS` | Optional | Summary-generation limit; default 5. |
+| `AI_CONCURRENCY_GLOBAL_LIMIT` | Optional | Maximum concurrent provider operations per API process; default 10. |
+| `AI_CONCURRENCY_USER_LIMIT` | Optional | Maximum concurrent provider operations per user per API process; default 2. |
 
 All rate-limit numeric values must be positive. The limiter is process-local;
 keep one API instance until distributed storage is introduced.
+
+Concurrency protection is also process-local. It limits expensive text,
+summary, kickoff, and realtime operations to two concurrent operations per
+user and ten across the API process by default. It is not a distributed quota;
+replace it with shared infrastructure before horizontal scaling.
+
+`GET /health` is liveness only. `GET /ready` performs a bounded `SELECT 1`
+against PostgreSQL and returns 503 when the application cannot reach its
+database. OpenAI availability is intentionally not part of readiness.
 
 `API_HOST` and `API_PORT` are accepted settings with local defaults, but current
 Makefile/Docker commands provide Uvicorn host/port directly. Render supplies
@@ -46,6 +57,7 @@ Makefile/Docker commands provide Uvicorn host/port directly. Render supplies
 | `NEXT_PUBLIC_API_BASE_URL` | Yes | FastAPI base URL; local default is `http://localhost:8000`. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Browser-safe Supabase publishable key. |
+| `NEXT_PUBLIC_REALTIME_MAX_DURATION_SECONDS` | Optional | Browser-enforced maximum live Interview/Mentor/Video session duration; default 3600 seconds. |
 
 Only browser-safe values may use `NEXT_PUBLIC_*`. Do not expose
 `DATABASE_URL`, `OPENAI_API_KEY`, service-role keys, signing keys, or legacy JWT

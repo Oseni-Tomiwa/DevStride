@@ -3,6 +3,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
+from app.ai.concurrency import ConcurrencyLimitExceeded, InMemoryConcurrencyLimiter
 from app.ai.rate_limit import require_ai_rate_limit
 from app.auth.models import CurrentUser
 from app.core.config import settings
@@ -34,6 +35,18 @@ def test_rate_limiter_gives_users_and_operations_independent_quota() -> None:
     limiter.consume(first_user, "respond", policy)
     limiter.consume(second_user, "respond", policy)
     limiter.consume(first_user, "kickoff", policy)
+
+
+def test_concurrency_limiter_releases_after_success_and_failure_paths() -> None:
+    limiter = InMemoryConcurrencyLimiter(global_limit=1, user_limit=1)
+    user_id = uuid4()
+    limiter.acquire(user_id)
+    with pytest.raises(ConcurrencyLimitExceeded):
+        limiter.acquire(user_id)
+    limiter.release(user_id)
+    limiter.acquire(user_id)
+    limiter.release(user_id)
+    limiter.acquire(uuid4())
 
 
 @pytest.mark.asyncio

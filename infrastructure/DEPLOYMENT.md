@@ -150,7 +150,12 @@ After deployment, verify the Render logs show a successful migration and run
 rollback does not imply a schema downgrade. Only perform a manual downgrade
 after reviewing migration compatibility and an explicit backup/rollback plan.
 
-The current repository head is `0005`.
+The current repository head is `0008`. Discover it before each release with
+`alembic heads`; do not treat this number as a substitute for checking the
+repository. The pre-deploy migration owner must run `alembic upgrade head`
+once, verify `alembic current` equals the single head, and only then allow the
+application release to receive traffic. Application rollback must not
+automatically downgrade the database.
 
 ## Backup and restore
 
@@ -159,6 +164,18 @@ launch. Confirm the plan's retention and restore options there; this repository
 does not assume a retention period. Test a restore procedure against a separate
 database before public launch. Do not claim backups exist until the selected
 Supabase plan and settings confirm them.
+
+Restore drill checklist:
+
+1. Identify the production Supabase project and record the backup/PITR setting.
+2. Identify the authorized restore operator and an isolated restore target.
+3. Restore a recent backup without pointing the application at it.
+4. Verify Alembic `current` and `heads` are both `0008` (or the discovered
+   current head), plus representative table/row checks.
+5. Record the drill date and result outside source-controlled secrets.
+6. Destroy or securely reset the isolated restore target.
+
+Backup configuration and the restore drill remain manual Phase 9C checks.
 
 ## OpenAI handling
 
@@ -200,6 +217,8 @@ Infrastructure:
 
 - Vercel deployment is healthy.
 - Render `/health` returns 200 without authentication.
+- Render `/ready` returns 200 only when the API can execute a bounded database
+  health query.
 - Render pre-deploy migration succeeds.
 - Supabase database is reachable.
 
