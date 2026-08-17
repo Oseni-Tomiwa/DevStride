@@ -100,8 +100,7 @@ export function InterviewEntry() {
               name="interview-transport"
               value="video"
               title="Video Interview"
-              description="Practice with camera and voice."
-              note="Camera and microphone required for the full experience. Camera stays local."
+              description="Practice with camera and voice. Camera and microphone required. Camera stays local."
               checked={transport === "video"}
               onChange={() => setTransport("video")}
             />
