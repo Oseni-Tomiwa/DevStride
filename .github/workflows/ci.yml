@@ -59,16 +59,19 @@ jobs:
       - run: cd apps/api && uv run pyright
       - run: >-
           cd apps/api &&
+          APP_ENV=test
           DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
           TEST_DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
           uv run alembic heads
       - run: >-
           cd apps/api &&
+          APP_ENV=test
           DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
           TEST_DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
           uv run alembic upgrade head
       - run: >-
           cd apps/api &&
+          APP_ENV=test
           DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
           TEST_DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
           AI_GENERATION_ENABLED=false
@@ -77,11 +80,11 @@ jobs:
         run: |
           docker build -f apps/api/Dockerfile -t devstride-api-ci .
           docker run -d --name devstride-api-ci -p 18000:10000 \
-            -e APP_ENV=test \
+            -e APP_ENV=production \
             -e DATABASE_URL=postgresql+asyncpg://devstride:devstride@host.docker.internal:5432/devstride_test \
             -e SUPABASE_JWT_ISSUER=https://test-project.supabase.co/auth/v1 \
             -e SUPABASE_JWT_ALGORITHMS=ES256 \
-            -e CORS_ORIGINS=http://localhost:3000 \
+            -e CORS_ORIGINS=https://ci.invalid \
             devstride-api-ci
           trap 'docker rm -f devstride-api-ci' EXIT
           for attempt in {1..20}; do
