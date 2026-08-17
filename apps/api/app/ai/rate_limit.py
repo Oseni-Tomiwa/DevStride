@@ -1,5 +1,6 @@
 from collections.abc import Awaitable, Callable
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 
@@ -44,15 +45,12 @@ def require_ai_rate_limit(operation: str) -> Callable[..., Awaitable[None]]:
     return enforce
 
 
-async def require_realtime_rate_limit(
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    limiter: Annotated[InMemoryRateLimiter, Depends(get_ai_rate_limiter)],
-) -> None:
-    if not settings.ai_rate_limit_enabled or not settings.live_interview_enabled:
+def consume_realtime_rate_limit(user_id: UUID) -> None:
+    if not settings.ai_rate_limit_enabled:
         return
     try:
-        limiter.consume(
-            current_user.id,
+        _rate_limiter.consume(
+            user_id,
             "realtime",
             RateLimitPolicy(*settings.ai_rate_limit_policy("realtime")),
         )
@@ -62,3 +60,14 @@ async def require_realtime_rate_limit(
             detail="Too many AI requests. Please try again shortly.",
             headers={"Retry-After": str(exc.retry_after_seconds)},
         ) from None
+
+
+async def require_realtime_rate_limit(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    limiter: Annotated[InMemoryRateLimiter, Depends(get_ai_rate_limiter)],
+) -> None:
+    # Kept as a reusable dependency for callers that already know the feature
+    # is enabled. Feature-aware routes call consume_realtime_rate_limit after
+    # validating the owned conversation and mode.
+    del limiter
+    consume_realtime_rate_limit(current_user.id)

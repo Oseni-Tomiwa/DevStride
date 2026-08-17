@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.rate_limit import get_ai_rate_limiter
 from app.ai.realtime import RealtimeInitializationError, create_realtime_call
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
@@ -36,6 +37,13 @@ SDP_OFFER = (
     "a=mid:0\r\n"
     "a=sendrecv\r\n"
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_realtime_limits() -> Generator[None, None, None]:
+    get_ai_rate_limiter().clear()
+    yield
+    get_ai_rate_limiter().clear()
 
 
 def make_interview(user_id: UUID = USER_ID, mode: str = "interview") -> Conversation:
@@ -640,7 +648,7 @@ async def test_realtime_call_logs_safe_provider_error(
     log_text = " ".join(str(value) for value in warnings)
     assert "400" in log_text
     assert "ek_secret_value" not in log_text
-    assert "[redacted]" in log_text
+    assert "missing_error_object" in log_text
 
 
 @pytest.mark.asyncio

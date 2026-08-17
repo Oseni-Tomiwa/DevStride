@@ -19,10 +19,12 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @devstride/web exec playwright install --with-deps chromium
       - run: pnpm web:lint
       - run: pnpm web:typecheck
       - run: pnpm web:test
       - run: pnpm web:build
+      - run: pnpm web:e2e --project=chromium
 
   api:
     runs-on: ubuntu-latest
@@ -59,5 +61,32 @@ jobs:
           cd apps/api &&
           DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
           TEST_DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
+          uv run alembic heads
+      - run: >-
+          cd apps/api &&
+          DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
+          TEST_DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
+          uv run alembic upgrade head
+      - run: >-
+          cd apps/api &&
+          DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
+          TEST_DATABASE_URL=postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test
           AI_GENERATION_ENABLED=false
           uv run pytest
+      - name: Build and smoke-test production API image
+        run: |
+          docker build -f apps/api/Dockerfile -t devstride-api-ci .
+          docker run -d --name devstride-api-ci -p 18000:10000 \
+            -e APP_ENV=test \
+            -e DATABASE_URL=postgresql+asyncpg://devstride:devstride@host.docker.internal:5432/devstride_test \
+            -e SUPABASE_JWT_ISSUER=https://test-project.supabase.co/auth/v1 \
+            -e SUPABASE_JWT_ALGORITHMS=ES256 \
+            -e CORS_ORIGINS=http://localhost:3000 \
+            devstride-api-ci
+          trap 'docker rm -f devstride-api-ci' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:18000/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs devstride-api-ci
+          exit 1

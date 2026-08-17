@@ -4,10 +4,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.concurrency import require_realtime_concurrency
 from app.ai.dependencies import get_ai_provider
 from app.ai.latency import PracticeLatencyTrace
 from app.ai.provider import AIProvider
-from app.ai.rate_limit import require_realtime_rate_limit
+from app.ai.rate_limit import consume_realtime_rate_limit
 from app.ai.realtime import (
     RealtimeInitializationError,
     create_realtime_call,
@@ -51,8 +52,7 @@ from app.session_summaries.service import (
 router = APIRouter(prefix="/api/v1/realtime", tags=["realtime"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
-RealtimeRateLimit = Annotated[None, Depends(require_realtime_rate_limit)]
-TranscriptRateLimit = Annotated[None, Depends(require_realtime_rate_limit)]
+RealtimeConcurrency = Annotated[None, Depends(require_realtime_concurrency("realtime"))]
 
 
 async def _owned_live_conversation(
@@ -161,7 +161,7 @@ async def create_session(
     data: RealtimeSessionRequest,
     session: Session,
     current_user: AuthenticatedUser,
-    _rate_limit: RealtimeRateLimit,
+    _concurrency: RealtimeConcurrency,
 ) -> RealtimeSessionResponse:
     try:
         conversation = await get_conversation(session, current_user.id, data.conversation_id)
@@ -205,6 +205,7 @@ async def create_session(
         if transport == "video":
             _require_video_enabled()
         model = settings.live_interview_model
+    consume_realtime_rate_limit(current_user.id)
     if settings.openai_api_key is None:
         raise HTTPException(
             status_code=503,
@@ -244,7 +245,7 @@ async def connect_session(
     request: Request,
     session: Session,
     current_user: AuthenticatedUser,
-    _rate_limit: RealtimeRateLimit,
+    _concurrency: RealtimeConcurrency,
 ) -> Response:
     trace = PracticeLatencyTrace("realtime", "connect")
     trace.mark("request_received")
@@ -272,6 +273,7 @@ async def connect_session(
         if conversation.metadata_.get("interview_transport", "text") == "video":
             _require_video_enabled()
         model = settings.live_interview_model
+    consume_realtime_rate_limit(current_user.id)
     if settings.openai_api_key is None:
         raise HTTPException(status_code=503, detail=f"Live {mode.title()} is currently unavailable")
     try:
@@ -315,7 +317,6 @@ async def persist_transcript_turn(
     data: RealtimeTranscriptTurnRequest,
     session: Session,
     current_user: AuthenticatedUser,
-    _rate_limit: TranscriptRateLimit,
 ) -> RealtimeTranscriptTurnResponse:
     await _owned_live_conversation(session, current_user.id, conversation_id, mode=None)
     if data.role == "user" and not is_meaningful_user_content(data.content):
@@ -352,7 +353,6 @@ async def persist_analytics_event(
     data: RealtimeAnalyticsEventRequest,
     session: Session,
     current_user: AuthenticatedUser,
-    _rate_limit: TranscriptRateLimit,
 ) -> dict[str, str]:
     await _owned_live_conversation(session, current_user.id, conversation_id)
     _require_realtime_enabled()

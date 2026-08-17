@@ -8,6 +8,7 @@ is resolved from the token, never from request-supplied `user_id`.
 | Method | Path | Success | Behavior |
 | --- | --- | --- | --- |
 | GET | `/health` | 200 | Public liveness response: `{"status":"ok","service":"devstride-api"}`. |
+| GET | `/ready` | 200 | Public readiness response after a bounded PostgreSQL `SELECT 1`; returns 503 when the database is unavailable. |
 | GET | `/api/v1/auth/me` | 200 | Returns verified user `id` and optional `email`. |
 
 ## Profile and onboarding

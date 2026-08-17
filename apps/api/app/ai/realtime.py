@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from typing import cast
 
 import httpx
@@ -15,10 +14,25 @@ class RealtimeInitializationError(Exception):
     pass
 
 
-def _safe_provider_body(value: str) -> str:
-    value = re.sub(r"(?i)bearer\s+[a-z0-9._-]+", "Bearer [redacted]", value)
-    value = re.sub(r"\bek_[a-z0-9._-]+\b", "[redacted]", value)
-    return value[:500]
+def _provider_error_category(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except (TypeError, ValueError):
+        return "invalid_or_non_json"
+    if not isinstance(payload, dict):
+        return "invalid_error_shape"
+    payload_dict = cast(dict[str, object], payload)
+    error = payload_dict.get("error")
+    if not isinstance(error, dict):
+        return "missing_error_object"
+    error_dict = cast(dict[str, object], error)
+    code = error_dict.get("code")
+    error_type = error_dict.get("type")
+    if isinstance(code, str) and code:
+        return code[:80]
+    if isinstance(error_type, str) and error_type:
+        return error_type[:80]
+    return "unknown_provider_error"
 
 
 def build_realtime_session(instructions: str, model: str) -> dict[str, object]:
@@ -129,11 +143,11 @@ async def create_realtime_call(
 
     if response.status_code not in {200, 201}:
         logger.warning(
-            "Realtime provider call negotiation rejected status=%s body=%s "
+            "Realtime provider call negotiation rejected status=%s category=%s "
             "sdp_chars=%s sdp_bytes=%s starts_with_v0=%s multipart_sdp_bytes=%s "
             "multipart_body_bytes=%s",
             response.status_code,
-            _safe_provider_body(response.text),
+            _provider_error_category(response),
             len(offer_sdp),
             len(sdp_bytes),
             offer_sdp.startswith("v=0"),
