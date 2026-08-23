@@ -43,6 +43,12 @@ describe("AuthForm", () => {
     expect(screen.getByRole("link", { name: "Back to DevStride" })).toHaveAttribute("href", "/");
   });
 
+  it("shows a forgot-password link on the login form", () => {
+    render(<AuthForm mode="login" />);
+
+    expect(screen.getByRole("link", { name: "Forgot password?" })).toHaveAttribute("href", "/forgot-password");
+  });
+
   it("handles email confirmation after sign-up", async () => {
     signUp.mockResolvedValue({ data: { session: null }, error: null });
     render(<AuthForm mode="sign-up" />);

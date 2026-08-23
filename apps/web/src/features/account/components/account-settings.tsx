@@ -8,6 +8,7 @@ import { createClient } from "../../../lib/supabase/client";
 import { Dialog } from "../../../components/dialog";
 import { PASSWORD_MIN_LENGTH } from "../../auth/validation";
 import { deleteAccount, exportAccountData } from "../api";
+import { PasswordField } from "../../auth/components/password-field";
 
 type AccountSettingsProps = {
   email: string | null;
@@ -34,6 +35,7 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
   const router = useRouter();
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
@@ -90,6 +92,11 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
     setPasswordError(null);
     setPasswordSuccess(null);
 
+    const currentParsed = passwordSchema.safeParse(currentPassword);
+    if (!currentParsed.success) {
+      setPasswordError(`Enter your current password (at least ${PASSWORD_MIN_LENGTH} characters).`);
+      return;
+    }
     const parsed = passwordSchema.safeParse(newPassword);
     if (!parsed.success) {
       setPasswordError(parsed.error.issues[0]?.message ?? "Enter a valid password.");
@@ -102,11 +109,18 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
 
     setPendingAction("password");
     try {
-      const { error } = await createClient().auth.updateUser({ password: parsed.data });
+      const supabase = createClient();
+      const { data: verification, error: verificationError } = await supabase.auth.signInWithPassword({ email: email ?? "", password: currentParsed.data });
+      if (verificationError || !verification.session) {
+        setPasswordError("Your current password is incorrect.");
+        return;
+      }
+      const { error } = await supabase.auth.updateUser({ password: parsed.data });
       if (error) {
         setPasswordError("We could not update your password. Please try again.");
         return;
       }
+      setCurrentPassword("");
       setNewPassword("");
       setPasswordConfirmation("");
       setPasswordSuccess("Your password has been updated.");
@@ -237,14 +251,13 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
         <form className="account-form" onSubmit={handlePasswordChange} noValidate>
           <div className="field-grid">
             <div className="field-group">
-              <label htmlFor="new-password">New password</label>
-              <input id="new-password" name="new-password" type="password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} value={newPassword} aria-describedby="password-hint" onChange={(event) => { setNewPassword(event.target.value); setPasswordError(null); setPasswordSuccess(null); }} />
+              <PasswordField id="current-password" label="Current password" value={currentPassword} onChange={(value) => { setCurrentPassword(value); setPasswordError(null); setPasswordSuccess(null); }} autoComplete="current-password" minLength={PASSWORD_MIN_LENGTH} />
             </div>
             <div className="field-group">
-              <label htmlFor="confirm-password">Confirm new password</label>
-              <input id="confirm-password" name="confirm-password" type="password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} value={passwordConfirmation} aria-invalid={Boolean(passwordError)} aria-describedby={passwordError ? "password-error" : "password-hint"} onChange={(event) => { setPasswordConfirmation(event.target.value); setPasswordError(null); setPasswordSuccess(null); }} />
+              <PasswordField id="new-password" label="New password" value={newPassword} onChange={(value) => { setNewPassword(value); setPasswordError(null); setPasswordSuccess(null); }} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} describedBy="password-hint" />
             </div>
           </div>
+          <PasswordField id="confirm-password" label="Confirm new password" value={passwordConfirmation} onChange={(value) => { setPasswordConfirmation(value); setPasswordError(null); setPasswordSuccess(null); }} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} describedBy={passwordError ? "password-error" : "password-hint"} />
           <p className="field-hint" id="password-hint">Use at least {PASSWORD_MIN_LENGTH} characters.</p>
           {passwordError && <p className="form-error" id="password-error" role="alert">{passwordError}</p>}
           {passwordSuccess && <p className="form-success" role="status">{passwordSuccess}</p>}

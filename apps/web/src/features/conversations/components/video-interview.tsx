@@ -105,6 +105,7 @@ export function VideoInterview({ conversationId, interviewType, interviewFocus, 
       watchCameraTrack(nextStream);
       const microphone = nextStream.getAudioTracks()[0];
       if (microphone) { setMicrophoneState("on"); watchMicrophoneTrack(microphone); }
+      streamRef.current = nextStream;
       setStream(nextStream);
       await refreshDevices();
     } catch (cameraCause) {
@@ -114,6 +115,7 @@ export function VideoInterview({ conversationId, interviewType, interviewFocus, 
         setCameraState("unavailable");
         const microphone = audioStream.getAudioTracks()[0];
         if (microphone) watchMicrophoneTrack(microphone);
+        streamRef.current = audioStream;
         setStream(audioStream);
         setError("Camera access was unavailable. Continue audio-only or retry the camera.");
         await refreshDevices();
