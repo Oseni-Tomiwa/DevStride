@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountSettings } from "./account-settings";
 
 const updateUser = vi.fn();
+const signInWithPassword = vi.fn();
 const signOut = vi.fn();
 const push = vi.fn();
 const refresh = vi.fn();
@@ -15,7 +16,7 @@ const { exportAccountData, deleteAccount } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../lib/supabase/client", () => ({
-  createClient: () => ({ auth: { updateUser, signOut } }),
+  createClient: () => ({ auth: { updateUser, signInWithPassword, signOut } }),
 }));
 vi.mock("../api", () => ({ exportAccountData, deleteAccount }));
 
@@ -39,6 +40,7 @@ function submitEmail(value: string) {
 }
 
 function submitPassword(password: string, confirmation: string) {
+  fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "current-password" } });
   fireEvent.change(screen.getByLabelText("New password"), { target: { value: password } });
   fireEvent.change(screen.getByLabelText("Confirm new password"), {
     target: { value: confirmation },
@@ -52,6 +54,7 @@ describe("AccountSettings", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
     vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:test"), revokeObjectURL: vi.fn() });
     updateUser.mockResolvedValue({ data: { user: {} }, error: null });
+    signInWithPassword.mockResolvedValue({ data: { session: {} }, error: null });
     signOut.mockResolvedValue({ error: null });
     exportAccountData.mockResolvedValue({ export_version: "1", account: { email: "ada@example.com" } });
     deleteAccount.mockResolvedValue(undefined);
@@ -115,11 +118,32 @@ describe("AccountSettings", () => {
     expect(updateUser).not.toHaveBeenCalled();
   });
 
+  it("requires the current password before changing it", () => {
+    renderSettings();
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "password123" } });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("current password");
+    expect(signInWithPassword).not.toHaveBeenCalled();
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it("does not change the password when current-password verification fails", async () => {
+    signInWithPassword.mockResolvedValueOnce({ data: { session: null }, error: { message: "invalid" } });
+    renderSettings();
+    submitPassword("password123", "password123");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("current password is incorrect");
+    expect(updateUser).not.toHaveBeenCalledWith({ password: "password123" });
+  });
+
   it("updates the signed-in user's password", async () => {
     renderSettings();
     submitPassword("password123", "password123");
 
-    await waitFor(() => expect(updateUser).toHaveBeenCalledWith({ password: "password123" }));
+    await waitFor(() => expect(signInWithPassword).toHaveBeenCalledWith({ email: "ada@example.com", password: "current-password" }));
+    expect(updateUser).toHaveBeenCalledWith({ password: "password123" });
     expect(await screen.findByRole("status")).toHaveTextContent("password has been updated");
   });
 

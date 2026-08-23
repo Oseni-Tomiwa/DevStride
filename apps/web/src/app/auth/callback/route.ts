@@ -8,17 +8,22 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next");
-  const destination = getSafeReturnPath(next);
+  const requestedDestination = getSafeReturnPath(next);
+  const returnTo = getSafeReturnPath(url.searchParams.get("returnTo"));
+  const destination = requestedDestination === "/reset-password"
+    ? `/reset-password?next=${encodeURIComponent(returnTo)}`
+    : requestedDestination;
+  const recoveryDestination = requestedDestination === "/reset-password";
 
   if (!code) {
-    return redirectWithNoStore(new URL("/login?error=confirmation", request.url));
+    return redirectWithNoStore(new URL(recoveryDestination ? "/reset-password?error=expired" : "/login?error=confirmation", request.url));
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return redirectWithNoStore(new URL("/login?error=confirmation", request.url));
+    return redirectWithNoStore(new URL(recoveryDestination ? "/reset-password?error=expired" : "/login?error=confirmation", request.url));
   }
 
   const response = redirectWithNoStore(new URL(destination, request.url));

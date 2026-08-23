@@ -9,6 +9,7 @@ import { createClient } from "../../../lib/supabase/client";
 import { DevStrideLogo } from "../../../components/brand/devstride-logo";
 import { getSafeReturnPath } from "../../../lib/supabase/return-path";
 import { PASSWORD_MIN_LENGTH } from "../validation";
+import { PasswordField } from "./password-field";
 
 type AuthMode = "login" | "sign-up";
 
@@ -108,23 +109,14 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete={mode === "login" ? "current-password" : "new-password"}
-          minLength={PASSWORD_MIN_LENGTH}
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
+        <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={PASSWORD_MIN_LENGTH} />
         {error && <p className="form-error" role="alert">{error}</p>}
         {message && <p className="form-success" role="status">{message}</p>}
         <button type="submit" disabled={isLoading}>
           {isLoading ? "Please wait…" : content.submit}
         </button>
       </form>
+      {mode === "login" && <Link href={`/forgot-password${searchParams.get("next") ? `?next=${encodeURIComponent(getSafeReturnPath(searchParams.get("next")))}` : ""}`}>Forgot password?</Link>}
       <Link href={content.alternateHref}>{content.alternate}</Link>
       <Link className="auth-home-link" href="/">Back to DevStride</Link>
     </section>
