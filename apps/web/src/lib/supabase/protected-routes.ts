@@ -5,5 +5,6 @@ export function isProtectedPath(pathname: string): boolean {
     pathname === "/account" || pathname.startsWith("/account/") ||
     pathname === "/conversations" || pathname.startsWith("/conversations/") ||
     pathname === "/progress" || pathname.startsWith("/progress/") ||
+    pathname === "/goals" || pathname.startsWith("/goals/") ||
     pathname === "/memories" || pathname.startsWith("/memories/");
 }

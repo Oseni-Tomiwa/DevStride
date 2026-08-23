@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountSettings } from "./account-settings";
 
@@ -44,9 +44,12 @@ function submitPassword(password: string, confirmation: string) {
 describe("AccountSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
     updateUser.mockResolvedValue({ data: { user: {} }, error: null });
     signOut.mockResolvedValue({ error: null });
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it("renders current account details without profile fields or secrets", () => {
     renderSettings();

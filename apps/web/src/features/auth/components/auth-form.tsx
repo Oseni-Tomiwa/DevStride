@@ -2,10 +2,12 @@
 
 import { FormEvent, useState } from "react";
 import React from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import { createClient } from "../../../lib/supabase/client";
 import { DevStrideLogo } from "../../../components/brand/devstride-logo";
+import { getSafeReturnPath } from "../../../lib/supabase/return-path";
 import { PASSWORD_MIN_LENGTH } from "../validation";
 
 type AuthMode = "login" | "sign-up";
@@ -27,9 +29,16 @@ const copy: Record<AuthMode, { title: string; submit: string; alternate: string;
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
   const searchParams = useSearchParams();
+  const callbackError = searchParams.get("error");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    callbackError === "confirmation"
+      ? "That confirmation link is invalid or expired. Please try again."
+      : callbackError === "session"
+        ? "We could not establish a secure session. Please log in again."
+        : null,
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const content = copy[mode];
@@ -42,7 +51,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
     const supabase = createClient();
     const next = searchParams.get("next");
-    const destination = next?.startsWith("/") ? next : "/dashboard";
+    const destination = getSafeReturnPath(next);
     const result = mode === "login"
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({
@@ -68,12 +77,24 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       return;
     }
 
+    try {
+      const policyResponse = await fetch("/auth/session-policy", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!policyResponse.ok) throw new Error("policy_unavailable");
+    } catch {
+      setError("We could not establish a secure session. Please try logging in again.");
+      return;
+    }
+
     window.location.assign(destination);
   }
 
   return (
     <section className="auth-card" aria-labelledby="auth-title">
-      <DevStrideLogo variant="auth" />
+      <Link href="/" aria-label="DevStride home"><DevStrideLogo variant="auth" /></Link>
       <h1 id="auth-title">{content.title}</h1>
       <p className="muted">Build confidence for your next engineering stride.</p>
       <form onSubmit={handleSubmit}>
@@ -104,7 +125,8 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           {isLoading ? "Please wait…" : content.submit}
         </button>
       </form>
-      <a href={content.alternateHref}>{content.alternate}</a>
+      <Link href={content.alternateHref}>{content.alternate}</Link>
+      <Link className="auth-home-link" href="/">Back to DevStride</Link>
     </section>
   );
 }

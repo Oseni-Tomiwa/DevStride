@@ -120,6 +120,9 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
         setSessionError("We could not update your sessions. Please try again.");
         return;
       }
+      if (scope !== "others") {
+        await fetch("/auth/session-policy", { method: "DELETE", credentials: "same-origin", cache: "no-store" });
+      }
       setConfirmationScope(null);
       if (scope === "others") {
         setSessionSuccess("Other sessions have been signed out. This session remains active.");

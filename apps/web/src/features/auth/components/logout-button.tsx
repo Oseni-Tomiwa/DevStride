@@ -17,6 +17,7 @@ export function LogoutButton() {
       setError("We could not log you out. Please try again.");
       return;
     }
+    await fetch("/auth/session-policy", { method: "DELETE", credentials: "same-origin", cache: "no-store" });
     router.push("/login");
     router.refresh();
   }
