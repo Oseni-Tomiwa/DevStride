@@ -173,7 +173,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .auth-card { width: min(100%, 31rem); padding: clamp(1.5rem, 4vw, 2.5rem); border: 1px solid rgb(201 211 226 / 88%); border-radius: var(--radius-lg); background: rgb(255 255 255 / 96%); box-shadow: var(--shadow-md); }
 .auth-card h1 { margin-bottom: 0.8rem; font-size: clamp(2rem, 5vw, 2.85rem); }
 .auth-card form { margin: var(--space-8) 0 var(--space-5); }
-.auth-card > a { font-size: 0.92rem; }
+.auth-card > a { display: block; font-size: 0.92rem; }
+.auth-card > a + a { margin-top: var(--space-3); }
+.auth-home-link { color: var(--ink-600); font-weight: 650; }
 
 /* Forms */
 form { display: grid; gap: 0.75rem; }

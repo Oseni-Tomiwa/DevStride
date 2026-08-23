@@ -14,6 +14,7 @@ describe("protected routes", () => {
     expect(isProtectedPath("/conversations/123")).toBe(true);
     expect(isProtectedPath("/progress")).toBe(true);
     expect(isProtectedPath("/memories")).toBe(true);
+    expect(isProtectedPath("/goals")).toBe(true);
   });
 
   it("leaves public paths accessible", () => {

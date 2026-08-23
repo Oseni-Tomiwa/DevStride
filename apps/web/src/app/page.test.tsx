@@ -1,30 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import HomePage from "./page";
 
-const { getUser, redirect } = vi.hoisted(() => ({
-  getUser: vi.fn(),
-  redirect: vi.fn((path: string): never => {
-    throw new Error(`REDIRECT:${path}`);
-  }),
-}));
-
-vi.mock("../lib/supabase/server", () => ({
-  createClient: async () => ({ auth: { getUser } }),
-}));
-
-vi.mock("next/navigation", () => ({ redirect }));
-
 describe("HomePage", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("renders the unauthenticated landing page and its actions", async () => {
-    getUser.mockResolvedValue({ data: { user: null } });
-
     render(await HomePage());
 
     expect(screen.getByRole("link", { name: "DevStride home" })).toBeInTheDocument();
@@ -34,10 +15,9 @@ describe("HomePage", () => {
     expect(screen.getByText(/AI-powered practice environment for software engineers/i)).toBeInTheDocument();
   });
 
-  it("redirects authenticated users to the dashboard", async () => {
-    getUser.mockResolvedValue({ data: { user: { id: "user-id" } } });
+  it("keeps the public landing page reachable for an authenticated visitor", async () => {
+    render(await HomePage());
 
-    await expect(HomePage()).rejects.toThrow("REDIRECT:/dashboard");
-    expect(redirect).toHaveBeenCalledWith("/dashboard");
+    expect(screen.getByRole("link", { name: "DevStride home" })).toHaveAttribute("href", "/");
   });
 });

@@ -1,20 +1,9 @@
 import React from "react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
-import { createClient } from "../lib/supabase/server";
 import { DevStrideLogo } from "../components/brand/devstride-logo";
 
-export const dynamic = "force-dynamic";
-
 export default async function HomePage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (user) {
-    redirect("/dashboard");
-  }
-
   return (
     <main className="landing-shell">
       <nav className="landing-nav" aria-label="Primary navigation">

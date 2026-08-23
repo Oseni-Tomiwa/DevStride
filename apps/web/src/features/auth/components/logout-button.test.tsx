@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LogoutButton } from "./logout-button";
 
@@ -20,7 +20,10 @@ vi.mock("next/navigation", () => ({
 describe("LogoutButton", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it("signs out only the current session and redirects to login", async () => {
     signOut.mockResolvedValue({ error: null });

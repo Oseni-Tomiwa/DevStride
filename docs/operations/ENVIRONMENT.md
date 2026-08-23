@@ -58,6 +58,7 @@ Makefile/Docker commands provide Uvicorn host/port directly. Render supplies
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Browser-safe Supabase publishable key. |
 | `NEXT_PUBLIC_REALTIME_MAX_DURATION_SECONDS` | Optional | Browser-enforced maximum live Interview/Mentor/Video session duration; default 3600 seconds. |
+| `SESSION_POLICY_SECRET` | Required in production | Server-only random secret used to sign the app-level inactivity/absolute session policy cookie. Never expose it as `NEXT_PUBLIC_*`. |
 
 Only browser-safe values may use `NEXT_PUBLIC_*`. Do not expose
 `DATABASE_URL`, `OPENAI_API_KEY`, service-role keys, signing keys, or legacy JWT
