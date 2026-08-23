@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 
 import { createClient } from "../../../lib/supabase/client";
+import { Dialog } from "../../../components/dialog";
 import { PASSWORD_MIN_LENGTH } from "../../auth/validation";
+import { deleteAccount, exportAccountData } from "../api";
 
 type AccountSettingsProps = {
   email: string | null;
@@ -14,7 +16,7 @@ type AccountSettingsProps = {
 };
 
 type SessionScope = "others" | "global";
-type PendingAction = "email" | "password" | "local" | SessionScope | null;
+type PendingAction = "email" | "password" | "local" | "export" | "delete" | SessionScope | null;
 
 const emailSchema = z.string().trim().email("Enter a valid email address.");
 const passwordSchema = z
@@ -41,6 +43,10 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
   const [sessionSuccess, setSessionSuccess] = useState<string | null>(null);
   const [confirmationScope, setConfirmationScope] = useState<SessionScope | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [privacyError, setPrivacyError] = useState<string | null>(null);
+  const [privacySuccess, setPrivacySuccess] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   async function handleEmailChange(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -137,6 +143,55 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
     }
   }
 
+  async function handleExport() {
+    setPrivacyError(null);
+    setPrivacySuccess(null);
+    setPendingAction("export");
+    try {
+      const payload = await exportAccountData(createClient());
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `devstride-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setPrivacySuccess("Your data export is ready.");
+    } catch {
+      setPrivacyError("We could not prepare your export. Please try again.");
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleDelete() {
+    if (deleteConfirmation !== "DELETE") return;
+    setPrivacyError(null);
+    setPrivacySuccess(null);
+    setPendingAction("delete");
+    try {
+      await deleteAccount(createClient());
+      try {
+        await createClient().auth.signOut({ scope: "local" });
+      } catch {
+        // The backend deletion has already completed; local cleanup is best effort.
+      }
+      await fetch("/auth/session-policy", { method: "DELETE", credentials: "same-origin", cache: "no-store" });
+      setDeleteDialogOpen(false);
+      router.push("/");
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error && error.message.includes("Recent authentication")
+        ? "Please sign in again, then return here to confirm account deletion."
+        : "We could not delete your account. No further action was taken; please try again.";
+      setPrivacyError(message);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   const isBusy = pendingAction !== null;
 
   return (
@@ -207,6 +262,25 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
         {sessionError && <p className="form-error" role="alert">{sessionError}</p>}
         {sessionSuccess && <p className="form-success" role="status">{sessionSuccess}</p>}
       </section>
+
+      <section className="account-card account-privacy-card" aria-labelledby="privacy-controls-title">
+        <div className="account-section-heading"><div><h2 id="privacy-controls-title">Data &amp; privacy</h2><p className="muted">Take your data with you or permanently remove your active DevStride account data.</p></div></div>
+        <div className="privacy-actions">
+          <div><h3>Export my data</h3><p className="muted">Download a JSON copy of your account, Profile, Goals, conversations, reports, realtime metrics, and Memory.</p><button type="button" className="button-secondary" disabled={isBusy} onClick={() => void handleExport()}>{pendingAction === "export" ? "Preparing export…" : "Export my data"}</button></div>
+          <div><h3>Delete account</h3><p className="muted">This removes active DevStride product data. Export first if you may need a copy.</p><button type="button" className="button-danger" disabled={isBusy} onClick={() => { setPrivacyError(null); setPrivacySuccess(null); setDeleteConfirmation(""); setDeleteDialogOpen(true); }}>Delete account</button></div>
+        </div>
+        {privacyError && <p className="form-error" role="alert">{privacyError}</p>}
+        {privacySuccess && <p className="form-success" role="status">{privacySuccess}</p>}
+      </section>
+
+      <Dialog open={deleteDialogOpen} title="Delete your DevStride account?" description="This is permanent for active DevStride data. You may need to sign in again if your recent authentication is too old." onClose={() => { if (!isBusy) setDeleteDialogOpen(false); }} closeOnEscape={!isBusy}>
+        <div className="delete-account-dialog">
+          <p>We will remove your Profile, Goals and focus areas, conversations and messages, reports, realtime metrics, and Memory. Supabase will then delete the authenticated account.</p>
+          <p>Export your data first if you want a copy. Narrow security or legal records are not created by this application; future infrastructure policies must be disclosed separately.</p>
+          <div className="field-group"><label htmlFor="delete-account-confirmation">Type DELETE to confirm</label><input id="delete-account-confirmation" value={deleteConfirmation} autoComplete="off" onChange={(event) => setDeleteConfirmation(event.target.value)} aria-describedby="delete-account-hint" /><p className="field-hint" id="delete-account-hint">This confirmation is not a substitute for recent authentication.</p></div>
+          <div className="dialog-actions"><button type="button" className="button-secondary" disabled={isBusy} onClick={() => setDeleteDialogOpen(false)}>Cancel</button><button type="button" className="button-danger" disabled={isBusy || deleteConfirmation !== "DELETE"} onClick={() => void handleDelete()}>{pendingAction === "delete" ? "Deleting account…" : "Permanently delete account"}</button></div>
+        </div>
+      </Dialog>
     </div>
   );
 }

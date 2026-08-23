@@ -138,4 +138,9 @@ async def verify_access_token(token: str) -> CurrentUser:
         raise InvalidTokenError("JWT subject is invalid") from exc
 
     email = payload.get("email")
-    return CurrentUser(id=user_id, email=email if isinstance(email, str) else None)
+    auth_time = payload.get("auth_time")
+    return CurrentUser(
+        id=user_id,
+        email=email if isinstance(email, str) else None,
+        auth_time=auth_time if isinstance(auth_time, int) else None,
+    )

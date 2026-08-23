@@ -168,14 +168,16 @@ def integration_client(
         app.dependency_overrides.clear()
 
 
-def bearer_token(signing_key: SigningKey, user_id: UUID) -> str:
+def bearer_token(signing_key: SigningKey, user_id: UUID, *, auth_time: int | None = None) -> str:
     now = datetime.now(UTC)
+    token_auth_time = int(now.timestamp()) if auth_time is None else auth_time
     return jwt.encode(
         {
             "sub": str(user_id),
             "aud": settings.supabase_jwt_audience,
             "iss": TEST_ISSUER,
             "iat": now,
+            "auth_time": token_auth_time,
             "exp": now + timedelta(minutes=5),
             "email": "integration@example.com",
         },
@@ -389,6 +391,176 @@ async def test_live_interview_end_runs_assessment_summary_and_progress(
 
 def auth_headers(signing_key: SigningKey, user_id: UUID) -> dict[str, str]:
     return {"Authorization": f"Bearer {bearer_token(signing_key, user_id)}"}
+
+
+def test_account_export_is_authenticated_and_empty(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, _ = integration_client
+    assert client.get("/api/v1/account/export").status_code == 401
+    response = cast(
+        Response,
+        client.get(
+            "/api/v1/account/export",
+            headers=auth_headers(signing_key, uuid4()),
+        ),
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert "attachment" in response.headers["content-disposition"]
+    assert response.json()["profile"] is None
+    assert response.json()["conversations"] == []
+    assert "access_token" not in response.text
+    assert "service_role" not in response.text
+
+
+def test_account_export_contains_only_current_user_data(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+) -> None:
+    client, signing_key, _ = integration_client
+    owner_id = uuid4()
+    other_id = uuid4()
+    assert (
+        client.post(
+            "/api/v1/onboarding",
+            headers=auth_headers(signing_key, owner_id),
+            json=onboarding_payload(),
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/v1/onboarding",
+            headers=auth_headers(signing_key, other_id),
+            json=onboarding_payload(),
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/v1/conversations",
+            headers=auth_headers(signing_key, owner_id),
+            json={"title": "Owner practice", "mode": "general"},
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/v1/conversations",
+            headers=auth_headers(signing_key, other_id),
+            json={"title": "Other practice", "mode": "general"},
+        ).status_code
+        == 201
+    )
+
+    response = cast(
+        Response, client.get("/api/v1/account/export", headers=auth_headers(signing_key, owner_id))
+    )
+    assert response.status_code == 200
+    payload = cast(dict[str, Any], response.json())
+    assert payload["account"]["email"] == "integration@example.com"
+    assert payload["profile"]["display_name"] == "Integration User"
+    conversations = cast(list[dict[str, Any]], payload["conversations"])
+    assert [item["title"] for item in conversations] == ["Owner practice"]
+    assert "user_id" not in response.text
+    assert "access_token" not in response.text
+    assert "refresh_token" not in response.text
+
+
+async def test_account_delete_requires_confirmation_and_removes_only_owner_data(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.account import service as account_service
+
+    client, signing_key, factory = integration_client
+    owner_id = uuid4()
+    other_id = uuid4()
+    owner_headers = auth_headers(signing_key, owner_id)
+    other_headers = auth_headers(signing_key, other_id)
+    assert (
+        client.post(
+            "/api/v1/onboarding", headers=owner_headers, json=onboarding_payload()
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/v1/onboarding", headers=other_headers, json=onboarding_payload()
+        ).status_code
+        == 201
+    )
+    assert client.post("/api/v1/account/delete", json={}).status_code == 401
+    stale_headers = auth_headers(signing_key, owner_id)
+    stale_token = bearer_token(
+        signing_key, owner_id, auth_time=int(datetime.now(UTC).timestamp()) - 3600
+    )
+    stale_headers["Authorization"] = f"Bearer {stale_token}"
+    assert (
+        client.post(
+            "/api/v1/account/delete", headers=stale_headers, json={"confirmation": "DELETE"}
+        ).status_code
+        == 401
+    )
+    owner_created = cast(
+        Response,
+        client.post(
+            "/api/v1/conversations",
+            headers=owner_headers,
+            json={"title": "Owner", "mode": "general"},
+        ),
+    )
+    other_created = cast(
+        Response,
+        client.post(
+            "/api/v1/conversations",
+            headers=other_headers,
+            json={"title": "Other", "mode": "general"},
+        ),
+    )
+    owner_conversation = str(cast(dict[str, Any], owner_created.json())["id"])
+    other_conversation = str(cast(dict[str, Any], other_created.json())["id"])
+
+    assert client.post("/api/v1/account/delete", headers=owner_headers, json={}).status_code == 422
+    assert (
+        client.post(
+            "/api/v1/account/delete", headers=owner_headers, json={"confirmation": "delete"}
+        ).status_code
+        == 422
+    )
+    deleted_ids: list[UUID] = []
+
+    async def fake_delete_supabase_user(user_id: UUID) -> None:
+        deleted_ids.append(user_id)
+
+    monkeypatch.setattr(settings, "supabase_service_role_key", "test-service-role-key")
+    monkeypatch.setattr(account_service, "delete_supabase_user", fake_delete_supabase_user)
+    response = cast(
+        Response,
+        client.post(
+            "/api/v1/account/delete", headers=owner_headers, json={"confirmation": "DELETE"}
+        ),
+    )
+    assert response.status_code == 204
+    assert deleted_ids == [owner_id]
+
+    async with factory() as session:
+        assert await session.scalar(select(Profile.id).where(Profile.user_id == owner_id)) is None
+        assert (
+            await session.scalar(
+                select(Conversation.id).where(Conversation.id == UUID(owner_conversation))
+            )
+            is None
+        )
+        assert (
+            await session.scalar(select(Profile.id).where(Profile.user_id == other_id)) is not None
+        )
+        assert (
+            await session.scalar(
+                select(Conversation.id).where(Conversation.id == UUID(other_conversation))
+            )
+            is not None
+        )
 
 
 def goal_payload() -> dict[str, object]:

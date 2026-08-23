@@ -1,0 +1,17 @@
+import { PublicPage } from "../../components/public-page";
+import { createPublicMetadata } from "../../lib/site-metadata";
+
+export const metadata = createPublicMetadata(
+  "DevStride Terms",
+  "Review the launch draft terms for using DevStride practice and coaching experiences.",
+  "/terms",
+);
+
+export default function TermsPage() {
+  return (
+    <PublicPage className="policy-page">
+      <section className="public-page-hero" aria-labelledby="terms-title"><p className="eyebrow">Terms</p><h1 id="terms-title">Practice with context, responsibility, and care.</h1><p>This launch draft describes the intended use of DevStride. Final legal review is required before these terms are treated as final.</p></section>
+      <article className="public-section public-section-surface public-prose policy-content" aria-labelledby="terms-content-title"><div className="legal-review-notice" role="note"><strong>Final legal review required before launch.</strong><span>Operator: Mavery Innovative Systems LTD. DevStride is intended for users aged 18 and over. Company notices, governing law, and other jurisdiction-specific terms are still intentionally unresolved.</span></div><h2 id="terms-content-title">Using DevStride</h2><h3>Acceptance and account responsibility</h3><p>Use DevStride only as intended for engineering practice and communication coaching. You must be at least 18 years old. Keep your account credentials private and ensure activity through your account is authorized by you.</p><h3>Practice and AI limitations</h3><p>DevStride provides practice simulations, feedback, summaries, and recommendations. AI-generated content can be incomplete or incorrect and should be reviewed with your own judgment. Practice results are not professional advice.</p><h3>No outcome or certification guarantee</h3><p>DevStride does not guarantee employment, interview success, promotion, skill mastery, or any professional certification. Interview, Team Practice, Mentor, Live, and Video experiences are simulations and practice tools, not hiring decisions or accredited training.</p><h3>Account deletion</h3><p>Authenticated users can export their data and request deletion through Account. Active DevStride product data is removed as part of the deletion flow before the Supabase Auth identity is deleted. Future narrowly required security or legal records, if introduced, must be justified and disclosed.</p><h3>Acceptable use</h3><p>Do not misuse the service, attempt to access another user’s data, submit credentials or secrets as practice content, interfere with service operation, or use the product to violate applicable law or another person’s rights.</p><h3>Availability and changes</h3><p>Service features, availability, models, and limits may change as the product develops. We may restrict or suspend access when needed for security, abuse prevention, maintenance, or violation of these rules.</p><h3>Content and intellectual property</h3><p>You remain responsible for content you submit and for having the rights to use it. DevStride’s application, brand, and software remain protected by their respective owners. Do not represent AI output as authoritative or as your own professional certification.</p><h3>Disclaimers and unresolved legal fields</h3><p>The service is provided as a practice product during its launch period. Final legal review must establish the applicable notices, jurisdiction, dispute process, liability language, and any commercial terms before publication.</p></article>
+    </PublicPage>
+  );
+}

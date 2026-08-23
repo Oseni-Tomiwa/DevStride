@@ -18,6 +18,7 @@ private signing keys, service-role credentials, or OpenAI keys.
 | `SUPABASE_JWT_ISSUER` | Yes outside test | Exact HTTPS `https://<project-ref>.supabase.co/auth/v1` issuer. |
 | `SUPABASE_JWT_AUDIENCE` | Optional | Defaults to `authenticated`. |
 | `SUPABASE_JWT_ALGORITHMS` | Optional but should be explicit | Comma-separated allow-list containing only `ES256` and/or `RS256`; default `ES256`. Match the project's active asymmetric key. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Required only for account deletion | Backend-only Supabase Admin API credential. Never expose it to Next.js or use a `NEXT_PUBLIC_*` name. |
 | `AI_GENERATION_ENABLED` | Optional | Defaults false. Enables provider-backed generation only when a key is present. |
 | `LIVE_INTERVIEW_ENABLED` | Optional | Defaults false. Enables Realtime Practice Phase 1 for owned Interview conversations. No transcripts or messages are persisted. |
 | `LIVE_INTERVIEW_MODEL` | Optional | Backend-selected Realtime model, default `gpt-realtime`; never accepted from clients. |
@@ -33,6 +34,7 @@ private signing keys, service-role credentials, or OpenAI keys.
 | `AI_RATE_LIMIT_SUMMARY_REQUESTS` | Optional | Summary-generation limit; default 5. |
 | `AI_CONCURRENCY_GLOBAL_LIMIT` | Optional | Maximum concurrent provider operations per API process; default 10. |
 | `AI_CONCURRENCY_USER_LIMIT` | Optional | Maximum concurrent provider operations per user per API process; default 2. |
+| `ACCOUNT_DELETION_RECENT_AUTH_SECONDS` | Optional | Maximum age of the verified JWT `auth_time` accepted for deletion; default 900 seconds. |
 
 All rate-limit numeric values must be positive. The limiter is process-local;
 keep one API instance until distributed storage is introduced.
@@ -57,6 +59,8 @@ Makefile/Docker commands provide Uvicorn host/port directly. Render supplies
 | `NEXT_PUBLIC_API_BASE_URL` | Yes | FastAPI base URL; local default is `http://localhost:8000`. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Browser-safe Supabase publishable key. |
+| `NEXT_PUBLIC_SITE_URL` | Optional locally; set in production | Canonical public web origin used for metadata. Production owner decision: `https://devstrideai.xyz`. |
+| `NEXT_PUBLIC_SUPPORT_EMAIL` | Optional | Public support address shown on `/support`; leave unset until an owner-approved address is ready. |
 | `NEXT_PUBLIC_REALTIME_MAX_DURATION_SECONDS` | Optional | Browser-enforced maximum live Interview/Mentor/Video session duration; default 3600 seconds. |
 | `SESSION_POLICY_SECRET` | Required in production | Server-only random secret used to sign the app-level inactivity/absolute session policy cookie. Never expose it as `NEXT_PUBLIC_*`. |
 

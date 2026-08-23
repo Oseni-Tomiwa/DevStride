@@ -15,6 +15,11 @@ import { MemoryManager } from "./features/memory/components/memory-manager";
 import { ProfileForm } from "./features/profile/components/profile-form";
 import { ProgressOverview } from "./features/progress/components/progress-overview";
 import { VideoInterview } from "./features/conversations/components/video-interview";
+import HomePage from "./app/page";
+import AboutPage from "./app/about/page";
+import SupportPage from "./app/support/page";
+import PrivacyPage from "./app/privacy/page";
+import TermsPage from "./app/terms/page";
 import ErrorPage from "./app/error";
 import NotFound from "./app/not-found";
 import type { ProgressSummary } from "./features/progress/types";
@@ -70,6 +75,16 @@ async function expectAccessible(ui: ReactElement) {
 }
 
 describe("representative application accessibility", () => {
+  it("keeps the public landing page accessible", async () => expectAccessible(<HomePage />));
+  it("keeps public launch pages accessible", async () => {
+    await expectAccessible(<AboutPage />);
+    cleanup();
+    await expectAccessible(<SupportPage />);
+    cleanup();
+    await expectAccessible(<PrivacyPage />);
+    cleanup();
+    await expectAccessible(<TermsPage />);
+  });
   it("keeps the auth surface accessible", async () => expectAccessible(<AuthForm mode="login" />));
   it("keeps the authenticated shell and dashboard surface accessible", async () => expectAccessible(<AppShell current="dashboard"><h1>Dashboard</h1><p>Practice summary</p></AppShell>));
   it("keeps Goals accessible", async () => expectAccessible(<GoalManager initialGoals={[]} initialProgress={null} />));

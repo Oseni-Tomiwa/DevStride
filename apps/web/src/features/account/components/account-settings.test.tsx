@@ -9,10 +9,15 @@ const updateUser = vi.fn();
 const signOut = vi.fn();
 const push = vi.fn();
 const refresh = vi.fn();
+const { exportAccountData, deleteAccount } = vi.hoisted(() => ({
+  exportAccountData: vi.fn(),
+  deleteAccount: vi.fn(),
+}));
 
 vi.mock("../../../lib/supabase/client", () => ({
   createClient: () => ({ auth: { updateUser, signOut } }),
 }));
+vi.mock("../api", () => ({ exportAccountData, deleteAccount }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, refresh }),
@@ -45,8 +50,11 @@ describe("AccountSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:test"), revokeObjectURL: vi.fn() });
     updateUser.mockResolvedValue({ data: { user: {} }, error: null });
     signOut.mockResolvedValue({ error: null });
+    exportAccountData.mockResolvedValue({ export_version: "1", account: { email: "ada@example.com" } });
+    deleteAccount.mockResolvedValue(undefined);
   });
 
   afterEach(() => vi.unstubAllGlobals());
@@ -154,5 +162,24 @@ describe("AccountSettings", () => {
     await waitFor(() => expect(signOut).toHaveBeenCalledWith({ scope: "global" }));
     expect(push).toHaveBeenCalledWith("/login");
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("offers a user-scoped export without rendering secrets", async () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Export my data" }));
+    await waitFor(() => expect(exportAccountData).toHaveBeenCalled());
+    expect(screen.getByRole("status")).toHaveTextContent("data export is ready");
+    expect(screen.queryByText(/service.role|access.token|refresh.token|api.key/i)).not.toBeInTheDocument();
+  });
+
+  it("requires typed DELETE before account deletion", async () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
+    expect(screen.getByRole("dialog", { name: "Delete your DevStride account?" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Permanently delete account" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), { target: { value: "DELETE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Permanently delete account" }));
+    await waitFor(() => expect(deleteAccount).toHaveBeenCalled());
+    expect(push).toHaveBeenCalledWith("/");
   });
 });

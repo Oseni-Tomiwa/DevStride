@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     supabase_jwt_issuer: str | None = None
     supabase_jwt_audience: str = "authenticated"
     supabase_jwt_algorithms: str = "ES256"
+    supabase_service_role_key: str | None = None
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
     ai_generation_enabled: bool = False
@@ -35,6 +36,7 @@ class Settings(BaseSettings):
     ai_rate_limit_summary_requests: int = 5
     ai_concurrency_global_limit: int = 10
     ai_concurrency_user_limit: int = 2
+    account_deletion_recent_auth_seconds: int = 900
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -115,6 +117,8 @@ class Settings(BaseSettings):
             raise ValueError("AI rate-limit operation limits must be positive")
         if self.ai_concurrency_global_limit <= 0 or self.ai_concurrency_user_limit <= 0:
             raise ValueError("AI concurrency limits must be positive")
+        if self.account_deletion_recent_auth_seconds <= 0:
+            raise ValueError("ACCOUNT_DELETION_RECENT_AUTH_SECONDS must be positive")
         return self
 
     def ai_rate_limit_policy(self, operation: str) -> tuple[int, int]:
