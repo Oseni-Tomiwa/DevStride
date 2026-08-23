@@ -283,3 +283,40 @@ it("turns a rate limit response into a retryable user-facing error", async () =>
       retryAfterSeconds: 60,
     });
 });
+
+it("uses export-specific messaging for export rate limits", async () => {
+  fetchMock.mockResolvedValue(
+    new Response(JSON.stringify({ detail: "Too many data export requests. Please try again later." }), {
+      status: 429,
+      headers: { "content-type": "application/json", "retry-after": "60" },
+    }),
+  );
+
+  await expect(authenticatedClient().get("/api/v1/account/export"))
+    .rejects.toMatchObject({ status: 429, message: "Too many data export requests. Please try again later." });
+});
+
+it("preserves safe recent-authentication detail for account deletion", async () => {
+  fetchMock.mockResolvedValue(
+    new Response(JSON.stringify({ detail: "Recent authentication is required" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    }),
+  );
+
+  await expect(authenticatedClient().post("/api/v1/account/delete", { confirmation: "DELETE" }))
+    .rejects.toMatchObject({ status: 401, message: "Recent authentication is required" });
+});
+
+it("preserves safe partial-deletion detail for account deletion", async () => {
+  const detail = "Your DevStride data was deleted, but sign-in account cleanup could not be completed. Please try again.";
+  fetchMock.mockResolvedValue(
+    new Response(JSON.stringify({ detail }), {
+      status: 503,
+      headers: { "content-type": "application/json" },
+    }),
+  );
+
+  await expect(authenticatedClient().post("/api/v1/account/delete", { confirmation: "DELETE" }))
+    .rejects.toMatchObject({ status: 503, message: detail });
+});

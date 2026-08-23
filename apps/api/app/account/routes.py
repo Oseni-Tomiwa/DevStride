@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.account.rate_limit import consume_export_rate_limit
 from app.account.schemas import DeleteAccountRequest
 from app.account.service import (
     AccountDeletionConfigurationError,
@@ -40,6 +41,7 @@ def _require_recent_auth(current_user: CurrentUser) -> None:
 
 @router.get("/export")
 async def export_account_data(session: Session, current_user: User) -> Response:
+    consume_export_rate_limit(current_user.id)
     payload = await build_export(session, current_user)
     date = datetime.now(UTC).date().isoformat()
     return JSONResponse(
@@ -53,7 +55,7 @@ async def export_account_data(session: Session, current_user: User) -> Response:
 
 @router.post("/delete", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_account_route(
-    data: DeleteAccountRequest, session: Session, current_user: User
+    _: DeleteAccountRequest, session: Session, current_user: User
 ) -> Response:
     _require_recent_auth(current_user)
     try:
@@ -66,7 +68,9 @@ async def delete_account_route(
     except AccountDeletionProviderError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Account deletion could not be completed. Please try again.",
+            detail=(
+                "Your DevStride data was deleted, but sign-in account cleanup "
+                "could not be completed. Please try again."
+            ),
         ) from None
-    del data
     return Response(status_code=status.HTTP_204_NO_CONTENT)

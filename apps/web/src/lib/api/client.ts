@@ -45,12 +45,20 @@ async function errorFromResponse(response: Response): Promise<ApiError> {
       detail = undefined;
     }
   }
+  const safeDetail = errorMessage(detail);
+  const message = safeDetail === "Recent authentication is required"
+      ? safeDetail
+      : response.status === 401
+        ? "Authentication required."
+      : response.status === 429 && safeDetail?.startsWith("Too many data export")
+        ? "Too many data export requests. Please try again later."
+        : response.status === 429
+          ? "Too many AI requests. Please try again shortly."
+        : safeDetail?.startsWith("Your DevStride data was deleted")
+          ? safeDetail
+          : "The API request failed.";
   return new ApiError(
-    response.status === 401
-      ? "Authentication required."
-      : response.status === 429
-        ? "Too many AI requests. Please try again shortly."
-        : errorMessage(detail) ?? "The API request failed.",
+    message,
     response.status,
     detail,
     response.status === 429 ? Number(response.headers.get("retry-after")) || undefined : undefined,

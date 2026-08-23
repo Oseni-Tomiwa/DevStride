@@ -182,4 +182,33 @@ describe("AccountSettings", () => {
     await waitFor(() => expect(deleteAccount).toHaveBeenCalled());
     expect(push).toHaveBeenCalledWith("/");
   });
+
+  it("offers safe reauthentication when recent authentication is required", async () => {
+    deleteAccount.mockRejectedValueOnce(new Error("Recent authentication is required"));
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
+    fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), { target: { value: "DELETE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Permanently delete account" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("sign in again");
+    expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/login?next=%2Faccount",
+    );
+    expect(push).not.toHaveBeenCalledWith("/");
+  });
+
+  it("reports partial deletion accurately when Supabase cleanup fails", async () => {
+    deleteAccount.mockRejectedValueOnce(
+      new Error("Your DevStride data was deleted, but sign-in account cleanup could not be completed. Please try again."),
+    );
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
+    fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), { target: { value: "DELETE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Permanently delete account" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("sign-in account remains");
+    expect(screen.queryByText(/No further action was taken/i)).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalledWith("/");
+  });
 });

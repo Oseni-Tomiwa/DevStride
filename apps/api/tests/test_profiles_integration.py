@@ -467,6 +467,31 @@ def test_account_export_contains_only_current_user_data(
     assert "refresh_token" not in response.text
 
 
+def test_account_export_is_rate_limited_per_user(
+    integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.account.rate_limit import get_export_limiter
+
+    client, signing_key, _ = integration_client
+    user_id = uuid4()
+    original_requests = settings.account_export_requests
+    original_window = settings.account_export_window_seconds
+    get_export_limiter().clear()
+    try:
+        monkeypatch.setattr(settings, "account_export_requests", 1)
+        monkeypatch.setattr(settings, "account_export_window_seconds", 60)
+        headers = auth_headers(signing_key, user_id)
+        assert client.get("/api/v1/account/export", headers=headers).status_code == 200
+        limited = cast(Response, client.get("/api/v1/account/export", headers=headers))
+    finally:
+        settings.account_export_requests = original_requests
+        settings.account_export_window_seconds = original_window
+        get_export_limiter().clear()
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"] == "60"
+
+
 async def test_account_delete_requires_confirmation_and_removes_only_owner_data(
     integration_client: tuple[TestClient, SigningKey, async_sessionmaker[Any]],
     monkeypatch: pytest.MonkeyPatch,
@@ -533,15 +558,33 @@ async def test_account_delete_requires_confirmation_and_removes_only_owner_data(
     async def fake_delete_supabase_user(user_id: UUID) -> None:
         deleted_ids.append(user_id)
 
+    missing_config = cast(
+        Response,
+        client.post(
+            "/api/v1/account/delete", headers=owner_headers, json={"confirmation": "DELETE"}
+        ),
+    )
+    assert missing_config.status_code == 503
+    async with factory() as session:
+        assert (
+            await session.scalar(select(Profile.id).where(Profile.user_id == owner_id)) is not None
+        )
+
     monkeypatch.setattr(settings, "supabase_service_role_key", "test-service-role-key")
-    monkeypatch.setattr(account_service, "delete_supabase_user", fake_delete_supabase_user)
+
+    async def failing_delete_supabase_user(user_id: UUID) -> None:
+        deleted_ids.append(user_id)
+        raise account_service.AccountDeletionProviderError
+
+    monkeypatch.setattr(account_service, "delete_supabase_user", failing_delete_supabase_user)
     response = cast(
         Response,
         client.post(
             "/api/v1/account/delete", headers=owner_headers, json={"confirmation": "DELETE"}
         ),
     )
-    assert response.status_code == 204
+    assert response.status_code == 503
+    assert "data was deleted" in response.json()["detail"]
     assert deleted_ids == [owner_id]
 
     async with factory() as session:
@@ -561,6 +604,16 @@ async def test_account_delete_requires_confirmation_and_removes_only_owner_data(
             )
             is not None
         )
+
+    monkeypatch.setattr(account_service, "delete_supabase_user", fake_delete_supabase_user)
+    retry = cast(
+        Response,
+        client.post(
+            "/api/v1/account/delete", headers=owner_headers, json={"confirmation": "DELETE"}
+        ),
+    )
+    assert retry.status_code == 204
+    assert deleted_ids == [owner_id, owner_id]
 
 
 def goal_payload() -> dict[str, object]:

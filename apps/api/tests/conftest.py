@@ -1,9 +1,26 @@
 import os
 
-os.environ.setdefault("APP_ENV", "test")
+os.environ["APP_ENV"] = "test"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://test:test@localhost:5432/devstride_test"
+os.environ["SUPABASE_JWT_ISSUER"] = "https://test-project.supabase.co/auth/v1"
+os.environ["SUPABASE_JWT_ALGORITHMS"] = "ES256"
+os.environ["CORS_ORIGINS"] = "http://localhost:3000"
+os.environ["AI_GENERATION_ENABLED"] = "false"
+os.environ["AI_RATE_LIMIT_ENABLED"] = "true"
+os.environ["AI_RATE_LIMIT_REQUESTS"] = "20"
+os.environ["AI_RATE_LIMIT_WINDOW_SECONDS"] = "60"
+os.environ["AI_RATE_LIMIT_KICKOFF_REQUESTS"] = "5"
+os.environ["AI_RATE_LIMIT_SUMMARY_REQUESTS"] = "5"
+os.environ["AI_CONCURRENCY_GLOBAL_LIMIT"] = "10"
+os.environ["AI_CONCURRENCY_USER_LIMIT"] = "2"
+os.environ["LIVE_INTERVIEW_ENABLED"] = "false"
+os.environ["VIDEO_INTERVIEW_ENABLED"] = "false"
+os.environ["LIVE_MENTOR_ENABLED"] = "false"
+os.environ["ACCOUNT_DELETION_RECENT_AUTH_SECONDS"] = "900"
+os.environ["ACCOUNT_EXPORT_REQUESTS"] = "3"
+os.environ["ACCOUNT_EXPORT_WINDOW_SECONDS"] = "3600"
+os.environ["SUPABASE_SERVICE_ROLE_KEY"] = ""
+os.environ["OPENAI_API_KEY"] = ""
 os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+asyncpg://test:test@localhost:5432/devstride_test",
+    "TEST_DATABASE_URL", "postgresql+asyncpg://devstride:devstride@localhost:5432/devstride_test"
 )
-os.environ.setdefault("SUPABASE_JWT_ISSUER", "https://test-project.supabase.co/auth/v1")
-os.environ.setdefault("SUPABASE_JWT_ALGORITHMS", "ES256")

@@ -12,6 +12,15 @@ describe("public metadata routes", () => {
     vi.unstubAllEnvs();
   });
 
+  it("fails production metadata when the public site origin is invalid", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "not-a-url");
+    expect(() => createPublicMetadata("About", "Description", "/about")).toThrow(
+      "NEXT_PUBLIC_SITE_URL",
+    );
+    vi.unstubAllEnvs();
+  });
+
   it("includes only public sitemap pages", () => {
     const entries = buildSitemap(new URL("https://devstride.example"));
     const urls = entries.map((entry) => entry.url);

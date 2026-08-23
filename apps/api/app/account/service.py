@@ -244,7 +244,6 @@ async def delete_owned_data(session: AsyncSession, user_id: UUID) -> None:
     await session.execute(delete(Goal).where(Goal.user_id == user_id))
     await session.execute(delete(MemoryRecord).where(MemoryRecord.user_id == user_id))
     await session.execute(delete(Profile).where(Profile.user_id == user_id))
-    await session.commit()
 
 
 def _supabase_auth_url() -> str:
@@ -280,5 +279,10 @@ async def delete_supabase_user(user_id: UUID) -> None:
 
 async def delete_account(session: AsyncSession, current_user: CurrentUser) -> None:
     _ensure_supabase_deletion_configured()
-    await delete_owned_data(session, current_user.id)
+    try:
+        await delete_owned_data(session, current_user.id)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
     await delete_supabase_user(current_user.id)

@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     ai_concurrency_global_limit: int = 10
     ai_concurrency_user_limit: int = 2
     account_deletion_recent_auth_seconds: int = 900
+    account_export_requests: int = 3
+    account_export_window_seconds: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -119,6 +121,10 @@ class Settings(BaseSettings):
             raise ValueError("AI concurrency limits must be positive")
         if self.account_deletion_recent_auth_seconds <= 0:
             raise ValueError("ACCOUNT_DELETION_RECENT_AUTH_SECONDS must be positive")
+        if self.account_export_requests <= 0 or self.account_export_window_seconds <= 0:
+            raise ValueError(
+                "ACCOUNT_EXPORT_REQUESTS and ACCOUNT_EXPORT_WINDOW_SECONDS must be positive"
+            )
         return self
 
     def ai_rate_limit_policy(self, operation: str) -> tuple[int, int]:

@@ -47,6 +47,7 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
   const [privacySuccess, setPrivacySuccess] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [reauthRequired, setReauthRequired] = useState(false);
 
   async function handleEmailChange(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -170,6 +171,7 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
     if (deleteConfirmation !== "DELETE") return;
     setPrivacyError(null);
     setPrivacySuccess(null);
+    setReauthRequired(false);
     setPendingAction("delete");
     try {
       await deleteAccount(createClient());
@@ -180,13 +182,20 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
       }
       await fetch("/auth/session-policy", { method: "DELETE", credentials: "same-origin", cache: "no-store" });
       setDeleteDialogOpen(false);
+      setDeleteConfirmation("");
       router.push("/");
       router.refresh();
     } catch (error) {
-      const message = error instanceof Error && error.message.includes("Recent authentication")
-        ? "Please sign in again, then return here to confirm account deletion."
-        : "We could not delete your account. No further action was taken; please try again.";
-      setPrivacyError(message);
+      if (error instanceof Error && error.message.includes("Recent authentication")) {
+        setReauthRequired(true);
+        setPrivacyError("Please sign in again before deleting your account.");
+      } else if (error instanceof Error && error.message.includes("Your DevStride data was deleted")) {
+        setDeleteDialogOpen(false);
+        setDeleteConfirmation("");
+        setPrivacyError("Your DevStride data was deleted, but your sign-in account remains. Please try account deletion again.");
+      } else {
+        setPrivacyError("We could not start account deletion. Please try again.");
+      }
     } finally {
       setPendingAction(null);
     }
@@ -270,6 +279,7 @@ export function AccountSettings({ email, emailConfirmedAt, createdAt }: AccountS
           <div><h3>Delete account</h3><p className="muted">This removes active DevStride product data. Export first if you may need a copy.</p><button type="button" className="button-danger" disabled={isBusy} onClick={() => { setPrivacyError(null); setPrivacySuccess(null); setDeleteConfirmation(""); setDeleteDialogOpen(true); }}>Delete account</button></div>
         </div>
         {privacyError && <p className="form-error" role="alert">{privacyError}</p>}
+        {reauthRequired && <p className="form-error"><a href="/login?next=%2Faccount">Sign in again</a>, then return here to confirm deletion.</p>}
         {privacySuccess && <p className="form-success" role="status">{privacySuccess}</p>}
       </section>
 

@@ -35,6 +35,8 @@ private signing keys, service-role credentials, or OpenAI keys.
 | `AI_CONCURRENCY_GLOBAL_LIMIT` | Optional | Maximum concurrent provider operations per API process; default 10. |
 | `AI_CONCURRENCY_USER_LIMIT` | Optional | Maximum concurrent provider operations per user per API process; default 2. |
 | `ACCOUNT_DELETION_RECENT_AUTH_SECONDS` | Optional | Maximum age of the verified JWT `auth_time` accepted for deletion; default 900 seconds. |
+| `ACCOUNT_EXPORT_REQUESTS` | Optional | Per-user export requests per process-local window; default 3. |
+| `ACCOUNT_EXPORT_WINDOW_SECONDS` | Optional | Process-local export rate-limit window; default 3600 seconds. |
 
 All rate-limit numeric values must be positive. The limiter is process-local;
 keep one API instance until distributed storage is introduced.
@@ -59,7 +61,7 @@ Makefile/Docker commands provide Uvicorn host/port directly. Render supplies
 | `NEXT_PUBLIC_API_BASE_URL` | Yes | FastAPI base URL; local default is `http://localhost:8000`. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Browser-safe Supabase publishable key. |
-| `NEXT_PUBLIC_SITE_URL` | Optional locally; set in production | Canonical public web origin used for metadata. Production owner decision: `https://devstrideai.xyz`. |
+| `NEXT_PUBLIC_SITE_URL` | Optional locally; required in production | Canonical public web origin used for metadata. Production owner decision: `https://devstrideai.xyz`; production builds fail if it is missing or invalid. |
 | `NEXT_PUBLIC_SUPPORT_EMAIL` | Optional | Public support address shown on `/support`; leave unset until an owner-approved address is ready. |
 | `NEXT_PUBLIC_REALTIME_MAX_DURATION_SECONDS` | Optional | Browser-enforced maximum live Interview/Mentor/Video session duration; default 3600 seconds. |
 | `SESSION_POLICY_SECRET` | Required in production | Server-only random secret used to sign the app-level inactivity/absolute session policy cookie. Never expose it as `NEXT_PUBLIC_*`. |
@@ -89,6 +91,11 @@ database. Alembic prefers `TEST_DATABASE_URL` when present; otherwise it uses
 `APP_ENV=test` allows missing `DATABASE_URL` and `SUPABASE_JWT_ISSUER` for
 isolated tests. It does not weaken URL/algorithm validation when values are
 provided.
+
+Account export protection is process-local and defaults to three exports per
+user per hour. Account deletion commits PostgreSQL-owned data before calling
+the separate Supabase Auth admin API; if that external deletion fails, the API
+reports partial deletion and a retry remains safe and idempotent.
 
 Run migrations with:
 
