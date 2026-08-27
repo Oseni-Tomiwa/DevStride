@@ -1,7 +1,11 @@
-from fastapi import FastAPI
+from collections.abc import Awaitable, Callable
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from app.account.routes import router as account_router
+from app.ai.latency import PracticeLatencyTrace, bind_trace, reset_trace
 from app.api.health import router as health_router
 from app.auth.routes import router as auth_router
 from app.conversations.routes import router as conversations_router
@@ -28,6 +32,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_latency_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Attach a safe correlation ID and timing trace to every API request."""
+    trace = PracticeLatencyTrace("http", f"{request.method} {request.url.path}")
+    trace_token = bind_trace(trace)
+    trace.mark("request_received")
+    try:
+        response = await call_next(request)
+    except BaseException:
+        trace.complete()
+        raise
+    else:
+        trace.complete(response.status_code)
+        response.headers["X-Request-ID"] = str(trace.correlation_id)
+        return response
+    finally:
+        reset_trace(trace_token)
+
 
 app.include_router(health_router)
 app.include_router(account_router)

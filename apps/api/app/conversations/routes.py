@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.concurrency import require_ai_concurrency
 from app.ai.dependencies import get_ai_provider
+from app.ai.latency import mark_current_stage
 from app.ai.provider import AIProvider
 from app.ai.rate_limit import require_ai_rate_limit
 from app.auth.dependencies import get_current_user
@@ -91,11 +92,13 @@ async def create(
 @router.get("", response_model=list[ConversationResponse])
 async def list_all(session: Session, current_user: AuthenticatedUser) -> list[ConversationResponse]:
     conversations = await list_conversations(session, current_user.id)
+    mark_current_stage("conversations_loaded")
     responses: list[ConversationResponse] = []
     for conversation in conversations:
         response = ConversationResponse.model_validate(conversation)
         response.title = await conversation_display_title(session, conversation)
         responses.append(response)
+    mark_current_stage("conversation_list_ready")
     return responses
 
 
@@ -112,7 +115,9 @@ async def get_one(
             status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
         ) from None
     response = ConversationResponse.model_validate(conversation)
+    mark_current_stage("conversation_loaded")
     response.title = await conversation_display_title(session, conversation)
+    mark_current_stage("conversation_detail_ready")
     return response
 
 
@@ -240,6 +245,7 @@ async def interview_start(
                 session, current_user.id, conversation_id, provider
             ):
                 if isinstance(event, StreamAssistantDelta):
+                    mark_current_stage("first_sse_assistant_delta_emitted")
                     yield _sse_event("assistant_delta", {"delta": event.delta})
                 elif isinstance(event, StreamInterviewPending):
                     yield _sse_event("interview_pending", {})
@@ -322,6 +328,7 @@ async def team_start(
                 session, current_user.id, conversation_id, provider
             ):
                 if isinstance(event, StreamAssistantDelta):
+                    mark_current_stage("first_sse_assistant_delta_emitted")
                     yield _sse_event("assistant_delta", {"delta": event.delta})
                 elif isinstance(event, StreamTeamPending):
                     yield _sse_event("team_pending", {})
@@ -383,6 +390,7 @@ async def list_messages(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
         ) from None
+    mark_current_stage("messages_loaded")
     return [MessageResponse.model_validate(item) for item in messages]
 
 
@@ -463,6 +471,7 @@ async def stream(
                     ).model_dump(mode="json")
                     yield _sse_event("user_message", payload)
                 elif isinstance(event, StreamAssistantDelta):
+                    mark_current_stage("first_sse_assistant_delta_emitted")
                     yield _sse_event("assistant_delta", {"delta": event.delta})
                 elif isinstance(event, StreamAssistantComplete):
                     payload = MessageResponse.model_validate(event.message).model_dump(mode="json")
@@ -545,6 +554,7 @@ async def retry_stream(
                     ).model_dump(mode="json")
                     yield _sse_event("user_message", payload)
                 elif isinstance(event, StreamAssistantDelta):
+                    mark_current_stage("first_sse_assistant_delta_emitted")
                     yield _sse_event("assistant_delta", {"delta": event.delta})
                 elif isinstance(event, StreamAssistantComplete):
                     payload = MessageResponse.model_validate(event.message).model_dump(mode="json")

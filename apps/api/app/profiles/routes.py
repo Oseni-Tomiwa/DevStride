@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.latency import mark_current_stage
 from app.auth.dependencies import get_current_user
 from app.auth.models import CurrentUser
 from app.database.session import get_db_session
@@ -24,6 +25,7 @@ AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 async def get_my_profile(session: Session, current_user: AuthenticatedUser) -> ProfileResponse:
     try:
         profile = await get_profile(session, current_user.id)
+        mark_current_stage("profile_loaded")
         return ProfileResponse.model_validate(profile)
     except ProfileNotFoundError:
         raise HTTPException(

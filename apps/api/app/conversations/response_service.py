@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.latency import PracticeLatencyTrace
+from app.ai.latency import get_or_create_trace, mark_current_stage
 from app.ai.prompts import SYSTEM_INSTRUCTION
 from app.ai.provider import (
     AIProvider,
@@ -158,6 +158,8 @@ async def start_interview_response(
     provider: AIProvider | None,
 ) -> AsyncIterator[StreamEvent]:
     """Generate the first interviewer question without creating a fake user turn."""
+    trace = get_or_create_trace("interview", "interview_start")
+    trace.mark("request_received")
     conversation = await repository.get_by_id_and_user_id_for_update(
         session, conversation_id, user_id
     )
@@ -165,6 +167,7 @@ async def start_interview_response(
         raise InterviewStartNotAllowedError
     if conversation.mode != "interview":
         raise InterviewStartNotAllowedError
+    trace.mark("conversation_loaded")
 
     messages = await repository.list_by_conversation_id(session, conversation_id)
     existing_assistant = next(
@@ -189,7 +192,9 @@ async def start_interview_response(
     chunks: list[str] = []
     final_result: GenerationResult | None = None
     try:
+        trace.mark("provider_request_started")
         async for chunk in provider.stream([], system_instruction=instruction):
+            trace.mark_once("first_provider_chunk_received")
             if chunk.delta:
                 chunks.append(chunk.delta)
                 yield StreamAssistantDelta(chunk.delta)
@@ -247,6 +252,7 @@ async def start_interview_response(
     metadata["interview_started"] = True
     conversation.metadata_ = metadata
     await session.commit()
+    trace.mark("stream_completed")
     yield StreamAssistantComplete(assistant_message)
 
 
@@ -257,7 +263,7 @@ async def complete_live_interview(
     provider: AIProvider | None,
 ) -> Message:
     """Run the existing Interview assessment without persisting a fake user turn."""
-    trace = PracticeLatencyTrace("interview", "live_interview_assessment")
+    trace = get_or_create_trace("interview", "live_interview_assessment")
     trace.mark("request_received")
     conversation = await repository.get_by_id_and_user_id_for_update(
         session, conversation_id, user_id
@@ -356,11 +362,14 @@ async def start_team_response(
     provider: AIProvider | None,
 ) -> AsyncIterator[StreamEvent]:
     """Generate the first Team Practice turn without creating a fake user turn."""
+    trace = get_or_create_trace("team", "team_start")
+    trace.mark("request_received")
     conversation = await repository.get_by_id_and_user_id_for_update(
         session, conversation_id, user_id
     )
     if conversation is None or conversation.mode != "team":
         raise TeamStartNotAllowedError
+    trace.mark("conversation_loaded")
 
     messages = await repository.list_by_conversation_id(session, conversation_id)
     existing_assistant = next(
@@ -385,7 +394,9 @@ async def start_team_response(
     chunks: list[str] = []
     final_result: GenerationResult | None = None
     try:
+        trace.mark("provider_request_started")
         async for chunk in provider.stream([], system_instruction=instruction):
+            trace.mark_once("first_provider_chunk_received")
             if chunk.delta:
                 chunks.append(chunk.delta)
                 yield StreamAssistantDelta(chunk.delta)
@@ -433,6 +444,7 @@ async def start_team_response(
     metadata["team_started"] = True
     conversation.metadata_ = metadata
     await session.commit()
+    trace.mark("stream_completed")
     yield StreamAssistantComplete(assistant_message)
 
 
@@ -443,6 +455,7 @@ async def system_instruction(
     if mode not in {"mentor", "interview", "team"}:
         return SYSTEM_INSTRUCTION
     profile = await profile_repository.get_profile_by_user_id(session, user_id)
+    mark_current_stage("profile_context_loaded")
     if profile is None:
         if mode == "interview":
             raise InterviewProfileRequiredError
@@ -454,11 +467,13 @@ async def system_instruction(
         if mode in {"mentor", "interview", "team"} and conversation.focus_area_id is not None
         else None
     )
+    mark_current_stage("goal_context_resolved")
     if mode == "interview":
         try:
             memories = await retrieve_for_prompt(session, user_id)
         except Exception:
             memories = []
+        mark_current_stage("memory_retrieval_completed")
         return build_interview_instruction(
             profile,
             conversation.metadata_ or {},
@@ -470,6 +485,7 @@ async def system_instruction(
             memories = await retrieve_for_prompt(session, user_id)
         except Exception:
             memories = []
+        mark_current_stage("memory_retrieval_completed")
         return build_team_instruction(
             profile,
             conversation.metadata_ or {},
@@ -480,6 +496,7 @@ async def system_instruction(
         memories = await retrieve_for_prompt(session, user_id)
     except Exception:
         memories = []
+    mark_current_stage("memory_retrieval_completed")
     return build_mentor_instruction(profile, memory_context(memories), goal_context)
 
 
@@ -490,10 +507,11 @@ async def generate_response(
     data: RespondRequest,
     provider: AIProvider | None,
 ) -> tuple[Message, Message]:
-    trace = PracticeLatencyTrace("general", "response")
+    trace = get_or_create_trace("general", "response")
     trace.mark("request_received")
     conversation = await get_conversation(session, user_id, conversation_id)
     trace.mode = conversation.mode
+    trace.mark("conversation_loaded")
     trace.mark("context_resolution_complete")
     if provider is None:
         raise AssistantGenerationDisabledError
@@ -562,10 +580,11 @@ async def stream_response(
     provider: AIProvider | None,
 ) -> AsyncIterator[StreamEvent]:
     """Persist the user turn, stream normalized deltas, then persist one assistant turn."""
-    trace = PracticeLatencyTrace("general", "stream_response")
+    trace = get_or_create_trace("general", "stream_response")
     trace.mark("request_received")
     conversation = await get_conversation(session, user_id, conversation_id)
     trace.mode = conversation.mode
+    trace.mark("conversation_loaded")
     trace.mark("context_resolution_complete")
     instruction = await system_instruction(session, user_id, conversation)
 
@@ -577,6 +596,7 @@ async def stream_response(
     await repository.create_message(session, user_message)
     repository.touch_conversation_activity(conversation)
     await session.commit()
+    trace.mark("user_message_persisted")
     yield StreamUserMessage(user_message)
 
     if provider is None:
@@ -585,12 +605,14 @@ async def stream_response(
     recent_messages = await repository.get_recent_by_conversation_id(
         session, conversation_id, limit=RECENT_MESSAGE_CONTEXT_LIMIT
     )
+    trace.mark("recent_message_history_loaded")
     context = _provider_messages(list(reversed(recent_messages)))
     chunks: list[str] = []
     final_result: GenerationResult | None = None
     try:
         trace.mark("provider_request_started")
         async for chunk in provider.stream(context, system_instruction=instruction):
+            trace.mark_once("first_provider_chunk_received")
             if chunk.delta:
                 chunks.append(chunk.delta)
                 yield StreamAssistantDelta(chunk.delta)
@@ -639,6 +661,7 @@ async def stream_response(
     trace.mark("persistence_complete")
     await _maybe_generate_session_summary(session, user_id, conversation, data.content, provider)
     trace.mark("response_returned")
+    trace.mark("stream_completed")
     yield StreamAssistantComplete(assistant_message)
 
 
@@ -650,7 +673,10 @@ async def retry_stream_response(
     provider: AIProvider | None,
 ) -> AsyncIterator[StreamEvent]:
     """Regenerate for an existing user message without inserting another user row."""
+    trace = get_or_create_trace("general", "retry_stream")
+    trace.mark("request_received")
     user_message = await get_retry_message(session, user_id, conversation_id, message_id)
+    trace.mark("conversation_loaded")
     yield StreamUserMessage(user_message)
 
     if provider is None:
@@ -661,11 +687,14 @@ async def retry_stream_response(
     recent_messages = await repository.get_recent_by_conversation_id(
         session, conversation_id, limit=RECENT_MESSAGE_CONTEXT_LIMIT
     )
+    trace.mark("recent_message_history_loaded")
     context = _provider_messages(list(reversed(recent_messages)))
     chunks: list[str] = []
     final_result: GenerationResult | None = None
     try:
+        trace.mark("provider_request_started")
         async for chunk in provider.stream(context, system_instruction=instruction):
+            trace.mark_once("first_provider_chunk_received")
             if chunk.delta:
                 chunks.append(chunk.delta)
                 yield StreamAssistantDelta(chunk.delta)
@@ -713,4 +742,5 @@ async def retry_stream_response(
     await _maybe_generate_session_summary(
         session, user_id, conversation, user_message.content, provider
     )
+    trace.mark("stream_completed")
     yield StreamAssistantComplete(assistant_message)

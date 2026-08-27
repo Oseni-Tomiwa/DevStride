@@ -4,6 +4,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 
+from app.ai.latency import mark_current_stage
 from app.auth.exceptions import authentication_error
 from app.auth.jwt import verify_access_token
 from app.auth.models import CurrentUser
@@ -18,7 +19,9 @@ async def get_current_user(
         raise authentication_error()
 
     try:
-        return await verify_access_token(credentials.credentials)
+        user = await verify_access_token(credentials.credentials)
+        mark_current_stage("authentication_completed")
+        return user
     except InvalidTokenError as exc:
         del exc
         raise authentication_error() from None

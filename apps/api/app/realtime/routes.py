@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.concurrency import require_realtime_concurrency
 from app.ai.dependencies import get_ai_provider
-from app.ai.latency import PracticeLatencyTrace
+from app.ai.latency import get_or_create_trace
 from app.ai.provider import AIProvider
 from app.ai.rate_limit import consume_realtime_rate_limit
 from app.ai.realtime import (
@@ -247,7 +247,7 @@ async def connect_session(
     current_user: AuthenticatedUser,
     _concurrency: RealtimeConcurrency,
 ) -> Response:
-    trace = PracticeLatencyTrace("realtime", "connect")
+    trace = get_or_create_trace("realtime", "connect")
     trace.mark("request_received")
     conversation = await _owned_live_conversation(
         session, current_user.id, conversation_id, mode=None

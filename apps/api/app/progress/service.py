@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.latency import mark_current_stage
 from app.conversations.models import Conversation
 from app.conversations.title import DEFAULT_CONVERSATION_TITLE, derive_conversation_title
 from app.goals import repository as goals_repository
@@ -931,13 +932,18 @@ async def get_progress_summary(
     session: AsyncSession, user_id: UUID, now: datetime | None = None
 ) -> ProgressSummaryResponse:
     rows = await repository.get_progress_rows(session, user_id)
+    mark_current_stage("progress_rows_loaded")
     summary_rows = await repository.get_recent_summary_evidence(
         session, user_id, limit=SUMMARY_EVIDENCE_LIMIT
     )
+    mark_current_stage("progress_summary_evidence_loaded")
     memories = await repository.get_active_focus_memories(session, user_id)
+    mark_current_stage("progress_focus_memories_loaded")
     profile = await profile_repository.get_profile_by_user_id(session, user_id)
+    mark_current_stage("progress_profile_loaded")
     active_goal = await goals_repository.get_active_owned(session, user_id)
-    return build_progress_summary(
+    mark_current_stage("progress_active_goal_loaded")
+    response = build_progress_summary(
         rows=rows,
         summary_rows=summary_rows,
         memories=memories,
@@ -945,6 +951,8 @@ async def get_progress_summary(
         now=now or datetime.now(UTC),
         active_goal=active_goal,
     )
+    mark_current_stage("progress_calculation_completed")
+    return response
 
 
 async def get_goal_progress(
