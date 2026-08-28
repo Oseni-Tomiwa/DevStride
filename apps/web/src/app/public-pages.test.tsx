@@ -3,11 +3,20 @@ import "@testing-library/jest-dom/vitest";
 import { describe, expect, it } from "vitest";
 
 import AboutPage from "./about/page";
+import AccessibilityPage from "./accessibility/page";
 import PrivacyPage from "./privacy/page";
 import SupportPage from "./support/page";
 import TermsPage from "./terms/page";
 
 describe("public launch pages", () => {
+  it("publishes an accurate accessibility statement", () => {
+    render(<AccessibilityPage />);
+    expect(screen.getByRole("heading", { name: /practice should be open/i })).toBeInTheDocument();
+    expect(screen.getByText(/aim to conform to WCAG 2\.2 Level AA/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /support page/i })).toHaveAttribute("href", "/support");
+    expect(screen.getByText(/certification or guarantee/i)).toBeInTheDocument();
+  });
+
   it("explains DevStride and offers a start CTA", () => {
     render(<AboutPage />);
     expect(screen.getByRole("heading", { name: /practice the work behind the work/i })).toBeInTheDocument();

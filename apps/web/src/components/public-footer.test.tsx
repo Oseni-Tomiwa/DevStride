@@ -11,6 +11,7 @@ describe("PublicFooter", () => {
     expect(screen.getByRole("link", { name: "Support" })).toHaveAttribute("href", "/support");
     expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
     expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute("href", "/terms");
+    expect(screen.getByRole("link", { name: "Accessibility" })).toHaveAttribute("href", "/accessibility");
     expect(screen.queryByText(/coming next/i)).not.toBeInTheDocument();
   });
 });

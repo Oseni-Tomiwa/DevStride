@@ -17,6 +17,7 @@ import { ProgressOverview } from "./features/progress/components/progress-overvi
 import { VideoInterview } from "./features/conversations/components/video-interview";
 import HomePage from "./app/page";
 import AboutPage from "./app/about/page";
+import AccessibilityPage from "./app/accessibility/page";
 import SupportPage from "./app/support/page";
 import PrivacyPage from "./app/privacy/page";
 import TermsPage from "./app/terms/page";
@@ -78,6 +79,8 @@ describe("representative application accessibility", () => {
   it("keeps the public landing page accessible", async () => expectAccessible(<HomePage />));
   it("keeps public launch pages accessible", async () => {
     await expectAccessible(<AboutPage />);
+    cleanup();
+    await expectAccessible(<AccessibilityPage />);
     cleanup();
     await expectAccessible(<SupportPage />);
     cleanup();

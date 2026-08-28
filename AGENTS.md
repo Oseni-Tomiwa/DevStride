@@ -66,6 +66,7 @@ Before editing:
 - Do not log secrets, tokens, or sensitive user content.
 - Review generated migrations and security-sensitive code manually.
 - Update `docs/product/PROJECT_STATUS.md` when product state or priorities change.
+- User-facing changes must follow `docs/product/ACCESSIBILITY.md`: preserve semantic HTML, keyboard access, visible focus, accessible names, form labels, accessible errors, and non-color-only communication; add relevant accessibility tests where practical and report known limitations.
 
 ## Commands
 
