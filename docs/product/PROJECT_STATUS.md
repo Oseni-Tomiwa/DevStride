@@ -1,7 +1,7 @@
 # DevStride Project Status
 
-Last reviewed: 2026-08-11  
-Current release: v0.1.0  
+Last reviewed: 2026-09-17
+Current release: v0.1.0
 Repository migration head: `0008`
 
 This is the canonical source of truth for the current product state and the
@@ -29,6 +29,9 @@ configuration and deployment checks.
   audience, expiry, subject, signature, and ownership enforcement
 - onboarding and the editable coaching Profile
 - Account view for authenticated sign-in information
+- first native Expo mobile slice with persisted Supabase authentication for
+  existing confirmed accounts, authenticated user/profile loading, a read-only
+  coaching Profile screen, bounded failure states, and sign-out
 - Goals / Development Plans experience with deterministic previews, editable
   focus areas, archive/history behavior, and goal-linked practice launch
 - personalized Dashboard with evidence-based next-practice recommendations,

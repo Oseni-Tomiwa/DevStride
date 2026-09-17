@@ -3,6 +3,12 @@
   "private": true,
   "packageManager": "pnpm@10.0.0",
   "scripts": {
+    "mobile:start": "pnpm --filter @devstride/mobile start",
+    "mobile:ios": "pnpm --filter @devstride/mobile ios",
+    "mobile:android": "pnpm --filter @devstride/mobile android",
+    "mobile:lint": "pnpm --filter @devstride/mobile lint",
+    "mobile:typecheck": "pnpm --filter @devstride/mobile typecheck",
+    "mobile:test": "pnpm --filter @devstride/mobile test",
     "web:dev": "pnpm --filter @devstride/web dev",
     "web:lint": "pnpm --filter @devstride/web lint",
     "web:typecheck": "pnpm --filter @devstride/web typecheck",

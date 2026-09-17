@@ -17,6 +17,7 @@ only as historical bootstrap references.
 ```text
 apps/web        Next.js frontend
 apps/api        FastAPI backend
+apps/mobile     Expo native mobile app
 packages        Shared contracts and prompts
 docs            Product, architecture, and ADRs
 evals           Evaluation strategy and future stable datasets
@@ -88,6 +89,36 @@ curl http://localhost:8000/ready
 returns 503 when PostgreSQL is unavailable; OpenAI availability is not part of
 readiness.
 
+## Run the mobile app
+
+The first Expo mobile slice supports an existing confirmed account: email and
+password sign-in, persisted Supabase sessions, authenticated user/profile
+loading, profile display, and sign-out. Mobile sign-up, onboarding,
+conversations, streaming, and voice/video are intentionally not included.
+
+Create an untracked local environment file from the public-only template:
+
+```bash
+cp apps/mobile/.env.example apps/mobile/.env.local
+```
+
+Set `EXPO_PUBLIC_API_BASE_URL` to an address reachable from the target device.
+`localhost` works for the iOS simulator; Android Emulator commonly uses
+`http://10.0.2.2:8000`; a physical device needs the development machine's LAN
+address. Set only the Supabase project URL and publishable key in the other two
+variables—never a service-role key or backend secret.
+
+From the repository root:
+
+```bash
+pnpm install
+pnpm mobile:start
+```
+
+Then press `i` for iOS or `a` for Android, or use `pnpm mobile:ios` and
+`pnpm mobile:android`. Mobile-only checks are `pnpm mobile:lint`,
+`pnpm mobile:typecheck`, and `pnpm mobile:test`.
+
 ## Quality checks
 
 ```bash
@@ -101,6 +132,10 @@ pnpm web:lint
 pnpm web:typecheck
 pnpm web:test
 pnpm web:build
+
+pnpm mobile:lint
+pnpm mobile:typecheck
+pnpm mobile:test
 
 make api-lint
 make api-format-check

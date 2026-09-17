@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "DevStride",
+    "slug": "devstride",
+    "version": "0.1.0",
+    "platforms": ["ios", "android"],
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "predictiveBackGestureEnabled": false
+    }
+  }
+}

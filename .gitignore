@@ -6,6 +6,7 @@
 # Node
 node_modules/
 .next/
+.expo/
 out/
 coverage/
 *.tsbuildinfo
