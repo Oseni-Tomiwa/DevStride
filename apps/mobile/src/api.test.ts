@@ -1,4 +1,5 @@
 import { createDevStrideApi, MobileApiError } from "./api";
+import { conversationFixture, userMessageFixture } from "./conversations/test-fixtures";
 
 const userResponse = {
   id: "a5ab2808-6304-4c8c-a261-67d6ce2eb4bd",
@@ -118,6 +119,118 @@ describe("createDevStrideApi", () => {
     });
 
     await expect(api.getCurrentUser()).rejects.toMatchObject({
+      kind: "invalid_response",
+      status: 200,
+    });
+  });
+
+  it("lists, creates, loads, and fetches messages through authenticated conversation endpoints", async () => {
+    const fetchImpl = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValueOnce(response([conversationFixture]))
+      .mockResolvedValueOnce(response(conversationFixture, 201))
+      .mockResolvedValueOnce(response(conversationFixture))
+      .mockResolvedValueOnce(response([userMessageFixture]));
+    const api = createDevStrideApi({
+      apiBaseUrl: "https://api.example.com/",
+      getAccessToken: async () => "access-token",
+      fetchImpl,
+    });
+
+    await expect(api.listConversations()).resolves.toEqual([conversationFixture]);
+    await expect(api.createGeneralConversation(" API design ")).resolves.toEqual(conversationFixture);
+    await expect(api.getConversation(conversationFixture.id)).resolves.toEqual(conversationFixture);
+    await expect(api.listMessages(conversationFixture.id)).resolves.toEqual([userMessageFixture]);
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://api.example.com/api/v1/conversations",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ title: "API design", mode: "general" }),
+      }),
+    );
+  });
+
+  it("opens the existing stream endpoint directly without posting /messages", async () => {
+    const streamResponse = new Response("event: done\ndata: {}\n\n", {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+    });
+    const fetchImpl = jest.fn().mockResolvedValue(streamResponse);
+    const api = createDevStrideApi({
+      apiBaseUrl: "https://api.example.com",
+      getAccessToken: async () => "access-token",
+      fetchImpl,
+    });
+
+    await expect(
+      api.streamConversation(conversationFixture.id, " How should I version this API? "),
+    ).resolves.toBe(streamResponse);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `https://api.example.com/api/v1/conversations/${conversationFixture.id}/stream`,
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Accept: "text/event-stream",
+          Authorization: "Bearer access-token",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ content: "How should I version this API?" }),
+      }),
+    );
+    expect(fetchImpl.mock.calls[0][0]).not.toContain("/messages");
+  });
+
+  it("opens retry streaming without sending a message body", async () => {
+    const streamResponse = new Response("event: done\ndata: {}\n\n", {
+      headers: { "Content-Type": "text/event-stream" },
+    });
+    const fetchImpl = jest.fn().mockResolvedValue(streamResponse);
+    const api = createDevStrideApi({
+      apiBaseUrl: "https://api.example.com",
+      getAccessToken: async () => "access-token",
+      fetchImpl,
+    });
+
+    await api.retryMessage(conversationFixture.id, userMessageFixture.id);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `https://api.example.com/api/v1/conversations/${conversationFixture.id}/messages/${userMessageFixture.id}/retry`,
+      expect.objectContaining({ method: "POST", body: undefined }),
+    );
+  });
+
+  it.each([
+    [404, "not_found"],
+    [409, "conflict"],
+    [429, "rate_limited"],
+  ])("normalizes conversation HTTP %i as %s", async (status, kind) => {
+    const api = createDevStrideApi({
+      apiBaseUrl: "https://api.example.com",
+      getAccessToken: async () => "access-token",
+      fetchImpl: jest.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "failed" }), {
+          status,
+          headers: status === 429 ? { "Retry-After": "12" } : undefined,
+        }),
+      ),
+    });
+
+    await expect(api.getConversation(conversationFixture.id)).rejects.toMatchObject({
+      kind,
+      status,
+      retryAfterSeconds: status === 429 ? 12 : null,
+    });
+  });
+
+  it("rejects a successful stream response with the wrong media type", async () => {
+    const api = createDevStrideApi({
+      apiBaseUrl: "https://api.example.com",
+      getAccessToken: async () => "access-token",
+      fetchImpl: jest.fn().mockResolvedValue(response({ ok: true })),
+    });
+    await expect(api.streamConversation(conversationFixture.id, "hello")).rejects.toMatchObject({
       kind: "invalid_response",
       status: 200,
     });

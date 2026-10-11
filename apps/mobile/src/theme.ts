@@ -1,6 +1,6 @@
 import { useColorScheme } from "react-native";
 
-const lightColors = {
+export const lightAppColors = {
   background: "#F4F7F5",
   surface: "#FFFFFF",
   text: "#17211D",
@@ -14,7 +14,7 @@ const lightColors = {
   tag: "#E4EFE9",
 };
 
-const darkColors = {
+export const darkAppColors = {
   background: "#0D1512",
   surface: "#17211D",
   text: "#F1F5F2",
@@ -30,7 +30,7 @@ const darkColors = {
 
 export function useAppTheme() {
   const isDark = useColorScheme() === "dark";
-  return { isDark, colors: isDark ? darkColors : lightColors };
+  return { isDark, colors: isDark ? darkAppColors : lightAppColors };
 }
 
-export type AppColors = typeof lightColors;
+export type AppColors = typeof lightAppColors;

@@ -1,6 +1,6 @@
 # DevStride Project Status
 
-Last reviewed: 2026-09-17
+Last reviewed: 2026-09-18
 Current release: v0.1.0
 Repository migration head: `0008`
 
@@ -29,9 +29,13 @@ configuration and deployment checks.
   audience, expiry, subject, signature, and ownership enforcement
 - onboarding and the editable coaching Profile
 - Account view for authenticated sign-in information
-- first native Expo mobile slice with persisted Supabase authentication for
+- native Expo mobile foundation with persisted Supabase authentication for
   existing confirmed accounts, authenticated user/profile loading, a read-only
   coaching Profile screen, bounded failure states, and sign-out
+- Native Chat milestone implementation with typed Conversations, Chat, and
+  Profile navigation; owned conversation history; General-only creation and
+  authenticated SSE chat; explicit Stop, reconciliation, and failed-message
+  Retry handling; and read-only existing Mentor, Interview, and Team history
 - Goals / Development Plans experience with deterministic previews, editable
   focus areas, archive/history behavior, and goal-linked practice launch
 - personalized Dashboard with evidence-based next-practice recommendations,
@@ -132,6 +136,9 @@ configuration and deployment checks.
   functionality is intentionally not part of the current product
 - resolve the Starlette/httpx test-client deprecation warning
 - resolve the jsdom navigation warning in frontend tests
+- manually validate the Native Chat milestone on iOS, then Android; automated
+  mobile lint, type checking, tests, Expo Doctor, and Expo config validation are
+  part of the implementation gate
 
 ## Next
 

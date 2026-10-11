@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer } from "react";
 import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -7,9 +7,9 @@ import { createDevStrideApi, MobileApiError } from "./src/api";
 import { initialAppState, mobileAppReducer } from "./src/app-state";
 import { registerAuthAutoRefresh } from "./src/auth-lifecycle";
 import { ActionButton } from "./src/components/ActionButton";
-import { ProfileScreen } from "./src/components/ProfileScreen";
 import { SignInScreen } from "./src/components/SignInScreen";
 import { loadAuthenticatedProfile } from "./src/load-profile";
+import { AuthenticatedNavigator } from "./src/navigation/AuthenticatedNavigator";
 import { mobileConfig } from "./src/runtime-config";
 import { getAccessToken, supabase } from "./src/supabase";
 import { useAppTheme, type AppColors } from "./src/theme";
@@ -68,6 +68,11 @@ function App() {
   const { colors, isDark } = useAppTheme();
   const [state, dispatch] = useReducer(mobileAppReducer, initialAppState);
 
+  const handleUnauthorized = useCallback(() => {
+    dispatch({ type: "unauthorized" });
+    void supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     let active = true;
     const unregisterRefresh = registerAuthAutoRefresh(supabase.auth, AppState);
@@ -119,8 +124,7 @@ function App() {
       .catch((error: unknown) => {
         if (!active) return;
         if (error instanceof MobileApiError && error.kind === "unauthorized") {
-          dispatch({ type: "unauthorized" });
-          void supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+          handleUnauthorized();
         } else if (error instanceof MobileApiError && error.kind === "profile_missing") {
           dispatch({ type: "profileMissing" });
         } else {
@@ -135,16 +139,16 @@ function App() {
     return () => {
       active = false;
     };
-  }, [state]);
+  }, [handleUnauthorized, state]);
 
-  const signOut = async (): Promise<string | null> => {
+  const signOut = useCallback(async (): Promise<string | null> => {
     try {
       const { error } = await supabase.auth.signOut({ scope: "local" });
       return error ? "Unable to sign out. Check your connection and try again." : null;
     } catch {
       return "Unable to sign out. Check your connection and try again.";
     }
-  };
+  }, []);
 
   let content;
   switch (state.status) {
@@ -162,9 +166,11 @@ function App() {
       break;
     case "authenticated":
       content = (
-        <ProfileScreen
+        <AuthenticatedNavigator
+          api={api}
           colors={colors}
           onSignOut={signOut}
+          onUnauthorized={handleUnauthorized}
           profile={state.profile}
           user={state.user}
         />
@@ -201,9 +207,13 @@ function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style={isDark ? "light" : "dark"} />
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        {content}
-      </SafeAreaView>
+      {state.status === "authenticated" ? (
+        content
+      ) : (
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+          {content}
+        </SafeAreaView>
+      )}
     </SafeAreaProvider>
   );
 }

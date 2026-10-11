@@ -91,10 +91,20 @@ readiness.
 
 ## Run the mobile app
 
-The first Expo mobile slice supports an existing confirmed account: email and
-password sign-in, persisted Supabase sessions, authenticated user/profile
-loading, profile display, and sign-out. Mobile sign-up, onboarding,
-conversations, streaming, and voice/video are intentionally not included.
+The Expo mobile app supports existing confirmed accounts with email/password
+sign-in, persisted Supabase sessions, authenticated user/profile loading,
+profile display, and sign-out. Its authenticated landing screen lists owned
+conversations and can create General conversations. General conversations have
+native message history and incremental SSE responses, including Stop,
+server-history reconciliation after ambiguous interruption, and a dedicated
+failed-message Retry action. Existing Mentor, Interview, and Team conversations
+show read-only history with a prompt to continue on DevStride Web.
+
+Mobile sign-up, onboarding, profile editing, interactive Mentor/Interview/Team
+modes, and voice/video remain outside this mobile milestone. Automated mobile
+lint, type checking, tests, Expo Doctor, and Expo config validation cover the
+implementation; manual iOS and Android validation is still required for this
+milestone.
 
 Create an untracked local environment file from the public-only template:
 
