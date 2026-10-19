@@ -1,6 +1,6 @@
 # DevStride Project Status
 
-Last reviewed: 2026-09-18
+Last reviewed: 2026-10-19
 Current release: v0.1.0
 Repository migration head: `0008`
 
@@ -29,8 +29,9 @@ configuration and deployment checks.
   audience, expiry, subject, signature, and ownership enforcement
 - onboarding and the editable coaching Profile
 - Account view for authenticated sign-in information
-- native Expo mobile foundation with persisted Supabase authentication for
-  existing confirmed accounts, authenticated user/profile loading, a read-only
+- native Expo mobile foundation with device-only SecureStore-backed Supabase
+  session persistence for existing confirmed accounts, safe migration from the
+  legacy unencrypted store, authenticated user/profile loading, a read-only
   coaching Profile screen, bounded failure states, and sign-out
 - Native Chat milestone implementation with typed Conversations, Chat, and
   Profile navigation; owned conversation history; General-only creation and

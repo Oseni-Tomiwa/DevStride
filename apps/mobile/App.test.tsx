@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react-native";
+import { act, render, screen, waitFor } from "@testing-library/react-native";
 
 import { MobileApiError } from "./src/api";
 import type { AuthenticatedUser, Profile, SessionSnapshot } from "./src/types";
@@ -38,7 +38,12 @@ const mockApi = {
 };
 
 const mockSignOut = jest.fn();
+const mockClearMobileAuthSession = jest.fn();
+const mockGetSession = jest.fn();
+const mockGetUser = jest.fn();
+const mockLoadAuthenticatedProfile = jest.fn(async () => ({ user: mockUser, profile: mockProfile }));
 const mockUnsubscribe = jest.fn();
+let mockAuthStateHandler: ((event: string, session: SessionSnapshot | null) => void) | null = null;
 
 jest.mock("./src/api", () => {
   const actual = jest.requireActual("./src/api");
@@ -46,7 +51,7 @@ jest.mock("./src/api", () => {
 });
 
 jest.mock("./src/load-profile", () => ({
-  loadAuthenticatedProfile: jest.fn(async () => ({ user: mockUser, profile: mockProfile })),
+  loadAuthenticatedProfile: mockLoadAuthenticatedProfile,
 }));
 
 jest.mock("./src/runtime-config", () => ({
@@ -54,11 +59,16 @@ jest.mock("./src/runtime-config", () => ({
 }));
 
 jest.mock("./src/supabase", () => ({
+  clearMobileAuthSession: mockClearMobileAuthSession,
   getAccessToken: jest.fn(),
   supabase: {
     auth: {
-      getSession: jest.fn(async () => ({ data: { session: mockSession }, error: null })),
-      onAuthStateChange: jest.fn(() => ({ data: { subscription: { unsubscribe: mockUnsubscribe } } })),
+      getSession: mockGetSession,
+      getUser: mockGetUser,
+      onAuthStateChange: jest.fn((handler) => {
+        mockAuthStateHandler = handler;
+        return { data: { subscription: { unsubscribe: mockUnsubscribe } } };
+      }),
       signOut: mockSignOut,
       startAutoRefresh: jest.fn(),
       stopAutoRefresh: jest.fn(),
@@ -73,6 +83,10 @@ describe("App authenticated integration", () => {
     jest.clearAllMocks();
     mockApi.listConversations.mockResolvedValue([]);
     mockSignOut.mockResolvedValue({ error: null });
+    mockClearMobileAuthSession.mockResolvedValue(null);
+    mockGetSession.mockResolvedValue({ data: { session: mockSession }, error: null });
+    mockGetUser.mockResolvedValue({ data: { user: { id: "user-id" } }, error: null });
+    mockAuthStateHandler = null;
   });
 
   it("mounts Conversations as the authenticated landing screen", async () => {
@@ -85,9 +99,62 @@ describe("App authenticated integration", () => {
       new MobileApiError("unauthorized", "Your session expired. Sign in again.", 401),
     );
     await render(<App />);
-    await waitFor(() =>
-      expect(mockSignOut).toHaveBeenCalledWith({ scope: "local" }),
-    );
+    await waitFor(() => expect(mockClearMobileAuthSession).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Your session expired. Sign in again.")).toBeOnTheScreen();
   });
+
+  it("validates a restored Supabase identity before loading the profile", async () => {
+    await render(<App />);
+    expect(await screen.findByRole("header", { name: "Conversations" })).toBeOnTheScreen();
+    expect(mockGetUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for restored identity validation before requesting the profile", async () => {
+    let resolveValidation: ((value: { data: { user: { id: string } }; error: null }) => void) | null =
+      null;
+    mockGetUser.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveValidation = resolve;
+        }),
+    );
+
+    await render(<App />);
+    await waitFor(() => expect(mockGetUser).toHaveBeenCalledTimes(1));
+    expect(mockLoadAuthenticatedProfile).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveValidation?.({ data: { user: { id: "user-id" } }, error: null });
+    });
+    expect(await screen.findByRole("header", { name: "Conversations" })).toBeOnTheScreen();
+    expect(mockLoadAuthenticatedProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves sign-in by validating a new authenticated session", async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    await render(<App />);
+    expect(await screen.findByRole("header", { name: "Welcome back" })).toBeOnTheScreen();
+    await act(async () => {
+      mockAuthStateHandler?.("SIGNED_IN", mockSession);
+    });
+    expect(await screen.findByRole("header", { name: "Conversations" })).toBeOnTheScreen();
+    expect(mockGetUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears an invalid restored session and returns to sign-in", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: { status: 401 } });
+    await render(<App />);
+    expect(await screen.findByText("Your session expired. Sign in again.")).toBeOnTheScreen();
+    expect(mockClearMobileAuthSession).toHaveBeenCalledTimes(1);
+    expect(mockApi.getCurrentUser).not.toHaveBeenCalled();
+  });
+
+  it("keeps a restored session on temporary validation failure and offers retry", async () => {
+    mockGetUser.mockRejectedValue(new TypeError("Network request failed"));
+    await render(<App />);
+    expect(await screen.findByRole("header", { name: "Couldn’t load your profile" })).toBeOnTheScreen();
+    expect(mockClearMobileAuthSession).not.toHaveBeenCalled();
+    expect(screen.getByText("Try again")).toBeOnTheScreen();
+  });
+
 });

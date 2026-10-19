@@ -6,12 +6,16 @@ import { StatusBar } from "expo-status-bar";
 import { createDevStrideApi, MobileApiError } from "./src/api";
 import { initialAppState, mobileAppReducer } from "./src/app-state";
 import { registerAuthAutoRefresh } from "./src/auth-lifecycle";
+import {
+  SessionValidationError,
+  validateAuthenticatedSession,
+} from "./src/auth/session-validation";
 import { ActionButton } from "./src/components/ActionButton";
 import { SignInScreen } from "./src/components/SignInScreen";
 import { loadAuthenticatedProfile } from "./src/load-profile";
 import { AuthenticatedNavigator } from "./src/navigation/AuthenticatedNavigator";
 import { mobileConfig } from "./src/runtime-config";
-import { getAccessToken, supabase } from "./src/supabase";
+import { clearMobileAuthSession, getAccessToken, supabase } from "./src/supabase";
 import { useAppTheme, type AppColors } from "./src/theme";
 
 const api = createDevStrideApi({
@@ -70,7 +74,7 @@ function App() {
 
   const handleUnauthorized = useCallback(() => {
     dispatch({ type: "unauthorized" });
-    void supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+    void clearMobileAuthSession();
   }, []);
 
   useEffect(() => {
@@ -112,7 +116,8 @@ function App() {
     let active = true;
     const sessionUserId = state.session.user.id;
 
-    void loadAuthenticatedProfile(api)
+    void validateAuthenticatedSession(supabase.auth, sessionUserId)
+      .then(() => loadAuthenticatedProfile(api))
       .then(({ user, profile }) => {
         if (!active) return;
         if (user.id !== sessionUserId || profile.user_id !== user.id) {
@@ -123,8 +128,16 @@ function App() {
       })
       .catch((error: unknown) => {
         if (!active) return;
-        if (error instanceof MobileApiError && error.kind === "unauthorized") {
+        if (
+          (error instanceof SessionValidationError && error.kind === "invalid") ||
+          (error instanceof MobileApiError && error.kind === "unauthorized")
+        ) {
           handleUnauthorized();
+        } else if (error instanceof SessionValidationError) {
+          dispatch({
+            type: "loadFailed",
+            message: "Unable to validate your session. Check your connection and try again.",
+          });
         } else if (error instanceof MobileApiError && error.kind === "profile_missing") {
           dispatch({ type: "profileMissing" });
         } else {
@@ -142,12 +155,9 @@ function App() {
   }, [handleUnauthorized, state]);
 
   const signOut = useCallback(async (): Promise<string | null> => {
-    try {
-      const { error } = await supabase.auth.signOut({ scope: "local" });
-      return error ? "Unable to sign out. Check your connection and try again." : null;
-    } catch {
-      return "Unable to sign out. Check your connection and try again.";
-    }
+    const failure = await clearMobileAuthSession();
+    dispatch({ type: "sessionResolved", session: null });
+    return failure ? "Unable to sign out. Check your connection and try again." : null;
   }, []);
 
   let content;
