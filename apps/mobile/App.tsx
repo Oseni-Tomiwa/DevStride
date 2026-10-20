@@ -1,20 +1,29 @@
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
 
 import { createDevStrideApi, MobileApiError } from "./src/api";
 import { initialAppState, mobileAppReducer } from "./src/app-state";
 import { registerAuthAutoRefresh } from "./src/auth-lifecycle";
 import {
+  getAuthRouteKind,
+  parseAuthLink,
+  type ParsedAuthLink,
+} from "./src/auth/auth-links";
+import { exchangeParsedAuthLink } from "./src/auth/auth-service";
+import {
   SessionValidationError,
   validateAuthenticatedSession,
 } from "./src/auth/session-validation";
 import { ActionButton } from "./src/components/ActionButton";
-import { SignInScreen } from "./src/components/SignInScreen";
 import { loadAuthenticatedProfile } from "./src/load-profile";
 import { AuthenticatedNavigator } from "./src/navigation/AuthenticatedNavigator";
+import { UnauthenticatedNavigator } from "./src/navigation/UnauthenticatedNavigator";
 import { mobileConfig } from "./src/runtime-config";
+import { AuthLinkErrorScreen } from "./src/screens/auth/AuthLinkErrorScreen";
+import { ResetPasswordScreen } from "./src/screens/auth/ResetPasswordScreen";
 import { clearMobileAuthSession, getAccessToken, supabase } from "./src/supabase";
 import { useAppTheme, type AppColors } from "./src/theme";
 
@@ -71,10 +80,89 @@ function MessageScreen({
 function App() {
   const { colors, isDark } = useAppTheme();
   const [state, dispatch] = useReducer(mobileAppReducer, initialAppState);
+  const authMode = useRef<"initializing" | "link" | "normal" | "recovery">("initializing");
+  const isExchangingAuthLink = useRef(false);
+  const pendingRecoveryLink = useRef<ParsedAuthLink | null>(null);
+  const seenAuthLinks = useRef(new Set<string>());
 
   const handleUnauthorized = useCallback(() => {
+    authMode.current = "normal";
     dispatch({ type: "unauthorized" });
     void clearMobileAuthSession();
+  }, []);
+
+  const handleAuthUrl = useCallback(async (url: string) => {
+    const parsed = parseAuthLink(url);
+    const routeKind = parsed.ok ? parsed.link.kind : getAuthRouteKind(url);
+
+    if (isExchangingAuthLink.current) {
+      if (
+        parsed.ok &&
+        parsed.link.kind === "recovery" &&
+        !seenAuthLinks.current.has(parsed.link.fingerprint)
+      ) {
+        seenAuthLinks.current.add(parsed.link.fingerprint);
+        pendingRecoveryLink.current = parsed.link;
+        authMode.current = "recovery";
+        dispatch({ type: "authLinkStarted", kind: "recovery" });
+      }
+      return;
+    }
+    if (authMode.current === "recovery") return;
+
+    if (!parsed.ok) {
+      authMode.current = "link";
+      dispatch({ type: "authLinkStarted", kind: routeKind ?? "confirmation" });
+      dispatch({
+        type: "authLinkFailed",
+        kind: routeKind,
+        message:
+          routeKind === "recovery"
+            ? "This recovery link is invalid or expired. Request a new email on this device."
+            : "This authentication link is invalid or unsupported. Request a new email and try again.",
+      });
+      return;
+    }
+    if (seenAuthLinks.current.has(parsed.link.fingerprint)) return;
+    seenAuthLinks.current.add(parsed.link.fingerprint);
+
+    const processLink = async (link: typeof parsed.link): Promise<void> => {
+      isExchangingAuthLink.current = true;
+      authMode.current = link.kind === "recovery" ? "recovery" : "link";
+      dispatch({ type: "authLinkStarted", kind: link.kind });
+      const result = await exchangeParsedAuthLink(supabase.auth, link);
+
+      if (link.kind === "confirmation" && pendingRecoveryLink.current) {
+        const recoveryLink = pendingRecoveryLink.current;
+        pendingRecoveryLink.current = null;
+        await processLink(recoveryLink);
+        return;
+      }
+      if (!result.ok) {
+        await clearMobileAuthSession();
+        if (pendingRecoveryLink.current) {
+          const recoveryLink = pendingRecoveryLink.current;
+          pendingRecoveryLink.current = null;
+          await processLink(recoveryLink);
+          return;
+        }
+        isExchangingAuthLink.current = false;
+        authMode.current = "link";
+        dispatch({ type: "authLinkFailed", kind: link.kind, message: result.error.message });
+        return;
+      }
+      if (link.kind === "recovery") {
+        isExchangingAuthLink.current = false;
+        authMode.current = "recovery";
+        dispatch({ type: "recoveryReady", session: result.session });
+        return;
+      }
+      isExchangingAuthLink.current = false;
+      authMode.current = "normal";
+      dispatch({ type: "sessionResolved", session: result.session });
+    };
+
+    await processLink(parsed.link);
   }, []);
 
   useEffect(() => {
@@ -84,6 +172,7 @@ function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
+      if (authMode.current !== "normal") return;
       if (event === "SIGNED_IN") {
         dispatch({ type: "sessionResolved", session });
       } else if (event === "SIGNED_OUT") {
@@ -91,15 +180,26 @@ function App() {
       }
     });
 
-    void supabase.auth
-      .getSession()
-      .then(({ data, error }) => {
-        if (active) {
+    const linkingSubscription = Linking.addEventListener("url", ({ url }) => {
+      if (active) void handleAuthUrl(url);
+    });
+
+    void Linking.getInitialURL()
+      .then(async (url) => {
+        if (!active || authMode.current !== "initializing") return;
+        if (url) {
+          await handleAuthUrl(url);
+          return;
+        }
+        authMode.current = "normal";
+        const { data, error } = await supabase.auth.getSession();
+        if (active && authMode.current === "normal") {
           dispatch({ type: "sessionResolved", session: error ? null : data.session });
         }
       })
       .catch(() => {
-        if (active) {
+        if (active && authMode.current === "initializing") {
+          authMode.current = "normal";
           dispatch({ type: "sessionResolved", session: null });
         }
       });
@@ -107,9 +207,10 @@ function App() {
     return () => {
       active = false;
       subscription.unsubscribe();
+      linkingSubscription.remove();
       unregisterRefresh();
     };
-  }, []);
+  }, [handleAuthUrl]);
 
   useEffect(() => {
     if (state.status !== "loading_profile") return;
@@ -160,9 +261,48 @@ function App() {
     return failure ? "Unable to sign out. Check your connection and try again." : null;
   }, []);
 
+  const finishRecovery = useCallback(async () => {
+    const failure = await clearMobileAuthSession();
+    if (failure) {
+      authMode.current = "recovery";
+      dispatch({
+        type: "authLinkFailed",
+        kind: "recovery",
+        message:
+          "Your password was updated, but this device could not clear the recovery session. Try again before signing in.",
+      });
+      return;
+    }
+    authMode.current = "normal";
+    dispatch({ type: "recoveryCompleted" });
+  }, []);
+
+  const returnToSignIn = useCallback(async () => {
+    const failure = await clearMobileAuthSession();
+    if (failure) return;
+    authMode.current = "normal";
+    dispatch({ type: "sessionResolved", session: null });
+  }, []);
+
+  const requestRecoveryEmail = useCallback(async () => {
+    const failure = await clearMobileAuthSession();
+    if (failure) {
+      authMode.current = "recovery";
+      dispatch({
+        type: "authLinkFailed",
+        kind: "recovery",
+        message: "This device could not clear the recovery session. Try again.",
+      });
+      return;
+    }
+    authMode.current = "normal";
+    dispatch({ type: "requestRecoveryEmail" });
+  }, []);
+
   let content;
   switch (state.status) {
     case "booting":
+    case "auth_link_loading":
     case "loading_profile":
       content = (
         <View accessibilityLabel="Loading DevStride" style={styles.centered}>
@@ -172,7 +312,35 @@ function App() {
       );
       break;
     case "signed_out":
-      content = <SignInScreen colors={colors} notice={state.notice} />;
+      content = (
+        <UnauthenticatedNavigator
+          auth={supabase.auth}
+          colors={colors}
+          initialRoute={state.initialRoute}
+          notice={state.notice}
+          onAuthenticated={(session) => dispatch({ type: "sessionResolved", session })}
+        />
+      );
+      break;
+    case "recovery":
+      content = (
+        <ResetPasswordScreen
+          auth={supabase.auth}
+          colors={colors}
+          onComplete={finishRecovery}
+          onRequestNew={requestRecoveryEmail}
+        />
+      );
+      break;
+    case "auth_link_error":
+      content = (
+        <AuthLinkErrorScreen
+          colors={colors}
+          message={state.message}
+          onContinue={returnToSignIn}
+          onRequestNew={state.kind === "recovery" ? requestRecoveryEmail : undefined}
+        />
+      );
       break;
     case "authenticated":
       content = (

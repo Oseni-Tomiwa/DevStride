@@ -91,20 +91,21 @@ readiness.
 
 ## Run the mobile app
 
-The Expo mobile app supports existing confirmed accounts with email/password
-sign-in, persisted Supabase sessions, authenticated user/profile loading,
-profile display, and sign-out. Its authenticated landing screen lists owned
+The Expo mobile app supports native email/password sign-in, sign-up, email
+verification and resend, password recovery, persisted Supabase sessions,
+authenticated user/profile loading, profile display, and sign-out. Its
+authenticated landing screen lists owned
 conversations and can create General conversations. General conversations have
 native message history and incremental SSE responses, including Stop,
 server-history reconciliation after ambiguous interruption, and a dedicated
 failed-message Retry action. Existing Mentor, Interview, and Team conversations
 show read-only history with a prompt to continue on DevStride Web.
 
-Mobile sign-up, onboarding, profile editing, interactive Mentor/Interview/Team
-modes, and voice/video remain outside this mobile milestone. Automated mobile
-lint, type checking, tests, Expo Doctor, and Expo config validation cover the
-implementation; manual iOS and Android validation is still required for this
-milestone.
+Native onboarding, profile editing, interactive Mentor/Interview/Team modes,
+biometrics, and voice/video remain outside this mobile milestone. Automated
+mobile lint, type checking, tests, Expo Doctor, and Expo config validation cover
+the implementation; manual iOS and Android validation is still required for
+this milestone.
 
 Create an untracked local environment file from the public-only template:
 
@@ -128,6 +129,20 @@ pnpm mobile:start
 Then press `i` for iOS or `a` for Android, or use `pnpm mobile:ios` and
 `pnpm mobile:android`. Mobile-only checks are `pnpm mobile:lint`,
 `pnpm mobile:typecheck`, and `pnpm mobile:test`.
+
+Native email callbacks use the development routes `devstride://auth/confirm`
+and `devstride://auth/recovery`. Add both exact URLs to the Supabase Auth
+redirect allowlist. Confirmation and recovery emails first open the
+prefetch-safe HTTPS `/auth/mobile` bridge and require an explicit user action;
+open them on the same device that requested them so its PKCE verifier is
+available. Supabase Dashboard template changes and the required Resend
+click-tracking setting are documented in
+[`docs/architecture/AUTHENTICATION.md`](docs/architecture/AUTHENTICATION.md).
+The same runbook records the two query-aware allowlist entries required for
+`sb_flow_id`; avoid a broad custom-scheme wildcard. Custom-scheme
+callback validation requires a development build; final production app
+identifiers and verified Universal Links / Android App Links remain a deployment
+decision.
 
 ## Quality checks
 

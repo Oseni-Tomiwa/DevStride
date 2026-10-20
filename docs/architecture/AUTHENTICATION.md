@@ -28,6 +28,59 @@ paths).
 No access token is manually persisted in localStorage. Supabase's SSR cookie
 flow owns session persistence and refresh.
 
+## Prefetch-safe mobile email bridge
+
+Native sign-up confirmation and password recovery remain PKCE flows owned by
+the mobile installation that started them. The mobile client asks Supabase to
+redirect to `devstride://auth/confirm` or `devstride://auth/recovery`; Supabase
+Auth appends the non-secret `sb_flow_id`, while the verifier stays in the
+device-only auth store. After the user explicitly continues from the HTTPS
+bridge, Supabase verifies the email token and redirects directly to the custom
+scheme. The mobile client, never the web bridge, exchanges the resulting
+authorization code, so that code is not sent through Vercel request logs.
+
+Authentication emails must not link directly to the consumable Supabase
+`ConfirmationURL`. The public `GET /auth/mobile` page is an explicit-action
+bridge: the email carries the `ConfirmationURL` in the HTTPS URL fragment, the
+bridge validates the Supabase origin, verification path/type, and exact mobile
+or same-origin web callback destination, and only a user button press opens the
+verification URL. URL fragments are not included in the request to Vercel, and
+the bridge neither displays nor logs the URL/token, calls `verifyOtp`, exchanges
+the PKCE code, nor creates a web session. Existing web flows still finish at
+the unchanged `/auth/callback` route.
+
+Before changing templates, disable click tracking for the Resend SMTP domain.
+Tracking rewrites authentication links and can expose or prefetch the
+one-time URL. Then make these exact Supabase Dashboard changes under
+Authentication → Email Templates (dashboard changes are manual and are not
+applied by this repository):
+
+- **Confirm signup:** replace the link target with
+  `{{ .SiteURL }}/auth/mobile#{{ .ConfirmationURL }}`.
+- **Reset password:** replace the link target with
+  `{{ .SiteURL }}/auth/mobile#{{ .ConfirmationURL }}`.
+
+For example, each template's action can use
+`<a href="{{ .SiteURL }}/auth/mobile#{{ .ConfirmationURL }}">…</a>` while
+retaining its existing visible wording and styling. The production Site URL
+remains `https://dev-stride-web.vercel.app`. Because Auth JS appends the flow
+identifier before Supabase checks the complete redirect URL, add these two
+narrow query-aware entries to the existing Supabase redirect allowlist:
+
+- `devstride://auth/confirm?sb_flow_id=*`
+- `devstride://auth/recovery?sb_flow_id=*`
+
+Keep the existing exact deep links as well. These patterns vary only the
+validated flow-id value on fixed scheme/host/path destinations; do not use a
+broad `devstride://**` entry. An expired/reused token is rejected by
+Supabase; a callback opened on another installation cannot be exchanged because
+that installation does not have the matching verifier.
+
+React Native does not provide `crypto.subtle.digest` in this runtime. The
+mobile entry point installs an `expo-crypto`-backed SHA-256 digest and secure
+random source before creating the Supabase client, so email PKCE requests use
+`code_challenge_method=s256` rather than the Auth JS `plain` fallback.
+
 ## FastAPI bearer boundary
 
 The authenticated API client retrieves the current Supabase session and sends:

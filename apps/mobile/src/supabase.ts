@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 
+import { installPkceCrypto } from "./auth/pkce-crypto";
 import {
   SecureSessionStorage,
   createExpoSecureStoreDriver,
@@ -12,6 +13,8 @@ import {
 import { clearAuthSession } from "./auth/session-validation";
 import { mobileConfig } from "./runtime-config";
 import { getUsableAccessToken } from "./session-token";
+
+installPkceCrypto();
 
 export const supabaseAuthStorageKey = getSupabaseAuthStorageKey(mobileConfig.supabaseUrl);
 
@@ -35,6 +38,8 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
+      flowType: "pkce",
+      experimental: { appendPkceFlowIdToRedirects: true },
     },
   },
 );

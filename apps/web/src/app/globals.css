@@ -328,6 +328,8 @@ dd { margin: 0.45rem 0 0; color: var(--ink-950); font-weight: 750; line-height: 
 .recovery-card { width: min(100%, 34rem); padding: clamp(1.5rem, 5vw, 2.5rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgb(255 255 255 / 96%); box-shadow: var(--shadow-md); }
 .recovery-card h1 { margin-bottom: 0.75rem; font-size: clamp(2rem, 6vw, 3rem); }
 .recovery-actions, .dialog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-6); }
+.mobile-auth-card { display: grid; gap: var(--space-4); }
+.mobile-auth-card > button { justify-self: start; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 1rem; background: rgb(16 24 40 / 48%); }
 .dialog { width: min(100%, 32rem); max-height: min(90vh, 42rem); overflow-y: auto; padding: clamp(1.25rem, 4vw, 2rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 0 24px 64px rgb(16 24 40 / 22%); }
 .dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }

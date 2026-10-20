@@ -61,4 +61,64 @@ describe("mobileAppReducer", () => {
       session,
     });
   });
+
+  it("gives a recovery callback precedence over an existing authenticated session", () => {
+    const loading = mobileAppReducer(initialAppState, {
+      type: "authLinkStarted",
+      kind: "recovery",
+    });
+    expect(loading).toEqual({ status: "auth_link_loading", kind: "recovery" });
+    expect(mobileAppReducer(loading, { type: "sessionResolved", session })).toEqual(loading);
+
+    const recovering = mobileAppReducer(loading, { type: "recoveryReady", session });
+    expect(recovering).toEqual({ status: "recovery", session });
+    expect(mobileAppReducer(recovering, { type: "sessionResolved", session })).toEqual(
+      recovering,
+    );
+  });
+
+  it("allows an exchanged confirmation session to enter profile validation", () => {
+    const loading = { status: "auth_link_loading", kind: "confirmation" } as const;
+    expect(mobileAppReducer(loading, { type: "sessionResolved", session })).toEqual({
+      status: "loading_profile",
+      session,
+    });
+  });
+
+  it("shows a safe link error with recovery context", () => {
+    const loading = { status: "auth_link_loading", kind: "recovery" } as const;
+    expect(
+      mobileAppReducer(loading, {
+        type: "authLinkFailed",
+        kind: "recovery",
+        message: "This recovery link is invalid or expired.",
+      }),
+    ).toEqual({
+      status: "auth_link_error",
+      kind: "recovery",
+      message: "This recovery link is invalid or expired.",
+    });
+  });
+
+  it("requires normal sign-in after password recovery completes", () => {
+    const recovering = { status: "recovery", session } as const;
+    expect(mobileAppReducer(recovering, { type: "recoveryCompleted" })).toEqual({
+      status: "signed_out",
+      notice: "Password updated. Sign in with your new password.",
+      initialRoute: "SignIn",
+    });
+  });
+
+  it("can open password reset request from a recovery-link error", () => {
+    const error = {
+      status: "auth_link_error",
+      kind: "recovery",
+      message: "Link unavailable.",
+    } as const;
+    expect(mobileAppReducer(error, { type: "requestRecoveryEmail" })).toEqual({
+      status: "signed_out",
+      notice: null,
+      initialRoute: "ForgotPassword",
+    });
+  });
 });
