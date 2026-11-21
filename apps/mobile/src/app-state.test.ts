@@ -26,10 +26,11 @@ describe("mobileAppReducer", () => {
   });
 
   it("loads an authenticated profile after restoring a session", () => {
-    const loading = mobileAppReducer(initialAppState, { type: "sessionResolved", session });
+    const loading = { status: "loading_profile", session } as const;
+    expect(mobileAppReducer(initialAppState, { type: "sessionHydrated", session })).toEqual(loading);
     expect(loading).toEqual({ status: "loading_profile", session });
 
-    expect(mobileAppReducer(loading, { type: "profileLoaded", user, profile })).toEqual({
+    expect(mobileAppReducer(loading, { type: "profileLoaded", request: loading, user, profile })).toEqual({
       status: "authenticated",
       session,
       user,
@@ -37,9 +38,23 @@ describe("mobileAppReducer", () => {
     });
   });
 
+  it("ignores late startup hydration after a newer sign-out", () => {
+    const signedOut = mobileAppReducer(initialAppState, { type: "sessionResolved", session: null });
+    expect(mobileAppReducer(signedOut, { type: "sessionHydrated", session })).toBe(signedOut);
+  });
+
+  it("ignores duplicate sign-in and profile results from a previous request", () => {
+    const first = { status: "loading_profile", session } as const;
+    expect(mobileAppReducer(first, { type: "sessionResolved", session })).toBe(first);
+    const signedOut = mobileAppReducer(first, { type: "sessionResolved", session: null });
+    const second = mobileAppReducer(signedOut, { type: "sessionResolved", session });
+    expect(mobileAppReducer(second, { type: "profileLoaded", request: first, user, profile })).toBe(second);
+    expect(mobileAppReducer(second, { type: "loadFailed", request: first, message: "Old request" })).toBe(second);
+  });
+
   it("shows the bounded profile-required state for a 404", () => {
     const loading = { status: "loading_profile", session } as const;
-    expect(mobileAppReducer(loading, { type: "profileMissing" })).toEqual({
+    expect(mobileAppReducer(loading, { type: "profileMissing", request: loading })).toEqual({
       status: "profile_missing",
       session,
     });

@@ -144,6 +144,9 @@ callback validation requires a development build; final production app
 identifiers and verified Universal Links / Android App Links remain a deployment
 decision.
 
+Existing sessions in the legacy plaintext store require one-time sign-in after
+upgrading. Run the native automated checks with `make mobile-check`.
+
 ## Quality checks
 
 ```bash

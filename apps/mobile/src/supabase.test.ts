@@ -1,10 +1,11 @@
+const mockProcessLock = jest.fn();
 const mockCreateClient = jest.fn(() => ({
   auth: {
     signOut: jest.fn(async () => ({ error: null })),
   },
 }));
 
-jest.mock("@supabase/supabase-js", () => ({ createClient: mockCreateClient }));
+jest.mock("@supabase/supabase-js", () => ({ createClient: mockCreateClient, processLock: mockProcessLock }));
 jest.mock("@react-native-async-storage/async-storage", () => ({
   getItem: jest.fn(async () => null),
   setItem: jest.fn(async () => undefined),
@@ -40,6 +41,7 @@ describe("mobile Supabase client", () => {
           autoRefreshToken: true,
           detectSessionInUrl: false,
           flowType: "pkce",
+          lock: mockProcessLock,
           persistSession: true,
           storageKey: "sb-project-ref-auth-token",
           experimental: { appendPkceFlowIdToRedirects: true },

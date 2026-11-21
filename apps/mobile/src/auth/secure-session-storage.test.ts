@@ -9,6 +9,7 @@ type StoreDriver = {
   deleteItem: jest.Mock<Promise<void>, [string]>;
   getItem: jest.Mock<Promise<string | null>, [string]>;
   setItem: jest.Mock<Promise<void>, [string, string]>;
+  getAllKeys: () => Promise<string[]>;
   values: Map<string, string>;
 };
 
@@ -16,6 +17,7 @@ function memoryStore(initial: Record<string, string> = {}): StoreDriver {
   const values = new Map(Object.entries(initial));
   return {
     values,
+    getAllKeys: async () => [...values.keys()],
     getItem: jest.fn(async (key) => values.get(key) ?? null),
     setItem: jest.fn(async (key, value) => void values.set(key, value)),
     deleteItem: jest.fn(async (key) => void values.delete(key)),
@@ -67,6 +69,53 @@ describe("SecureSessionStorage", () => {
     expect([...secure.values.keys()].filter((key) => key.includes(".chunk.")).length).toBeGreaterThan(1);
   });
 
+  it("round trips a realistic session under a per-value native byte limit", async () => {
+    const { secure, storage } = createStorage({ chunkSize: 375 });
+    secure.setItem.mockImplementation(async (key, value) => {
+      const bytes = encodeURIComponent(value).replace(/%[0-9A-F]{2}/g, "_").length;
+      if (bytes > 1_500) throw new Error("native size limit");
+      secure.values.set(key, value);
+    });
+    const payload = JSON.stringify({ access_token: "a".repeat(4_200),
+      refresh_token: "r".repeat(96), user: { name: "李🙂".repeat(550) } });
+    await storage.setItem(AUTH_KEY, payload);
+    await expect(storage.getItem(AUTH_KEY)).resolves.toBe(payload);
+  });
+
+  it("completes queued sign-out after a pending refresh write", async () => {
+    const first = createStorage();
+    await first.storage.setItem(AUTH_KEY, "old");
+    let start!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => { start = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    first.secure.setItem.mockImplementation(async (key, value) => {
+      if (key.includes("generation-b.chunk.0")) {
+        start();
+        await pending;
+      }
+      first.secure.values.set(key, value);
+    });
+    const refresh = first.storage.setItem(AUTH_KEY, "refreshed");
+    await started;
+    const signOut = first.storage.removeItem(AUTH_KEY);
+    release();
+    await Promise.all([refresh, signOut]);
+    const restarted = createStorage({ legacy: first.legacy, secure: first.secure });
+    await expect(restarted.storage.getItem(AUTH_KEY)).resolves.toBeNull();
+  });
+
+  it("rejects oversized values before writing a new secure generation", async () => {
+    const { secure, storage } = createStorage({ chunkSize: 1 });
+    await storage.setItem(AUTH_KEY, "old");
+    secure.setItem.mockClear();
+    await expect(storage.setItem(AUTH_KEY, "x".repeat(513))).rejects.toThrow(
+      "Secure session value is too large.",
+    );
+    expect(secure.setItem).not.toHaveBeenCalled();
+    await expect(storage.getItem(AUTH_KEY)).resolves.toBe("old");
+  });
+
   it("preserves Unicode characters at chunk boundaries", async () => {
     const { storage } = createStorage({ chunkSize: 2 });
     await storage.setItem(AUTH_KEY, "a😀é𠜎z");
@@ -79,6 +128,18 @@ describe("SecureSessionStorage", () => {
     await storage.removeItem(AUTH_KEY);
     await expect(storage.getItem(AUTH_KEY)).resolves.toBeNull();
     expect([...secure.values.keys()].filter((key) => key.includes("generation-a"))).toEqual([]);
+  });
+
+  it("blocks reads and refresh writes until a failed deletion can be retried", async () => {
+    const { secure, storage } = createStorage();
+    await storage.setItem(AUTH_KEY, "session-value");
+    secure.setItem.mockRejectedValueOnce(new Error("secure storage unavailable"));
+    await expect(storage.removeItem(AUTH_KEY)).rejects.toThrow();
+    await expect(storage.getItem(AUTH_KEY)).resolves.toBeNull();
+    await expect(storage.setItem(AUTH_KEY, "refresh")).rejects.toThrow("Secure session storage is unavailable.");
+    await storage.removeItem(AUTH_KEY);
+    await storage.setItem(AUTH_KEY, "new sign-in");
+    await expect(storage.getItem(AUTH_KEY)).resolves.toBe("new sign-in");
   });
 
   it("retains deletion references until interrupted chunk cleanup succeeds after restart", async () => {
@@ -228,50 +289,34 @@ describe("legacy migration and installation state", () => {
     expect(legacy.values.get(INSTALLATION_MARKER_KEY)).toBe("1");
   });
 
-  it("migrates and verifies a legacy session before deleting it", async () => {
+  it("deletes the prior plaintext session and verifier keys without reading credential values", async () => {
+    const legacy = memoryStore(Object.fromEntries([
+      AUTH_KEY, AUTH_KEY + "-user", AUTH_KEY + "-code-verifier",
+      AUTH_KEY + "-flows-code-verifier", AUTH_KEY + "-flow-example-code-verifier", "theme",
+    ].map((key) => [key, "synthetic"])));
+    const { storage } = createStorage({ legacy });
+    await storage.prepare();
+    await expect(storage.getItem(AUTH_KEY)).resolves.toBeNull();
+    expect(legacy.getItem.mock.calls).toEqual([[INSTALLATION_MARKER_KEY]]);
+    expect([...legacy.values]).toEqual([["theme", "synthetic"], [INSTALLATION_MARKER_KEY, "1"]]);
+  });
+
+  it("blocks preparation on deletion failure and safely retries", async () => {
     const legacy = memoryStore({ [AUTH_KEY]: "legacy-session" });
-    const secure = memoryStore();
-    let legacyPresentDuringSecureVerification = false;
-    secure.getItem.mockImplementation(async (key) => {
-      if (key.includes(".chunk.")) {
-        legacyPresentDuringSecureVerification ||= legacy.values.has(AUTH_KEY);
-      }
-      return secure.values.get(key) ?? null;
-    });
-    const { storage } = createStorage({ legacy, secure });
-    await expect(storage.getItem(AUTH_KEY)).resolves.toBe("legacy-session");
-    expect(legacyPresentDuringSecureVerification).toBe(true);
+    const { storage } = createStorage({ legacy });
+    legacy.deleteItem.mockRejectedValueOnce(new Error("native error"));
+    await expect(storage.prepare()).rejects.toThrow("Secure session storage is unavailable.");
+    await storage.prepare();
+    await expect(storage.getItem(AUTH_KEY)).resolves.toBeNull();
     expect(legacy.values.has(AUTH_KEY)).toBe(false);
-    expect(legacy.values.get(INSTALLATION_MARKER_KEY)).toBe("1");
   });
 
-  it("retains the legacy value when a secure write fails", async () => {
-    const legacy = memoryStore({ [AUTH_KEY]: "legacy-session" });
-    const secure = memoryStore();
-    secure.setItem.mockRejectedValue(new Error("secure store unavailable"));
-    const { storage } = createStorage({ legacy, secure });
-    await expect(storage.getItem(AUTH_KEY)).resolves.toBeNull();
-    expect(legacy.values.get(AUTH_KEY)).toBe("legacy-session");
-  });
-
-  it("retains the legacy value when secure round-trip verification fails", async () => {
-    const legacy = memoryStore({ [AUTH_KEY]: "legacy-session" });
-    const secure = memoryStore();
-    secure.getItem.mockImplementation(async (key) => {
-      const value = secure.values.get(key) ?? null;
-      return key.includes(".chunk.") && value ? `${value}corrupt` : value;
-    });
-    const { storage } = createStorage({ legacy, secure });
-    await expect(storage.getItem(AUTH_KEY)).resolves.toBeNull();
-    expect(legacy.values.get(AUTH_KEY)).toBe("legacy-session");
-  });
-
-  it("prefers a verified secure value and deletes a legacy duplicate", async () => {
+  it("clears a secure copy when its legacy plaintext entry still exists", async () => {
     const first = createStorage();
     await first.storage.setItem(AUTH_KEY, "secure-session");
     first.legacy.values.set(AUTH_KEY, "legacy-session");
     const second = createStorage({ legacy: first.legacy, secure: first.secure });
-    await expect(second.storage.getItem(AUTH_KEY)).resolves.toBe("secure-session");
+    await expect(second.storage.getItem(AUTH_KEY)).resolves.toBeNull();
     expect(first.legacy.values.has(AUTH_KEY)).toBe(false);
   });
 
@@ -284,14 +329,12 @@ describe("legacy migration and installation state", () => {
     expect([...first.secure.values.keys()].some((key) => key.endsWith(".manifest"))).toBe(false);
   });
 
-  it("migrates legitimate legacy data instead of treating it as stale", async () => {
+  it("retains a valid secure session on repeat startup", async () => {
     const first = createStorage();
-    await first.storage.setItem(AUTH_KEY, "stale-session");
-    first.legacy.values.clear();
-    first.legacy.values.set(AUTH_KEY, "current-install-session");
-    const second = createStorage({ legacy: first.legacy, secure: first.secure });
-    await expect(second.storage.getItem(AUTH_KEY)).resolves.toBe("current-install-session");
-    expect(first.legacy.values.has(AUTH_KEY)).toBe(false);
+    await first.storage.setItem(AUTH_KEY, "secure-only-session");
+    const restarted = createStorage({ legacy: first.legacy, secure: first.secure });
+    await restarted.storage.prepare();
+    await expect(restarted.storage.getItem(AUTH_KEY)).resolves.toBe("secure-only-session");
   });
 });
 

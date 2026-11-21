@@ -41,16 +41,25 @@ type SecureSessionStorageOptions = {
   authStorageKey: string;
   chunkSize?: number;
   generateId?: () => string;
-  legacyStorage: AsyncStringStore;
+  legacyStorage: Pick<AsyncStringStore, "getItem" | "setItem" | "deleteItem"> & {
+    getAllKeys: () => Promise<readonly string[]>;
+  };
   secureStore: AsyncStringStore;
 };
 
 export function createExpoSecureStoreDriver(module: ExpoSecureStoreModule): AsyncStringStore {
   const options = { keychainAccessible: module.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
+  async function access<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch {
+      throw new Error("Secure session storage is unavailable.");
+    }
+  }
   return {
-    deleteItem: (key) => module.deleteItemAsync(key, options),
-    getItem: (key) => module.getItemAsync(key, options),
-    setItem: (key, value) => module.setItemAsync(key, value, options),
+    deleteItem: (key) => access(() => module.deleteItemAsync(key, options)),
+    getItem: (key) => access(() => module.getItemAsync(key, options)),
+    setItem: (key, value) => access(() => module.setItemAsync(key, value, options)),
   };
 }
 
@@ -141,10 +150,11 @@ export class SecureSessionStorage {
   private readonly authStorageKey: string;
   private readonly chunkSize: number;
   private readonly generateId: () => string;
-  private readonly legacyStorage: AsyncStringStore;
+  private readonly legacyStorage: SecureSessionStorageOptions["legacyStorage"];
   private readonly secureStore: AsyncStringStore;
   private initialized = false;
   private operation: Promise<void> = Promise.resolve();
+  private readonly blockedKeys = new Set<string>();
 
   constructor(options: SecureSessionStorageOptions) {
     this.authStorageKey = options.authStorageKey;
@@ -159,6 +169,7 @@ export class SecureSessionStorage {
 
   getItem(key: string): Promise<string | null> {
     return this.serialize(async () => {
+      if (this.blockedKeys.has(key)) return null;
       if (!(await this.ensureInstallationState())) return null;
       return this.readValue(key);
     });
@@ -166,18 +177,19 @@ export class SecureSessionStorage {
 
   setItem(key: string, value: string): Promise<void> {
     return this.serialize(async () => {
-      if (!(await this.ensureInstallationState())) {
+      if (this.blockedKeys.has(key) || !(await this.ensureInstallationState())) {
         throw new Error("Secure session storage is unavailable.");
       }
       await this.writeValue(key, value);
-      if (key === this.authStorageKey) await this.legacyStorage.deleteItem(key);
     });
   }
 
   removeItem(key: string): Promise<void> {
     return this.serialize(async () => {
+      this.blockedKeys.add(key);
       await this.removeValue(key);
       if (key === this.authStorageKey) await this.legacyStorage.deleteItem(key);
+      this.blockedKeys.delete(key);
     });
   }
 
@@ -376,52 +388,33 @@ export class SecureSessionStorage {
     }
   }
 
-  private async migrateLegacyValue(value: string): Promise<boolean> {
-    try {
-      await this.writeValue(this.authStorageKey, value);
-      if ((await this.readValue(this.authStorageKey)) !== value) return false;
-      await this.legacyStorage.setItem(INSTALLATION_MARKER_KEY, "1");
-      await this.legacyStorage.deleteItem(this.authStorageKey);
-      return true;
-    } catch {
-      return false;
-    }
+  prepare(): Promise<void> {
+    return this.serialize(async () => {
+      if (!(await this.ensureInstallationState())) {
+        throw new Error("Secure session storage is unavailable.");
+      }
+    });
   }
 
   private async ensureInstallationState(): Promise<boolean> {
     if (this.initialized) return true;
     try {
-      const [marker, legacyValue] = await Promise.all([
+      const key = this.authStorageKey;
+      const [marker, keys] = await Promise.all([
         this.legacyStorage.getItem(INSTALLATION_MARKER_KEY),
-        this.legacyStorage.getItem(this.authStorageKey),
+        this.legacyStorage.getAllKeys(),
       ]);
-      const secureValue = await this.readValue(this.authStorageKey);
+      const legacyKeys = keys.filter((name) =>
+        name === key || name === `${key}-user` || name === `${key}-code-verifier` ||
+        name === `${key}-flows-code-verifier` ||
+        (name.startsWith(`${key}-flow-`) && name.endsWith("-code-verifier")),
+      );
 
-      if (marker === "1") {
-        if (secureValue !== null) {
-          if (legacyValue !== null) await this.legacyStorage.deleteItem(this.authStorageKey);
-          this.initialized = true;
-          return true;
-        }
-        if (legacyValue !== null && !(await this.migrateLegacyValue(legacyValue))) return false;
-        this.initialized = true;
-        return true;
-      }
-
-      if (legacyValue !== null) {
-        if (secureValue === legacyValue) {
-          await this.legacyStorage.setItem(INSTALLATION_MARKER_KEY, "1");
-          await this.legacyStorage.deleteItem(this.authStorageKey);
-          this.initialized = true;
-          return true;
-        }
-        if (!(await this.migrateLegacyValue(legacyValue))) return false;
-        this.initialized = true;
-        return true;
-      }
-
-      if (secureValue !== null) await this.removeValue(this.authStorageKey);
-      await this.legacyStorage.setItem(INSTALLATION_MARKER_KEY, "1");
+      // A plaintext session may have been copied by an earlier interrupted upgrade.
+      if (marker !== "1" || legacyKeys.includes(key)) await this.removeValue(key);
+      for (const name of legacyKeys) await this.legacyStorage.deleteItem(name);
+      await this.readValue(key);
+      if (marker !== "1") await this.legacyStorage.setItem(INSTALLATION_MARKER_KEY, "1");
       this.initialized = true;
       return true;
     } catch {

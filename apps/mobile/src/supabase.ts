@@ -1,7 +1,7 @@
 import "react-native-url-polyfill/auto";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, processLock } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 
 import { installPkceCrypto } from "./auth/pkce-crypto";
@@ -23,6 +23,7 @@ export const secureSessionStorage = new SecureSessionStorage({
   legacyStorage: {
     deleteItem: (key) => AsyncStorage.removeItem(key),
     getItem: (key) => AsyncStorage.getItem(key),
+    getAllKeys: () => AsyncStorage.getAllKeys(),
     setItem: (key, value) => AsyncStorage.setItem(key, value),
   },
   secureStore: createExpoSecureStoreDriver(SecureStore),
@@ -34,6 +35,7 @@ export const supabase = createClient(
   {
     auth: {
       storage: secureSessionStorage,
+      lock: processLock,
       storageKey: supabaseAuthStorageKey,
       autoRefreshToken: true,
       persistSession: true,
@@ -43,6 +45,8 @@ export const supabase = createClient(
     },
   },
 );
+
+export const prepareMobileAuthStorage = () => secureSessionStorage.prepare();
 
 export const getAccessToken = () => getUsableAccessToken(supabase.auth);
 

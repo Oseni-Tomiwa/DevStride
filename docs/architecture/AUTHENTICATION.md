@@ -28,6 +28,34 @@ paths).
 No access token is manually persisted in localStorage. Supabase's SSR cookie
 flow owns session persistence and refresh.
 
+## Native session storage and upgrade
+
+The Expo client uses SecureStore with device-only, unlocked Keychain access
+on iOS and Keystore-backed storage on Android. The Expo plugin configures the
+Android backup exclusion. The existing generation format, bounded Unicode
+chunks, checksum verification, and deletion records remain compatible with
+sessions already stored securely.
+
+Startup deletes the configured project's AsyncStorage auth session, user entry,
+and legacy PKCE verifier keys without reading or copying their credential
+values. A legacy session requires signing in again. An existing secure-only
+session retains its installation marker and can still hydrate. If the marker
+is absent or a plaintext session was left behind, startup invalidates any
+corresponding secure session before removing the old keys. A failed cleanup
+blocks startup with a retry. In-flight email links whose verifier existed only
+in the legacy store need to be requested again.
+
+SecureStore operations are serialized, and the Supabase process lock orders
+SDK refresh and sign-out operations. Cold hydration cannot supersede a later
+auth decision, and Profile results can only update their originating request.
+Sign-out or authorization failure blocks the authenticated UI during cleanup.
+The app shows a retry screen if it cannot confirm cleanup and blocks storage
+reads and writes for the affected key in the current process. If native
+storage fails before recording durable deletion, cleanup across a relaunch
+remains unconfirmed. Native deletion, iOS reinstall, and Android backup and
+restore remain device release checks. An already-issued access JWT may
+remain valid until expiry.
+
 ## Prefetch-safe mobile email bridge
 
 Native sign-up confirmation and password recovery remain PKCE flows owned by

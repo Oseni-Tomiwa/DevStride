@@ -29,6 +29,20 @@ jobs:
           NEXT_PUBLIC_SITE_URL: https://devstrideai.xyz
       - run: pnpm web:e2e --project=chromium
 
+  mobile:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_NO_DOTENV: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: make mobile-check
+
   api:
     runs-on: ubuntu-latest
     services:

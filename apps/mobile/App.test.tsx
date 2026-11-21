@@ -40,6 +40,7 @@ const mockApi = {
 const mockSignOut = jest.fn();
 const mockClearMobileAuthSession = jest.fn();
 const mockGetSession = jest.fn();
+const mockPrepareMobileAuthStorage = jest.fn();
 const mockGetUser = jest.fn();
 const mockExchangeCodeForSession = jest.fn();
 const mockUpdateUser = jest.fn();
@@ -73,6 +74,7 @@ jest.mock("./src/runtime-config", () => ({
 
 jest.mock("./src/supabase", () => ({
   clearMobileAuthSession: mockClearMobileAuthSession,
+  prepareMobileAuthStorage: mockPrepareMobileAuthStorage,
   getAccessToken: jest.fn(),
   supabase: {
     auth: {
@@ -95,6 +97,8 @@ jest.mock("./src/supabase", () => ({
   },
 }));
 
+// Load after the mock fixtures used by App's module initialization.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const App = require("./App").default as typeof import("./App").default;
 
 describe("App authenticated integration", () => {
@@ -103,6 +107,7 @@ describe("App authenticated integration", () => {
     mockApi.listConversations.mockResolvedValue([]);
     mockSignOut.mockResolvedValue({ error: null });
     mockClearMobileAuthSession.mockResolvedValue(null);
+    mockPrepareMobileAuthStorage.mockResolvedValue(undefined);
     mockGetSession.mockResolvedValue({ data: { session: mockSession }, error: null });
     mockGetInitialURL.mockResolvedValue(null);
     mockGetUser.mockResolvedValue({ data: { user: { id: "user-id" } }, error: null });
@@ -124,6 +129,25 @@ describe("App authenticated integration", () => {
     await render(<App />);
     await waitFor(() => expect(mockClearMobileAuthSession).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Your session expired. Sign in again.")).toBeOnTheScreen();
+  });
+
+  it("blocks hydration and retries after a storage preparation failure", async () => {
+    mockPrepareMobileAuthStorage.mockRejectedValueOnce(new Error("storage unavailable"));
+    await render(<App />);
+    expect(await screen.findByText("Secure storage unavailable")).toBeOnTheScreen();
+    expect(mockGetSession).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("header", { name: "Conversations" })).toBeOnTheScreen();
+  });
+
+  it("keeps sign-in blocked after failed cleanup until a retry succeeds", async () => {
+    mockApi.listConversations.mockRejectedValueOnce(new MobileApiError("unauthorized", "Expired", 401));
+    mockClearMobileAuthSession.mockResolvedValueOnce(new Error("storage unavailable"));
+    await render(<App />);
+    expect(await screen.findByText("Couldn’t clear your session")).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("button", { name: "Sign in" })).toBeOnTheScreen();
   });
 
   it("validates a restored Supabase identity before loading the profile", async () => {
