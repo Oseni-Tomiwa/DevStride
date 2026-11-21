@@ -1,4 +1,4 @@
-.PHONY: api-install api-dev api-lint api-format api-format-check api-typecheck api-test api-migration api-migrate api-migrate-down db-up db-down db-logs check
+.PHONY: api-install api-dev api-lint api-format api-format-check api-typecheck api-test api-migration api-migrate api-migrate-down db-up db-down db-logs mobile-check check
 
 api-install:
 	cd apps/api && uv sync --dev
@@ -39,6 +39,11 @@ db-down:
 db-logs:
 	docker compose logs -f postgres
 
+mobile-check:
+	pnpm mobile:lint
+	pnpm mobile:typecheck
+	pnpm mobile:test
+
 check:
 	pnpm web:lint
 	pnpm web:typecheck
@@ -48,3 +53,4 @@ check:
 	$(MAKE) api-format-check
 	$(MAKE) api-typecheck
 	$(MAKE) api-test
+	$(MAKE) mobile-check

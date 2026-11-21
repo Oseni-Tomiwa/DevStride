@@ -10,7 +10,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "lint": "expo lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand --watchman=false"
   },

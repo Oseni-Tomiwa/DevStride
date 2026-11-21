@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import * as Linking from "expo-linking";
@@ -24,7 +24,7 @@ import { UnauthenticatedNavigator } from "./src/navigation/UnauthenticatedNaviga
 import { mobileConfig } from "./src/runtime-config";
 import { AuthLinkErrorScreen } from "./src/screens/auth/AuthLinkErrorScreen";
 import { ResetPasswordScreen } from "./src/screens/auth/ResetPasswordScreen";
-import { clearMobileAuthSession, getAccessToken, supabase } from "./src/supabase";
+import { clearMobileAuthSession, getAccessToken, prepareMobileAuthStorage, supabase } from "./src/supabase";
 import { useAppTheme, type AppColors } from "./src/theme";
 
 const api = createDevStrideApi({
@@ -80,18 +80,38 @@ function MessageScreen({
 function App() {
   const { colors, isDark } = useAppTheme();
   const [state, dispatch] = useReducer(mobileAppReducer, initialAppState);
-  const authMode = useRef<"initializing" | "link" | "normal" | "recovery">("initializing");
+  const [storageError, setStorageError] = useState(false);
+  const [startupAttempt, setStartupAttempt] = useState(0);
+  const cancelProfileLoad = useRef<{ userId: string; cancel: () => void } | null>(null);
+  const [cleanupState, setCleanupState] = useState<"idle" | "pending" | "failed">("idle");
+  const authMode = useRef<"initializing" | "link" | "normal" | "recovery" | "clearing" | "cleanup_failed">("initializing");
   const isExchangingAuthLink = useRef(false);
   const pendingRecoveryLink = useRef<ParsedAuthLink | null>(null);
   const seenAuthLinks = useRef(new Set<string>());
 
-  const handleUnauthorized = useCallback(() => {
+  const clearSession = useCallback(async (expired: boolean): Promise<string | null> => {
+    if (authMode.current === "clearing") return null;
+    cancelProfileLoad.current?.cancel();
+    authMode.current = "clearing";
+    setCleanupState("pending");
+    const failure = await clearMobileAuthSession();
+    if (failure) {
+      authMode.current = "cleanup_failed";
+      setCleanupState("failed");
+      return "Unable to clear this device’s session. Unlock your device and try again.";
+    }
     authMode.current = "normal";
-    dispatch({ type: "unauthorized" });
-    void clearMobileAuthSession();
+    dispatch(expired ? { type: "unauthorized" } : { type: "sessionResolved", session: null });
+    setCleanupState("idle");
+    return null;
   }, []);
 
+  const handleUnauthorized = useCallback(() => {
+    void clearSession(true);
+  }, [clearSession]);
+
   const handleAuthUrl = useCallback(async (url: string) => {
+    if (authMode.current === "clearing" || authMode.current === "cleanup_failed") return;
     const parsed = parseAuthLink(url);
     const routeKind = parsed.ok ? parsed.link.kind : getAuthRouteKind(url);
 
@@ -111,6 +131,7 @@ function App() {
     if (authMode.current === "recovery") return;
 
     if (!parsed.ok) {
+      cancelProfileLoad.current?.cancel();
       authMode.current = "link";
       dispatch({ type: "authLinkStarted", kind: routeKind ?? "confirmation" });
       dispatch({
@@ -125,6 +146,7 @@ function App() {
     }
     if (seenAuthLinks.current.has(parsed.link.fingerprint)) return;
     seenAuthLinks.current.add(parsed.link.fingerprint);
+    cancelProfileLoad.current?.cancel();
 
     const processLink = async (link: typeof parsed.link): Promise<void> => {
       isExchangingAuthLink.current = true;
@@ -174,33 +196,51 @@ function App() {
       if (!active) return;
       if (authMode.current !== "normal") return;
       if (event === "SIGNED_IN") {
+        const profileRequest = cancelProfileLoad.current;
+        if (profileRequest && profileRequest.userId !== session?.user.id) profileRequest.cancel();
         dispatch({ type: "sessionResolved", session });
       } else if (event === "SIGNED_OUT") {
+        cancelProfileLoad.current?.cancel();
         dispatch({ type: "sessionResolved", session: null });
       }
     });
 
+    const storageReady = prepareMobileAuthStorage().then(
+      () => true,
+      () => {
+        if (active) setStorageError(true);
+        return false;
+      },
+    );
     const linkingSubscription = Linking.addEventListener("url", ({ url }) => {
-      if (active) void handleAuthUrl(url);
+      void storageReady.then((ready) => {
+        if (active && ready) void handleAuthUrl(url);
+      });
     });
 
-    void Linking.getInitialURL()
+    void storageReady.then(async (ready) => {
+      if (!active || !ready) return;
+      return Linking.getInitialURL();
+    })
       .then(async (url) => {
-        if (!active || authMode.current !== "initializing") return;
+        if (!active || url === undefined || authMode.current !== "initializing") return;
         if (url) {
           await handleAuthUrl(url);
           return;
         }
         authMode.current = "normal";
-        const { data, error } = await supabase.auth.getSession();
+        const result = await supabase.auth.getSession().catch(() => null);
         if (active && authMode.current === "normal") {
-          dispatch({ type: "sessionResolved", session: error ? null : data.session });
+          dispatch({
+            type: "sessionHydrated",
+            session: result && !result.error ? result.data.session : null,
+          });
         }
       })
       .catch(() => {
         if (active && authMode.current === "initializing") {
           authMode.current = "normal";
-          dispatch({ type: "sessionResolved", session: null });
+          dispatch({ type: "sessionHydrated", session: null });
         }
       });
 
@@ -210,22 +250,29 @@ function App() {
       linkingSubscription.remove();
       unregisterRefresh();
     };
-  }, [handleAuthUrl]);
+  }, [handleAuthUrl, startupAttempt]);
 
   useEffect(() => {
     if (state.status !== "loading_profile") return;
+    const request = state;
     let active = true;
-    const sessionUserId = state.session.user.id;
+    const sessionUserId = request.session.user.id;
+    const profileRequest = {
+      userId: sessionUserId,
+      cancel: () => { active = false; },
+    };
+    cancelProfileLoad.current = profileRequest;
 
     void validateAuthenticatedSession(supabase.auth, sessionUserId)
-      .then(() => loadAuthenticatedProfile(api))
-      .then(({ user, profile }) => {
+      .then(async () => {
+        if (!active) return;
+        const { user, profile } = await loadAuthenticatedProfile(api);
         if (!active) return;
         if (user.id !== sessionUserId || profile.user_id !== user.id) {
-          dispatch({ type: "loadFailed", message: "DevStride returned an invalid profile." });
+          dispatch({ type: "loadFailed", request, message: "DevStride returned an invalid profile." });
           return;
         }
-        dispatch({ type: "profileLoaded", user, profile });
+        dispatch({ type: "profileLoaded", request, user, profile });
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -237,29 +284,27 @@ function App() {
         } else if (error instanceof SessionValidationError) {
           dispatch({
             type: "loadFailed",
+            request,
             message: "Unable to validate your session. Check your connection and try again.",
           });
         } else if (error instanceof MobileApiError && error.kind === "profile_missing") {
-          dispatch({ type: "profileMissing" });
+          dispatch({ type: "profileMissing", request });
         } else {
           const message =
             error instanceof MobileApiError
               ? error.message
               : "Unable to load your DevStride profile. Try again.";
-          dispatch({ type: "loadFailed", message });
+          dispatch({ type: "loadFailed", request, message });
         }
       });
 
     return () => {
-      active = false;
+      profileRequest.cancel();
+      if (cancelProfileLoad.current === profileRequest) cancelProfileLoad.current = null;
     };
   }, [handleUnauthorized, state]);
 
-  const signOut = useCallback(async (): Promise<string | null> => {
-    const failure = await clearMobileAuthSession();
-    dispatch({ type: "sessionResolved", session: null });
-    return failure ? "Unable to sign out. Check your connection and try again." : null;
-  }, []);
+  const signOut = useCallback(() => clearSession(false), [clearSession]);
 
   const finishRecovery = useCallback(async () => {
     const failure = await clearMobileAuthSession();
@@ -302,6 +347,22 @@ function App() {
   let content;
   switch (state.status) {
     case "booting":
+      if (storageError) {
+        content = (
+          <MessageScreen
+            colors={colors}
+            title="Secure storage unavailable"
+            message="Unlock your device and try again."
+            primaryLabel="Try again"
+            onPrimary={() => {
+              setStorageError(false);
+              setStartupAttempt((attempt) => attempt + 1);
+            }}
+          />
+        );
+        break;
+      }
+      // Fall through to the loading screen.
     case "auth_link_loading":
     case "loading_profile":
       content = (
@@ -382,10 +443,24 @@ function App() {
       break;
   }
 
+  if (cleanupState !== "idle") {
+    content = (
+      <MessageScreen
+        colors={colors}
+        title={cleanupState === "failed" ? "Couldn’t clear your session" : "Signing out"}
+        message={cleanupState === "failed"
+          ? "Unlock your device and try again."
+          : "Clearing the session on this device…"}
+        primaryLabel={cleanupState === "failed" ? "Try again" : undefined}
+        onPrimary={() => void signOut()}
+      />
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <StatusBar style={isDark ? "light" : "dark"} />
-      {state.status === "authenticated" ? (
+      {state.status === "authenticated" && cleanupState === "idle" ? (
         content
       ) : (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>

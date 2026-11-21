@@ -30,7 +30,8 @@ configuration and deployment checks.
 - onboarding and the editable coaching Profile
 - Account view for authenticated sign-in information
 - native Expo mobile foundation with device-only SecureStore-backed Supabase
-  session persistence, safe migration from the legacy unencrypted store,
+  session persistence, deletion of legacy plaintext auth data with one-time
+  reauthentication for legacy sessions,
   complete native email/password sign-in, sign-up, verification/resend, and
   S256 PKCE password-recovery flows, strict custom-scheme callback handling,
   and a prefetch-safe explicit-action HTTPS email bridge that leaves mobile
@@ -141,6 +142,10 @@ configuration and deployment checks.
   functionality is intentionally not part of the current product
 - resolve the Starlette/httpx test-client deprecation warning
 - resolve the jsdom navigation warning in frontend tests
+- verify SecureStore upgrade, session restore, refresh, local sign-out,
+  reinstall, and backup behavior on iOS and Android using approved
+  non-production services; verify PKCE confirmation and password recovery
+  alongside those storage scenarios
 - manually validate the Native Chat milestone on iOS, then Android; automated
   mobile lint, type checking, tests, Expo Doctor, and Expo config validation are
   part of the implementation gate

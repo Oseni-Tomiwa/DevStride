@@ -1,5 +1,7 @@
 import type { AuthenticatedUser, Profile, SessionSnapshot } from "./types";
 
+type ProfileRequest = { status: "loading_profile"; session: SessionSnapshot };
+
 export type MobileAppState =
   | { status: "booting" }
   | {
@@ -14,7 +16,7 @@ export type MobileAppState =
       message: string;
     }
   | { status: "recovery"; session: SessionSnapshot }
-  | { status: "loading_profile"; session: SessionSnapshot }
+  | ProfileRequest
   | {
       status: "authenticated";
       session: SessionSnapshot;
@@ -25,6 +27,7 @@ export type MobileAppState =
   | { status: "load_error"; session: SessionSnapshot; message: string };
 
 export type MobileAppAction =
+  | { type: "sessionHydrated"; session: SessionSnapshot | null }
   | { type: "sessionResolved"; session: SessionSnapshot | null }
   | { type: "authLinkStarted"; kind: "confirmation" | "recovery" }
   | {
@@ -35,9 +38,9 @@ export type MobileAppAction =
   | { type: "recoveryReady"; session: SessionSnapshot }
   | { type: "recoveryCompleted" }
   | { type: "requestRecoveryEmail" }
-  | { type: "profileLoaded"; user: AuthenticatedUser; profile: Profile }
-  | { type: "profileMissing" }
-  | { type: "loadFailed"; message: string }
+  | { type: "profileLoaded"; request: ProfileRequest; user: AuthenticatedUser; profile: Profile }
+  | { type: "profileMissing"; request: ProfileRequest }
+  | { type: "loadFailed"; request: ProfileRequest; message: string }
   | { type: "unauthorized" }
   | { type: "retry" };
 
@@ -52,6 +55,11 @@ export function mobileAppReducer(
   action: MobileAppAction,
 ): MobileAppState {
   switch (action.type) {
+    case "sessionHydrated":
+      if (state.status !== "booting") return state;
+      return action.session
+        ? { status: "loading_profile", session: action.session }
+        : { status: "signed_out", notice: null };
     case "sessionResolved":
       if (
         (state.status === "auth_link_loading" && state.kind === "recovery") ||
@@ -60,6 +68,7 @@ export function mobileAppReducer(
         return state;
       }
       if (action.session) {
+        if (sessionFrom(state)?.user.id === action.session.user.id) return state;
         return { status: "loading_profile", session: action.session };
       }
       return state.status === "signed_out" ? state : { status: "signed_out", notice: null };
@@ -78,18 +87,17 @@ export function mobileAppReducer(
     case "requestRecoveryEmail":
       return { status: "signed_out", notice: null, initialRoute: "ForgotPassword" };
     case "profileLoaded": {
-      const session = sessionFrom(state);
-      return session
-        ? { status: "authenticated", session, user: action.user, profile: action.profile }
+      return state === action.request
+        ? { status: "authenticated", session: state.session, user: action.user, profile: action.profile }
         : state;
     }
     case "profileMissing": {
-      const session = sessionFrom(state);
-      return session ? { status: "profile_missing", session } : state;
+      return state === action.request ? { status: "profile_missing", session: state.session } : state;
     }
     case "loadFailed": {
-      const session = sessionFrom(state);
-      return session ? { status: "load_error", session, message: action.message } : state;
+      return state === action.request
+        ? { status: "load_error", session: state.session, message: action.message }
+        : state;
     }
     case "unauthorized":
       return { status: "signed_out", notice: "Your session expired. Sign in again." };
