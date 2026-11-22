@@ -110,7 +110,7 @@ this milestone.
 Create an untracked local environment file from the public-only template:
 
 ```bash
-cp apps/mobile/.env.example apps/mobile/.env.local
+test -e apps/mobile/.env.local || cp apps/mobile/.env.example apps/mobile/.env.local
 ```
 
 Set `EXPO_PUBLIC_API_BASE_URL` to an address reachable from the target device.
@@ -119,16 +119,60 @@ Set `EXPO_PUBLIC_API_BASE_URL` to an address reachable from the target device.
 address. Set only the Supabase project URL and publishable key in the other two
 variables—never a service-role key or backend secret.
 
-From the repository root:
+For an iOS simulator startup smoke test, boot a simulator and use the Expo
+Go build that matches SDK 57. From the repository root:
 
 ```bash
-pnpm install
-pnpm mobile:start
+pnpm install --frozen-lockfile
+pnpm mobile:start --go --localhost --port 8094
 ```
 
-Then press `i` for iOS or `a` for Android, or use `pnpm mobile:ios` and
-`pnpm mobile:android`. Mobile-only checks are `pnpm mobile:lint`,
-`pnpm mobile:typecheck`, and `pnpm mobile:test`.
+In another terminal, verify readiness and open the project directly on the
+booted simulator:
+
+```bash
+curl --fail http://127.0.0.1:8094/status
+xcrun simctl openurl booted exp://127.0.0.1:8094
+```
+
+Opening the URL directly avoids automatic simulator-window activation, which
+timed out locally with Xcode 27. If Metro stalls before listening
+on macOS, check whether the workspace or its dependencies are cloud-offloaded.
+`ls -lO` reports such files as `dataless`. Make the workspace and installed
+dependencies available locally before retrying.
+
+To verify startup before an approved test environment is available, use
+inert loopback values and turn off Expo's environment-file loading:
+
+```bash
+EXPO_NO_DOTENV=1 \
+EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:9 \
+EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:9 \
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=simulator-placeholder \
+pnpm mobile:start --go --localhost --port 8094
+```
+
+This smoke test reached DevStride's “Welcome back” screen on iPhone 17 Pro
+with iOS 26.4 and Expo Go 57.0.9. It exercises signed-out startup without
+submitting credentials.
+
+For app-specific callback and storage verification, use the repository's
+native build commands, `pnpm mobile:ios --device` or
+`pnpm mobile:android --device`. These use the Expo app configuration to
+generate native projects when needed. Mobile-only checks are
+`pnpm mobile:lint`, `pnpm mobile:typecheck`, and `pnpm mobile:test`.
+
+Use a dedicated non-production Supabase Auth project, test mailbox, and
+FastAPI environment for auth and chat verification. Set the project's URL
+and publishable key in `apps/mobile/.env.local`, and point
+`EXPO_PUBLIC_API_BASE_URL` at that test API. For a local API, configure
+`DATABASE_URL` for an isolated test database and set
+`SUPABASE_JWT_ISSUER` to the test project's Auth issuer and
+`SUPABASE_JWT_ALGORITHMS` to its signing algorithm. Run
+`make api-migrate` against that database, then `make api-dev`, and check
+`curl --fail http://localhost:8000/ready`. General chat additionally requires
+approved non-production OpenAI credentials and `AI_GENERATION_ENABLED=true`
+on the API. Use a pre-onboarded test account for Profile and chat checks.
 
 Native email callbacks use the development routes `devstride://auth/confirm`
 and `devstride://auth/recovery`. Add both exact URLs to the Supabase Auth
@@ -138,6 +182,8 @@ open them on the same device that requested them so its PKCE verifier is
 available. Supabase Dashboard template changes and the required Resend
 click-tracking setting are documented in
 [`docs/architecture/AUTHENTICATION.md`](docs/architecture/AUTHENTICATION.md).
+For testing, use the staging web deployment of `/auth/mobile` and apply
+the Site URL, template, and redirect changes only to the test Auth project.
 The same runbook records the two query-aware allowlist entries required for
 `sb_flow_id`; avoid a broad custom-scheme wildcard. Custom-scheme
 callback validation requires a development build; final production app

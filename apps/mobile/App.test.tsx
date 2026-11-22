@@ -204,6 +204,25 @@ describe("App authenticated integration", () => {
     expect(screen.getByText("Try again")).toBeOnTheScreen();
   });
 
+  it("restores the session on an Expo Go project launch URL", async () => {
+    mockGetInitialURL.mockResolvedValue("exp://127.0.0.1:8094");
+    await render(<App />);
+    expect(await screen.findByRole("header", { name: "Conversations" })).toBeOnTheScreen();
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+    expect(mockExchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps the signed-out screen on a warm Expo Go project URL", async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    await render(<App />);
+    expect(await screen.findByRole("header", { name: "Welcome back" })).toBeOnTheScreen();
+    await act(async () => {
+      mockLinkHandler?.({ url: "exps://example.test/" });
+    });
+    expect(screen.getByRole("header", { name: "Welcome back" })).toBeOnTheScreen();
+    expect(mockExchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
   it("handles a valid confirmation link at cold start before session restoration", async () => {
     mockGetInitialURL.mockResolvedValue(
       "devstride://auth/confirm?code=confirmation-code-123&sb_flow_id=abcdef1234567890",

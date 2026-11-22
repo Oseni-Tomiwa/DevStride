@@ -17,6 +17,16 @@ const CODE_PATTERN = /^[A-Za-z0-9._~-]{8,2048}$/;
 const FLOW_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const ALLOWED_PARAMETERS = new Set(["code", "sb_flow_id"]);
 
+export function isExpoGoProjectUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "exp:" || url.protocol === "exps:") &&
+      Boolean(url.hostname) && (url.pathname === "" || url.pathname === "/");
+  } catch {
+    return false;
+  }
+}
+
 export function getAuthRouteKind(value: string): "confirmation" | "recovery" | null {
   try {
     const url = new URL(value);

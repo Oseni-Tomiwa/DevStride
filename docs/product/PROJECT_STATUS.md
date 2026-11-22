@@ -150,6 +150,24 @@ configuration and deployment checks.
   mobile lint, type checking, tests, Expo Doctor, and Expo config validation are
   part of the implementation gate
 
+### Native runtime verification
+
+- At baseline `1927e23`, Metro stalled on cloud-offloaded package files,
+  and automatic simulator-window activation timed out under Xcode 27.
+  Making the packages available locally and opening the Metro URL with
+  `simctl` restored the iOS startup path. On 2026-11-22, Expo Go 57.0.9
+  rendered DevStride's “Welcome back” screen after a cold launch on an
+  iPhone 17 Pro simulator with iOS 26.4 and inert loopback endpoints.
+  The app now separates Expo Go project URLs from auth callbacks.
+  See the [mobile runbook](../../README.md#run-the-mobile-app).
+- The mobile gate passed all 230 tests across 23 suites from a temporary
+  snapshot of tracked sources, including two launch-routing regressions.
+  Untracked duplicate source files in the original checkout blocked its
+  in-place type check and were left untouched.
+- Approved non-production services and accounts are still needed for native
+  authentication, SecureStore persistence and legacy migration, Profile,
+  chat, and release verification.
+
 ## Next
 
 1. Refine goal-aware Mentor, Interview, Team, and live practice context.

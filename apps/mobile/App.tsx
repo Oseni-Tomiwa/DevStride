@@ -9,6 +9,7 @@ import { initialAppState, mobileAppReducer } from "./src/app-state";
 import { registerAuthAutoRefresh } from "./src/auth-lifecycle";
 import {
   getAuthRouteKind,
+  isExpoGoProjectUrl,
   parseAuthLink,
   type ParsedAuthLink,
 } from "./src/auth/auth-links";
@@ -214,7 +215,7 @@ function App() {
     );
     const linkingSubscription = Linking.addEventListener("url", ({ url }) => {
       void storageReady.then((ready) => {
-        if (active && ready) void handleAuthUrl(url);
+        if (active && ready && !isExpoGoProjectUrl(url)) void handleAuthUrl(url);
       });
     });
 
@@ -224,7 +225,7 @@ function App() {
     })
       .then(async (url) => {
         if (!active || url === undefined || authMode.current !== "initializing") return;
-        if (url) {
+        if (url && !isExpoGoProjectUrl(url)) {
           await handleAuthUrl(url);
           return;
         }
