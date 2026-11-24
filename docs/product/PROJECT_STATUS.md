@@ -142,10 +142,10 @@ configuration and deployment checks.
   functionality is intentionally not part of the current product
 - resolve the Starlette/httpx test-client deprecation warning
 - resolve the jsdom navigation warning in frontend tests
-- verify SecureStore upgrade, session restore, refresh, local sign-out,
-  reinstall, and backup behavior on iOS and Android using approved
-  non-production services; verify PKCE confirmation and password recovery
-  alongside those storage scenarios
+- verify SecureStore upgrade, Keychain cleanup after sign-out, token refresh,
+  reinstall, and backup behavior on iOS, and run Android native authentication
+  and storage checks using approved non-production services
+- verify native PKCE email confirmation and password recovery
 - manually validate the Native Chat milestone on iOS, then Android; automated
   mobile lint, type checking, tests, Expo Doctor, and Expo config validation are
   part of the implementation gate
@@ -169,9 +169,32 @@ configuration and deployment checks.
   mobile. The owner also verified session restoration after a cold relaunch,
   sign-out, and a second cold relaunch that stayed signed out. These checks
   used the isolated staging Auth and FastAPI services.
-- App-specific SecureStore, legacy migration, token refresh, native email
-  callbacks, Android, and live chat still require runtime verification. See
-  the [staging verification checklist](#native-staging-verification-checklist).
+
+#### Standalone iOS staging results
+
+- The iOS Release build at `b2e2670` succeeded from an isolated local
+  directory under `/private/tmp`. Numbered duplicates in the original
+  dependency tree and Finder metadata on the generated ExpoModulesJSI
+  framework had blocked earlier builds. The source of the numbered
+  duplicates has not been conclusively identified.
+- DevStride installed and launched on the iPhone 17 Pro simulator as
+  `com.anonymous.devstride`. The product owner signed in with the approved
+  staging account and accessed the authenticated Profile and Conversations.
+- A controlled cold relaunch of the same installation restored the session
+  without signing in again. Staging FastAPI returned HTTP `200` for
+  `GET /api/v1/auth/me`, `GET /api/v1/profile/me`, and
+  `GET /api/v1/conversations`. The earlier reported restoration failure
+  did not reproduce during this test.
+- In a subsequent manual UI check, the product owner signed out and saw
+  “Welcome back”. After another cold relaunch without signing in, the same
+  screen remained visible. Complete Keychain-record deletion was not
+  independently verified for that sign-out.
+- Mobile ESLint and TypeScript passed, and Jest passed 230 tests across
+  23 suites in the isolated build copy.
+- Token refresh, PKCE email confirmation and password recovery, Android
+  native verification, legacy migration, reinstall and backup behavior,
+  and live chat remain pending. See the
+  [staging verification checklist](#native-staging-verification-checklist).
 
 #### Native staging verification checklist
 
