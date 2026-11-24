@@ -164,9 +164,70 @@ configuration and deployment checks.
   snapshot of tracked sources, including two launch-routing regressions.
   Untracked duplicate source files in the original checkout blocked its
   in-place type check and were left untouched.
-- Approved non-production services and accounts are still needed for native
-  authentication, SecureStore persistence and legacy migration, Profile,
-  chat, and release verification.
+- The product owner verified staging sign-in in Expo Go on the iPhone 17 Pro,
+  completed onboarding in the staging web app, and retrieved the Profile in
+  mobile. The owner also verified session restoration after a cold relaunch,
+  sign-out, and a second cold relaunch that stayed signed out. These checks
+  used the isolated staging Auth and FastAPI services.
+- App-specific SecureStore, legacy migration, token refresh, native email
+  callbacks, Android, and live chat still require runtime verification. See
+  the [staging verification checklist](#native-staging-verification-checklist).
+
+#### Native staging verification checklist
+
+Use a disposable staging account and mailbox. Record OS, app build, UTC
+times, screen states and HTTP status codes. Keep tokens, email links, callback
+URLs, and passwords out of screenshots and logs.
+
+1. Confirm the mobile project URL matches the running API's JWT issuer and
+   that the API points to the staging database with AI disabled. With the
+   iPhone 17 Pro booted, run
+   `CI=1 pnpm mobile:ios --device CC6D8290-41D4-4FEB-901F-AAA5B560DFCE`
+   from the repository root, using the
+   staging mobile environment. If the pnpm launcher cannot select its
+   pinned version, use the installed Expo CLI from `apps/mobile`:
+   `CI=1 node node_modules/expo/bin/cli run:ios --device CC6D8290-41D4-4FEB-901F-AAA5B560DFCE`.
+   Expo may generate `apps/mobile/ios` and resolve CocoaPods. Keep generated
+   native files out of the commit. Select
+   that device in Xcode Device Hub to interact with the installed app.
+2. In the app-specific build, sign in and verify Profile. Force-quit and open
+   the app, then verify Profile again. On a physical iPhone, also lock and
+   unlock before reopening. Verify in generated native configuration that
+   the build registers the `devstride` scheme.
+3. For refresh, first use the existing staging JWT lifetime. Note sign-in
+   time and the configured lifetime, background the app past that interval,
+   then foreground it and request Profile. Confirm a successful staging
+   Auth refresh event and a subsequent authenticated Profile HTTP 200. Repeat
+   with the app foregrounded to cover periodic refresh. If shortening the
+   lifetime is necessary, obtain approval for that staging-only change and
+   restore the previous value afterwards. For refresh rejection use a
+   disposable session and revoke it through supported staging Auth controls,
+   then verify that protected content clears and reauthentication is required.
+4. Sign out, force-quit, relaunch, and confirm sign-in is required. Sign in
+   again, uninstall only the app-specific test app, reinstall the same build,
+   and verify the old session is not restored even if iOS retains Keychain
+   items. On approved physical devices, back up the signed-in test
+   installation and restore to a second device. Verify that the
+   device-only session does not transfer. To test legacy cleanup, upgrade
+   a dedicated staging-only build of the old app with the same identifier
+   and an existing legacy session. Expect one-time reauthentication followed
+   by successful secure cold restoration.
+5. Use the [authentication runbook](../architecture/AUTHENTICATION.md#prefetch-safe-mobile-email-bridge)
+   to verify the staging HTTPS bridge, templates, redirects, and SMTP
+   behavior before requesting mail. On the same installation, request
+   confirmation for a fresh mailbox and recovery for a disposable account.
+   Verify the landing page waits for an explicit action, the custom scheme
+   opens the installed app, confirmation enables sign-in, and recovery
+   takes the user to password reset. Verify expired, reused, and
+   wrong-installation links fail without authenticating.
+6. On Android, use an approved emulator or physical device, an Android SDK
+   and JDK, and a dedicated test application ID. Run
+   `pnpm mobile:android --device` with the staging configuration and
+   `http://10.0.2.2:8000` for the standard emulator. Repeat the Auth,
+   refresh, callback, sign-out, upgrade, and reinstall checks. Inspect the
+   generated manifest and backup rules for the SecureStore exclusion, then
+   test backup and restore on a device with an approved backup transport.
+   Verify restored data does not recover the previous session.
 
 ## Next
 
